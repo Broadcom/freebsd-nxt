@@ -77,40 +77,47 @@ struct if_txrx bnxt_txrx  = {
  * Device Dependent Packet Transmit and Receive Functions
  */
 
-static int bnxt_isc_txd_encap(void *arg, if_pkt_info_t pi)
+static int
+bnxt_isc_txd_encap(void *arg, if_pkt_info_t pi)
 {
 	return ENOSYS;
 }
 
-static void bnxt_isc_txd_flush(void *arg, uint16_t txqid, uint32_t pidx)
+static void
+bnxt_isc_txd_flush(void *arg, uint16_t txqid, uint32_t pidx)
 {
 	return;
 }
 
-static int bnxt_isc_txd_credits_update(void *arg, uint16_t txqid, uint32_t cidx, bool clear)
+static int
+bnxt_isc_txd_credits_update(void *arg, uint16_t txqid, uint32_t cidx, bool clear)
 {
 	return 0;	// No error return?
 }
 
-static void bnxt_isc_rxd_refill(void *arg, uint16_t rxqid, uint8_t flid,
+static void
+bnxt_isc_rxd_refill(void *arg, uint16_t rxqid, uint8_t flid,
 				uint32_t pidx, uint64_t *paddrs,
 				caddr_t *vaddrs, uint16_t count)
 {
 	return;
 }
 
-static void bnxt_isc_rxd_flush(void *arg, uint16_t rxqid, uint8_t flid,
+static void
+bnxt_isc_rxd_flush(void *arg, uint16_t rxqid, uint8_t flid,
     uint32_t pidx)
 {
 	return;
 }
 
-static int bnxt_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx)
+static int
+bnxt_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx)
 {
 	return 0;	// No error return?
 }
 
-static int bnxt_isc_rxd_pkt_get(void *arg, if_rxd_info_t ri)
+static int
+bnxt_isc_rxd_pkt_get(void *arg, if_rxd_info_t ri)
 {
 	return ENOSYS;
 }
