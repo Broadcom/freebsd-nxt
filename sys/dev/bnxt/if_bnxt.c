@@ -101,7 +101,7 @@ static uint64_t	bnxt_if_get_counter(if_ctx_t, ift_counter);
 static void bnxt_if_update_admin_status(if_ctx_t ctx);
 
 /* Interrupt enable / disable */
-void bnxt_if_enable_intr(if_ctx_t ctx);
+static void bnxt_if_enable_intr(if_ctx_t ctx);
 static void bnxt_if_queue_intr_enable(if_ctx_t ctx, uint16_t qid);
 static void bnxt_if_disable_intr(if_ctx_t ctx);
 
@@ -189,9 +189,10 @@ if_shared_ctx_t bnxt_sctx = &bnxt_sctx_init;
  * Device Methods
  */
 
-static void *bnxt_register(device_t dev)
+static void *
+bnxt_register(device_t dev)
 {
-	return NULL;
+	return bnxt_sctx;
 }
 
 /*
@@ -199,94 +200,111 @@ static void *bnxt_register(device_t dev)
 */
 
 /* Soft queue setup and teardown */
-static int bnxt_if_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
+static int
+bnxt_if_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
     uint64_t *paddrs, int nrxqs, int nrxqsets)
 {
 	return ENOSYS;
 }
 
-static int bnxt_if_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
+static int
+bnxt_if_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
     uint64_t *paddrs, int nrxqs, int nrxqsets)
 {
 	return ENOSYS;
 }
 
 /* Device setup and teardown */
-static int bnxt_if_attach_pre(if_ctx_t ctx)
+static int
+bnxt_if_attach_pre(if_ctx_t ctx)
 {
 	return ENOSYS;
 }
 
-static int bnxt_if_attach_post(if_ctx_t ctx)
+static int
+bnxt_if_attach_post(if_ctx_t ctx)
 {
 	return ENOSYS;
 }
 
-static int bnxt_if_detach(if_ctx_t ctx)
+static int
+bnxt_if_detach(if_ctx_t ctx)
 {
 	return ENOSYS;
 }
 
 /* Device configuration */
-static void bnxt_if_init(if_ctx_t ctx)
+static void
+bnxt_if_init(if_ctx_t ctx)
 {
 	return;
 }
 
-static void bnxt_if_stop(if_ctx_t ctx)
+static void
+bnxt_if_stop(if_ctx_t ctx)
 {
 	return;
 }
 
-static void bnxt_if_multi_set(if_ctx_t ctx)
+static void
+bnxt_if_multi_set(if_ctx_t ctx)
 {
 	return;
 }
 
-static int bnxt_if_mtu_set(if_ctx_t ctx, uint32_t mtu)
+static int
+bnxt_if_mtu_set(if_ctx_t ctx, uint32_t mtu)
 {
 	return ENOSYS;
 }
 
-static void bnxt_if_media_status(if_ctx_t ctx, struct ifmediareq * ifmr)
+static void
+bnxt_if_media_status(if_ctx_t ctx, struct ifmediareq * ifmr)
 {
 	return;
 }
 
-static int bnxt_if_media_change(if_ctx_t ctx)
+static int
+bnxt_if_media_change(if_ctx_t ctx)
 {
 	return ENOSYS;
 }
 
-static int bnxt_if_promisc_set(if_ctx_t ctx, int flags)
+static int
+bnxt_if_promisc_set(if_ctx_t ctx, int flags)
 {
 	return ENOSYS;
 }
 
-static uint64_t	bnxt_if_get_counter(if_ctx_t ctx, ift_counter cnt)
+static uint64_t
+bnxt_if_get_counter(if_ctx_t ctx, ift_counter cnt)
 {
 	if_t ifp = iflib_get_ifp(ctx);
 
 	return if_get_counter_default(ifp, cnt);
 }
 
-static void bnxt_if_update_admin_status(if_ctx_t ctx)
+static void
+bnxt_if_update_admin_status(if_ctx_t ctx)
 {
 	return;
 }
 
 /* Interrupt enable / disable */
-void bnxt_if_enable_intr(if_ctx_t ctx)
+static void
+bnxt_if_enable_intr(if_ctx_t ctx)
 {
 	return;
 }
 
-static void bnxt_if_queue_intr_enable(if_ctx_t ctx, uint16_t qid)
+static void
+bnxt_if_queue_intr_enable(if_ctx_t ctx, uint16_t qid)
 {
 	return;
 }
 
-static void bnxt_if_disable_intr(if_ctx_t ctx)
+static void
+bnxt_if_disable_intr(if_ctx_t ctx)
 {
 	return;
 }
