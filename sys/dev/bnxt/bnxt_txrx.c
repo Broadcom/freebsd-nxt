@@ -60,7 +60,7 @@ static int bnxt_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx);
 static int bnxt_isc_rxd_pkt_get(void *arg, if_rxd_info_t ri);
 
 extern void bnxt_if_enable_intr(if_ctx_t ctx);
-extern int bnxt_intr(void *arg);
+static int bnxt_intr(void *arg);
 
 struct if_txrx bnxt_txrx  = {
 	bnxt_isc_txd_encap,
@@ -118,6 +118,12 @@ bnxt_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx)
 
 static int
 bnxt_isc_rxd_pkt_get(void *arg, if_rxd_info_t ri)
+{
+	return ENOSYS;
+}
+
+static int
+bnxt_intr(void *arg)
 {
 	return ENOSYS;
 }
