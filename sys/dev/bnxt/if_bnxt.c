@@ -179,6 +179,8 @@ static struct if_shared_ctx bnxt_sctx_init = {
 	.isc_rx_nsegments = 1,
 	.isc_ntxqs = 1,
 	.isc_nrxqs = 1,
+	.isc_nrxd = PAGE_SIZE / sizeof(struct rx_pkt_cmpl),
+	.isc_ntxd = PAGE_SIZE / sizeof(struct tx_bd_short),
 	.isc_admin_intrcnt = 1,
 	.isc_vendor_info = bnxt_vendor_info_array,
 };
