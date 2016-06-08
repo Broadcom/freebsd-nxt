@@ -84,34 +84,6 @@ $header =~ s/(    ) +(#define)/$1$2/gs;
 $header =~ s/^(}[^\n]*;)\n([^\n])/$1\n\n$2/gsm;
 $header =~ s/([^\n])\n(typedef)/$1\n\n$2/gs;
 
-# Add 64-but stats struct
-$header =~ s/(typedef struct ctx_hw_stats\s*{)/typedef struct ctx_hw_stats64 {
-    uint64_t rx_ucast_pkts;
-    uint64_t rx_mcast_pkts;
-    uint64_t rx_bcast_pkts;
-    uint64_t rx_drop_pkts;
-    uint64_t rx_err_pkts;
-    uint64_t rx_ucast_bytes;
-    uint64_t rx_mcast_bytes;
-    uint64_t rx_bcast_bytes;
-
-    uint64_t tx_ucast_pkts;
-    uint64_t tx_mcast_pkts;
-    uint64_t tx_bcast_pkts;
-    uint64_t tx_drop_pkts;
-    uint64_t tx_err_pkts;
-    uint64_t tx_ucast_bytes;
-    uint64_t tx_mcast_bytes;
-    uint64_t tx_bcast_bytes;
-
-    uint64_t tpa_pkts;
-    uint64_t tpa_bytes;
-    uint64_t tpa_events;
-    uint64_t tpa_aborts;
-} ctx_hw_stats64_t;
-
-$1/s;
-
 print OUT $header;
 close OUT;
 
