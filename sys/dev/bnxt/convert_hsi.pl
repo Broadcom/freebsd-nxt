@@ -77,12 +77,18 @@ $header =~ s/\b((?:0x)?[0-9a-f]+)UL/UINT32_C($1)/gs;
 #$header =~ s/[ \t]*\/\*.*?\*\/\s*?\n?//gs;
 
 # Pack structs
-$header =~ s/}(\s+)([^\s]+_t[,;])/} __attribute__((packed))$1$2/gs;
+#$header =~ s/}(\s+)([^\s]+_t[,;])/} __attribute__((packed))$1$2/gs;
 
 # Normalize indent
 $header =~ s/(    ) +(#define)/$1$2/gs;
 $header =~ s/^(}[^\n]*;)\n([^\n])/$1\n\n$2/gsm;
 $header =~ s/([^\n])\n(typedef)/$1\n\n$2/gs;
+$header =~ s/        /\t/g;
+$header =~ s/    /\t/g;
+$header =~ s/([^\s]\t+) +/$1/g;
+
+# Remove typedefs and pack structs
+$header =~ s/^typedef struct (.*?)\n{\n(.*?)}[^\n]*;/struct $1 {\n$2} __attribute__((packed));/gsm;
 
 print OUT $header;
 close OUT;
