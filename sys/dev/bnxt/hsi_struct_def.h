@@ -39,6 +39,8 @@ __FBSDID("$FreeBSD$");
 #ifndef _HSI_STRUCT_DEF_LINUX_EXTERNAL_H_
 #define _HSI_STRUCT_DEF_LINUX_EXTERNAL_H_
 
+#include <sys/types.h>
+
 /* per-context HW statistics -- chip view */
 struct ctx_hw_stats  {
     uint64_t rx_ucast_pkts;
