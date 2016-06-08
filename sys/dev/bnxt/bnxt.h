@@ -207,16 +207,6 @@ struct bnxt_link_info {
 	struct hwrm_port_phy_qcfg_output phy_qcfg_resp;
 };
 
-struct bnxt_dma_info {
-	bus_addr_t		paddr;
-	void			*vaddr;
-	bus_dma_tag_t		tag;
-	bus_dmamap_t		map;
-	bus_dma_segment_t	seg;
-	bus_size_t		size;
-	int			nseg;
-};
-
 struct bnxt_irq {
 	struct resource	*res;
 	int		rid;
@@ -224,6 +214,7 @@ struct bnxt_irq {
 };
 
 enum bnxt_cp_type {
+	BNXT_DEFAULT,
 	BNXT_TX,
 	BNXT_RX,
 	BNXT_SHARED
@@ -240,9 +231,9 @@ struct bnxt_cp_ring {
 	uint32_t		ring_mask;
 	uint32_t		raw_cons;
 	vm_offset_t		doorbell;
-	struct bnxt_dma_info	ring_dma;
+	struct iflib_dma_info	ring_dma;
 	struct tx_cmpl		*base;
-	struct bnxt_dma_info	stats_dma;
+	struct iflib_dma_info	stats_dma;
 	struct ctx_hw_stats	*stats;
 	uint32_t		stats_ctx_id;
 	uint16_t		fw_ring_id;
@@ -338,12 +329,12 @@ struct bnxt_vnic_info {
 	uint16_t	end_grp_id;
 	uint16_t	fw_grp_ids[MAX_QUEUES_PER_VNIC];
 	uint16_t	hash_type;
-	struct bnxt_dma_info rss;
+	struct iflib_dma_info rss;
 	vm_offset_t	rss_key_vaddr;
 	uint32_t	rss_size;
 	uint32_t	rx_mask;
 
-	struct bnxt_dma_info mc_list;
+	struct iflib_dma_info mc_list;
 	int		mc_list_size;
 	int		mc_list_count;
 #define BNXT_MAX_MC_ADDRS	16
@@ -379,7 +370,7 @@ struct bnxt_tx_ring {
 	uint16_t		active;
 	uint16_t		fw_ring_id;
 	vm_offset_t		doorbell;
-	struct bnxt_dma_info	dma;
+	struct iflib_dma_info	dma;
 	bus_dma_tag_t		tag;
 	struct tx_bd_short	*base;
 	struct bnxt_tx_info	*tx_info;
@@ -403,7 +394,7 @@ struct bnxt_ag_ring {
 	uint16_t		prod;
 	uint16_t		cons;
 	vm_offset_t		doorbell;
-	struct bnxt_dma_info	dma;
+	struct iflib_dma_info	dma;
 	struct rx_prod_pkt_bd	*base;	/* The descriptor ring */
 	struct bnxt_ag_info	*ag_info;
 };
@@ -419,7 +410,7 @@ struct bnxt_rx_ring {
 	uint16_t		prod;
 	uint16_t		cons;
 	vm_offset_t		doorbell;
-	struct bnxt_dma_info	dma;
+	struct iflib_dma_info	dma;
 	bus_dma_tag_t		tag;
 	struct rx_prod_pkt_bd	*base;
 	struct bnxt_rx_info	*rx_info;
@@ -450,7 +441,7 @@ struct bnxt_softc {
 
 	uint16_t		hwrm_cmd_seq;
 	uint16_t		hwrm_cmd_timeo;	/* milliseconds */
-	struct bnxt_dma_info	hwrm_cmd_resp;
+	struct iflib_dma_info	hwrm_cmd_resp;
 	/* Interrupt info for HWRM */
 //	struct bnxt_irq		irq;
 	struct mtx		hwrm_lock;
@@ -473,8 +464,8 @@ struct bnxt_softc {
 	uint8_t			max_tc;
 	struct bnxt_cos_queue	q_info[BNXT_MAX_QUEUE];
 
-	struct bnxt_dma_info	hw_rx_port_stats;
-	struct bnxt_dma_info	hw_tx_port_stats;
+	struct iflib_dma_info	hw_rx_port_stats;
+	struct iflib_dma_info	hw_tx_port_stats;
 	struct rx_port_stats	*rx_port_stats;
 	struct tx_port_stats	*tx_port_stats;
 };

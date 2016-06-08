@@ -91,7 +91,7 @@ static void *bnxt_register(device_t dev);
 
 /* Soft queue setup and teardown */
 static int bnxt_if_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
-    uint64_t *paddrs, int nrxqs, int nrxqsets);
+    uint64_t *paddrs, int ntxqs, int ntxqsets);
 static int bnxt_if_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
     uint64_t *paddrs, int nrxqs, int nrxqsets);
 
@@ -224,7 +224,7 @@ bnxt_register(device_t dev)
 /* Soft queue setup and teardown */
 static int
 bnxt_if_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
-    uint64_t *paddrs, int nrxqs, int nrxqsets)
+    uint64_t *paddrs, int ntxqs, int ntxqsets)
 {
 	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
 	return ENOSYS;
@@ -540,7 +540,7 @@ bnxt_update_link(struct bnxt_softc *softc, bool chng_link_state)
 {
 	struct bnxt_link_info *link_info = &softc->link_info;
 	struct hwrm_port_phy_qcfg_input req = {0};
-	struct hwrm_port_phy_qcfg_output *resp = softc->hwrm_cmd_resp.vaddr;
+	struct hwrm_port_phy_qcfg_output *resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	uint8_t link_up = link_info->link_up;
 	int rc = 0;
 
