@@ -345,9 +345,9 @@ bnxt_hwrm_func_drv_rgtr(struct bnxt_softc *softc)
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_FUNC_DRV_RGTR, -1, -1);
 
-	req.enables = htole32(FUNC_DRV_RGTR_REQ_ENABLES_VER |
-			      FUNC_DRV_RGTR_REQ_ENABLES_OS_TYPE);
-	req.os_type = htole16(FUNC_DRV_RGTR_REQ_OS_TYPE_FREEBSD);
+	req.enables = htole32(HWRM_FUNC_DRV_RGTR_INPUT_ENABLES_VER |
+			      HWRM_FUNC_DRV_RGTR_INPUT_ENABLES_OS_TYPE);
+	req.os_type = htole16(HWRM_FUNC_DRV_RGTR_INPUT_OS_TYPE_FREEBSD);
 
 	req.ver_maj = __FreeBSD_version / 100000;
 	req.ver_min = (__FreeBSD_version / 1000) % 100;
@@ -364,7 +364,7 @@ bnxt_hwrm_func_drv_unrgtr(struct bnxt_softc *softc, bool shutdown)
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_FUNC_DRV_UNRGTR, -1, -1);
 	if (shutdown == true)
-		req.flags |= FUNC_DRV_UNRGTR_REQ_FLAGS_PREPARE_FOR_SHUTDOWN;
+		req.flags |= HWRM_FUNC_DRV_UNRGTR_INPUT_FLAGS_PREPARE_FOR_SHUTDOWN;
 	return _hwrm_send_message(softc, &req, sizeof(req));
 }
 
@@ -473,22 +473,22 @@ bnxt_hwrm_set_link_common(struct bnxt_softc *softc,
 
 	if (autoneg & BNXT_AUTONEG_SPEED) {
 		req->auto_mode |=
-			PORT_PHY_CFG_REQ_AUTO_MODE_SPEED_MASK;
+			HWRM_PORT_PHY_CFG_INPUT_AUTO_MODE_SPEED_MASK;
 
 		req->enables |= htole32(
-			PORT_PHY_CFG_REQ_ENABLES_AUTO_LINK_SPEED_MASK);
+			HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_LINK_SPEED_MASK);
 		req->auto_link_speed_mask = htole16(advertising);
 
-		req->enables |= htole32(PORT_PHY_CFG_REQ_ENABLES_AUTO_MODE);
+		req->enables |= htole32(HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_MODE);
 		req->flags |=
-			htole32(PORT_PHY_CFG_REQ_FLAGS_RESTART_AUTONEG);
+			htole32(HWRM_PORT_PHY_CFG_INPUT_FLAGS_RESTART_AUTONEG);
 	} else {
 		req->force_link_speed = htole16(fw_link_speed);
-		req->flags |= htole32(PORT_PHY_CFG_REQ_FLAGS_FORCE);
+		req->flags |= htole32(HWRM_PORT_PHY_CFG_INPUT_FLAGS_FORCE);
 	}
 
 	/* tell chimp that the setting takes effect immediately */
-	req->flags |= htole32(PORT_PHY_CFG_REQ_FLAGS_RESET_PHY);
+	req->flags |= htole32(HWRM_PORT_PHY_CFG_INPUT_FLAGS_RESET_PHY);
 }
 
 
@@ -498,24 +498,24 @@ bnxt_hwrm_set_pause_common(struct bnxt_softc *softc, struct hwrm_port_phy_cfg_in
 	if (softc->link_info.autoneg & BNXT_AUTONEG_FLOW_CTRL) {
 		if (softc->flags & BNXT_FLAG_HWRM_120)
 			req->auto_pause =
-			    PORT_PHY_CFG_REQ_AUTO_PAUSE_AUTONEG_PAUSE;
+			    HWRM_PORT_PHY_CFG_INPUT_AUTO_PAUSE_AUTONEG_PAUSE;
 		if (softc->link_info.req_flow_ctrl & BNXT_LINK_PAUSE_RX)
-			req->auto_pause |= PORT_PHY_CFG_REQ_AUTO_PAUSE_RX;
+			req->auto_pause |= HWRM_PORT_PHY_CFG_INPUT_AUTO_PAUSE_RX;
 		if (softc->link_info.req_flow_ctrl & BNXT_LINK_PAUSE_TX)
-			req->auto_pause |= PORT_PHY_CFG_REQ_AUTO_PAUSE_RX;
+			req->auto_pause |= HWRM_PORT_PHY_CFG_INPUT_AUTO_PAUSE_RX;
 		req->enables |=
-			htole32(PORT_PHY_CFG_REQ_ENABLES_AUTO_PAUSE);
+			htole32(HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_PAUSE);
 	} else {
 		if (softc->link_info.req_flow_ctrl & BNXT_LINK_PAUSE_RX)
-			req->force_pause |= PORT_PHY_CFG_REQ_FORCE_PAUSE_RX;
+			req->force_pause |= HWRM_PORT_PHY_CFG_INPUT_FORCE_PAUSE_RX;
 		if (softc->link_info.req_flow_ctrl & BNXT_LINK_PAUSE_TX)
-			req->force_pause |= PORT_PHY_CFG_REQ_FORCE_PAUSE_TX;
+			req->force_pause |= HWRM_PORT_PHY_CFG_INPUT_FORCE_PAUSE_TX;
 		req->enables |=
-			htole32(PORT_PHY_CFG_REQ_ENABLES_FORCE_PAUSE);
+			htole32(HWRM_PORT_PHY_CFG_INPUT_ENABLES_FORCE_PAUSE);
 		if (softc->flags & BNXT_FLAG_HWRM_120) {
 			req->auto_pause = req->force_pause;
 			req->enables |= htole32(
-			        PORT_PHY_CFG_REQ_ENABLES_AUTO_PAUSE);
+			        HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_PAUSE);
 		}
 	}
 }
@@ -531,10 +531,10 @@ bnxt_hwrm_set_eee(struct bnxt_softc *softc, struct hwrm_port_phy_cfg_input *req)
 	if (eee_enabled) {
 #if 0
 		uint16_t eee_speeds;
-		uint32_t flags = PORT_PHY_CFG_REQ_FLAGS_EEE_ENABLE;
+		uint32_t flags = HWRM_PORT_PHY_CFG_INPUT_FLAGS_EEE_ENABLE;
 
 		if (eee->tx_lpi_enabled)
-			flags |= PORT_PHY_CFG_REQ_FLAGS_EEE_TX_LPI;
+			flags |= HWRM_PORT_PHY_CFG_INPUT_FLAGS_EEE_TX_LPI;
 
 		req->flags |= htole32(flags);
 		eee_speeds = bnxt_get_fw_auto_link_speeds(eee->advertised);
@@ -542,7 +542,7 @@ bnxt_hwrm_set_eee(struct bnxt_softc *softc, struct hwrm_port_phy_cfg_input *req)
 		req->tx_lpi_timer = htole32(eee->tx_lpi_timer);
 #endif
 	} else {
-		req->flags |= htole32(PORT_PHY_CFG_REQ_FLAGS_EEE_DISABLE);
+		req->flags |= htole32(HWRM_PORT_PHY_CFG_INPUT_FLAGS_EEE_DISABLE);
 	}
 }
 
@@ -606,11 +606,11 @@ bnxt_hwrm_set_vnic_filter(struct bnxt_softc *softc, uint16_t vnic_id, uint16_t i
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_CFA_L2_FILTER_ALLOC, -1, -1);
 
 // Set these in the filter 
-	req.flags = htole32(CFA_L2_FILTER_ALLOC_REQ_FLAGS_PATH_RX |
-				CFA_L2_FILTER_ALLOC_REQ_FLAGS_OUTERMOST);
+	req.flags = htole32(HWRM_CFA_L2_FILTER_ALLOC_INPUT_FLAGS_PATH_RX |
+				HWRM_CFA_L2_FILTER_ALLOC_INPUT_FLAGS_OUTERMOST);
 	req.dst_id = htole16(softc->vnic_info[vnic_id].fw_vnic_id);
-	req.enables = htole32(CFA_L2_FILTER_ALLOC_REQ_ENABLES_L2_ADDR |
-			    CFA_L2_FILTER_ALLOC_REQ_ENABLES_L2_ADDR_MASK);
+	req.enables = htole32(HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_ADDR |
+			    HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_ADDR_MASK);
 
 	memcpy(req.l2_addr, mac_addr, ETHER_ADDR_LEN);
 	req.l2_addr_mask[0] = 0xff;
@@ -673,10 +673,10 @@ bnxt_hwrm_vnic_set_rss(struct bnxt_softc *softc, uint16_t vnic_id, bool set_rss)
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_VNIC_RSS_CFG, -1, -1);
 	if (set_rss) {
-		vnic->hash_type = VNIC_RSS_CFG_REQ_HASH_TYPE_IPV4 |
-				 VNIC_RSS_CFG_REQ_HASH_TYPE_TCP_IPV4 |
-				 VNIC_RSS_CFG_REQ_HASH_TYPE_IPV6 |
-				 VNIC_RSS_CFG_REQ_HASH_TYPE_TCP_IPV6;
+		vnic->hash_type = HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_IPV4 |
+				 HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_TCP_IPV4 |
+				 HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_IPV6 |
+				 HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_TCP_IPV6;
 
 		req.hash_type = htole32(vnic->hash_type);
 
@@ -710,9 +710,9 @@ bnxt_hwrm_vnic_set_hds(struct bnxt_softc *softc, uint16_t vnic_id)
 
 	resp = softc->hwrm_cmd_resp.vaddr;
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_VNIC_PLCMODES_CFG, -1, -1);
-	req.flags = htole32(VNIC_PLCMODES_CFG_REQ_FLAGS_JUMBO_PLACEMENT |
-				VNIC_PLCMODES_CFG_REQ_FLAGS_HDS_IPV4 |
-				VNIC_PLCMODES_CFG_REQ_FLAGS_HDS_IPV6);
+	req.flags = htole32(HWRM_VNIC_PLCMODES_CFG_INPUT_FLAGS_JUMBO_PLACEMENT |
+				HWRM_VNIC_PLCMODES_CFG_INPUT_FLAGS_HDS_IPV4 |
+				HWRM_VNIC_PLCMODES_CFG_INPUT_FLAGS_HDS_IPV6);
 
 	req.vnic_id = htole32(vnic->fw_vnic_id);
 	rc = hwrm_send_message(softc, &req, sizeof(req));
@@ -788,8 +788,8 @@ bnxt_hwrm_vnic_cfg(struct bnxt_softc *softc, uint16_t vnic_id)
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_VNIC_CFG, -1, -1);
 
 	/* Only RSS support for now */
-	req.enables = htole32(VNIC_CFG_REQ_ENABLES_DFLT_RING_GRP |
-				  VNIC_CFG_REQ_ENABLES_RSS_RULE);
+	req.enables = htole32(HWRM_VNIC_CFG_INPUT_ENABLES_DFLT_RING_GRP |
+				  HWRM_VNIC_CFG_INPUT_ENABLES_RSS_RULE);
 
 #if 0
 	if (vnic->flags & BNXT_VNIC_RSS_FLAG)
@@ -812,7 +812,7 @@ bnxt_hwrm_vnic_cfg(struct bnxt_softc *softc, uint16_t vnic_id)
 	req.flags = 1;
 
 	if (softc->flags & BNXT_FLAG_STRIP_VLAN)
-		req.flags |= htole32(VNIC_CFG_REQ_FLAGS_VLAN_STRIP_MODE);
+		req.flags |= htole32(HWRM_VNIC_CFG_INPUT_FLAGS_VLAN_STRIP_MODE);
 
 	rc = hwrm_send_message(softc, &req, sizeof(req));
 	err = le16toh(resp->error_code);
@@ -880,7 +880,7 @@ bnxt_hwrm_vnic_alloc(struct bnxt_softc *softc, uint16_t vnic_id,
 	softc->vnic_info[vnic_id].fw_rss_cos_lb_ctx =
 	    (uint16_t)HWRM_NA_SIGNATURE;
 	if (vnic_id == 0) {
-		req.flags = htole32(VNIC_ALLOC_REQ_FLAGS_DEFAULT);
+		req.flags = htole32(HWRM_VNIC_ALLOC_INPUT_FLAGS_DEFAULT);
 		/* JFV - sort of arbitrary but this needs to be set */
 		softc->vnic_info[vnic_id].flags = BNXT_VNIC_RSS_FLAG;
 	}
@@ -983,7 +983,7 @@ hwrm_ring_alloc_send(struct bnxt_softc *softc, enum hwrm_ring_alloc_type type, i
 	case HWRM_RING_ALLOC_TX:
 		txr = &softc->tx_rings[index];
 		cpr = &softc->cp_rings[txr->id];
-		req.ring_type = RING_ALLOC_REQ_RING_TYPE_TX;
+		req.ring_type = HWRM_RING_ALLOC_INPUT_RING_TYPE_TX;
 		dma = &txr->dma;
 		req.page_tbl_addr = htole64(dma->paddr);
 		/* Association of transmit ring with completion ring */
@@ -1002,14 +1002,14 @@ hwrm_ring_alloc_send(struct bnxt_softc *softc, enum hwrm_ring_alloc_type type, i
 	case HWRM_RING_ALLOC_RX:
 		rxr = &softc->rx_rings[index];
 		cpr = &softc->cp_rings[rxr->id];
-		req.ring_type = RING_ALLOC_REQ_RING_TYPE_RX;
+		req.ring_type = HWRM_RING_ALLOC_INPUT_RING_TYPE_RX;
 		req.cmpl_ring_id = htole16(cpr->fw_ring_id);
 		dma = &rxr->dma;
 		req.page_tbl_addr = htole64(dma->paddr);
 		req.length = htole32(rxr->ring_size);
 		req.logical_id = htole16(rxr->id);
 		req.stat_ctx_id = htole32(cpr->stats_ctx_id);
-		req.enables |= RING_ALLOC_REQ_ENABLES_STAT_CTX_ID_VALID;
+		req.enables |= HWRM_RING_ALLOC_INPUT_ENABLES_STAT_CTX_ID_VALID;
 		BNXT_HWRM_LOCK(softc);
 		rc = _hwrm_send_message(softc, &req, sizeof(req));
 		err = le16toh(resp->error_code);
@@ -1021,7 +1021,7 @@ hwrm_ring_alloc_send(struct bnxt_softc *softc, enum hwrm_ring_alloc_type type, i
 		agg = &softc->ag_rings[index];
 		rxr = &softc->rx_rings[index];
 		cpr = &softc->cp_rings[rxr->id];
-		req.ring_type = RING_ALLOC_REQ_RING_TYPE_RX;
+		req.ring_type = HWRM_RING_ALLOC_INPUT_RING_TYPE_RX;
 		req.cmpl_ring_id = htole16(cpr->fw_ring_id);
 		dma = &agg->dma;
 		req.page_tbl_addr = htole64(dma->paddr);
@@ -1036,15 +1036,15 @@ hwrm_ring_alloc_send(struct bnxt_softc *softc, enum hwrm_ring_alloc_type type, i
 		break;
 	case HWRM_RING_ALLOC_CMPL:
 		cpr = &softc->cp_rings[index];
-		req.ring_type = RING_ALLOC_REQ_RING_TYPE_CMPL;
+		req.ring_type = HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL;
 		req.length = htole32(cpr->ring_size);
 		req.logical_id = htole16(cpr->id);
 		dma = &cpr->ring_dma;
 		req.page_tbl_addr = htole64(dma->paddr);
 		if (softc->total_msix)
-			req.int_mode = RING_ALLOC_REQ_INT_MODE_MSIX;
+			req.int_mode = HWRM_RING_ALLOC_INPUT_INT_MODE_MSIX;
 		else
-			req.int_mode = RING_ALLOC_REQ_INT_MODE_LEGACY;
+			req.int_mode = HWRM_RING_ALLOC_INPUT_INT_MODE_LEGACY;
 		BNXT_HWRM_LOCK(softc);
 		rc = _hwrm_send_message(softc, &req, sizeof(req));
 		err = le16toh(resp->error_code);
@@ -1174,21 +1174,21 @@ hwrm_ring_free_send(struct bnxt_softc *softc, uint32_t type, int index)
 	struct hwrm_ring_free_output *resp = softc->hwrm_cmd_resp.vaddr;
 
 	switch (type) {
-	case RING_FREE_REQ_RING_TYPE_TX:
+	case HWRM_RING_FREE_INPUT_RING_TYPE_TX:
 		txr = &softc->tx_rings[index];
 		bnxt_hwrm_cmd_hdr_init(softc, &req,
 		    HWRM_RING_FREE, fw_ring_id, -1);
 		req.ring_type = type;
 		req.ring_id = htole16(fw_ring_id);
 		break;
-	case RING_FREE_REQ_RING_TYPE_RX:
+	case HWRM_RING_FREE_INPUT_RING_TYPE_RX:
 		rxr = &softc->rx_rings[index];
 		bnxt_hwrm_cmd_hdr_init(softc, &req,
 		   HWRM_RING_FREE, fw_ring_id, -1);
 		req.ring_type = type;
 		req.ring_id = htole16(fw_ring_id);
 		break;
-	case RING_FREE_REQ_RING_TYPE_CMPL:
+	case HWRM_RING_FREE_INPUT_RING_TYPE_CMPL:
 		cpr = &softc->cp_rings[index];
 		bnxt_hwrm_cmd_hdr_init(softc, &req,
 		    HWRM_RING_FREE, fw_ring_id, -1);
@@ -1207,15 +1207,15 @@ hwrm_ring_free_send(struct bnxt_softc *softc, uint32_t type, int index)
 
 	if (rc || err) {
 		switch (type) {
-		case RING_FREE_REQ_RING_TYPE_CMPL:
+		case HWRM_RING_FREE_INPUT_RING_TYPE_CMPL:
 			device_printf(dev,
 			    "hwrm_ring_free cp failed. err = %x rc:%d\n", err, rc);
 			return (rc);
-		case RING_FREE_REQ_RING_TYPE_RX:
+		case HWRM_RING_FREE_INPUT_RING_TYPE_RX:
 			device_printf(dev,
 			    "hwrm_ring_free rx failed. err = %x rc:%d\n", err, rc);
 			return (rc);
-		case RING_FREE_REQ_RING_TYPE_TX:
+		case HWRM_RING_FREE_INPUT_RING_TYPE_TX:
 			device_printf(dev,
 			    "hwrm_ring_free tx failed. err = %x rc:%d\n", err, rc);
 			return (rc);
@@ -1239,7 +1239,7 @@ bnxt_hwrm_free_rings(struct bnxt_softc *softc)
 
 		if (cpr->fw_ring_id != (uint16_t)HWRM_NA_SIGNATURE) {
 			hwrm_ring_free_send(softc,
-			    RING_FREE_REQ_RING_TYPE_CMPL, cpr->id);
+			    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL, cpr->id);
 			cpr->fw_ring_id = (uint16_t)HWRM_NA_SIGNATURE;
 		}
 	}
@@ -1249,7 +1249,7 @@ bnxt_hwrm_free_rings(struct bnxt_softc *softc)
 
 		if (txr->fw_ring_id != (uint16_t)HWRM_NA_SIGNATURE) {
 			hwrm_ring_free_send(softc,
-			    RING_FREE_REQ_RING_TYPE_TX, i);
+			    HWRM_RING_FREE_INPUT_RING_TYPE_TX, i);
 			txr->fw_ring_id = (uint16_t)HWRM_NA_SIGNATURE;
 		}
 	}
@@ -1259,7 +1259,7 @@ bnxt_hwrm_free_rings(struct bnxt_softc *softc)
 
 		if (rxr->fw_ring_id != (uint16_t)HWRM_NA_SIGNATURE) {
 			hwrm_ring_free_send(softc,
-			    RING_FREE_REQ_RING_TYPE_RX, i);
+			    HWRM_RING_FREE_INPUT_RING_TYPE_RX, i);
 			rxr->fw_ring_id = (uint16_t)HWRM_NA_SIGNATURE;
 			softc->grp_info[rxr->index].rx_ring_id =
 			    (uint16_t)HWRM_NA_SIGNATURE;
@@ -1405,20 +1405,20 @@ bnxt_hwrm_set_filter(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic,
 
         req.flags = htole32(filter->flags);
 
-	enables = filter->enables | CFA_L2_FILTER_ALLOC_REQ_ENABLES_DST_ID;
+	enables = filter->enables | HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_DST_ID;
 
 	req.dst_id = htole16(vnic->fw_vnic_id);
 
-        if (enables & CFA_L2_FILTER_ALLOC_REQ_ENABLES_L2_ADDR)
+        if (enables & HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_ADDR)
 		memcpy(req.l2_addr, filter->l2_addr, ETHER_ADDR_LEN);
 
-        if (enables & CFA_L2_FILTER_ALLOC_REQ_ENABLES_L2_ADDR_MASK)
+        if (enables & HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_ADDR_MASK)
 		memcpy(req.l2_addr_mask, filter->l2_addr_mask, ETHER_ADDR_LEN);
 
-        if (enables & CFA_L2_FILTER_ALLOC_REQ_ENABLES_L2_OVLAN)
+        if (enables & HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_OVLAN)
 		req.l2_ovlan = filter->l2_ovlan;
 
-        if (enables & CFA_L2_FILTER_ALLOC_REQ_ENABLES_L2_OVLAN_MASK)
+        if (enables & HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_OVLAN_MASK)
 		req.l2_ovlan_mask = filter->l2_ovlan_mask;
 
 	req.enables = htole32(enables);

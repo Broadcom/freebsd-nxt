@@ -577,7 +577,7 @@ bnxt_update_link(struct bnxt_softc *softc, bool chng_link_state)
 	link_info->media_type = resp->media_type;
 	link_info->transceiver = resp->xcvr_pkg_type;
 	link_info->phy_addr = resp->eee_config_phy_addr &
-			      PORT_PHY_QCFG_RESP_PHY_ADDR_MASK;
+			      HWRM_PORT_PHY_QCFG_OUTPUT_PHY_ADDR_MASK;
 
 	/* TODO: need to add more logic to report VF link */
 	if (chng_link_state) {
