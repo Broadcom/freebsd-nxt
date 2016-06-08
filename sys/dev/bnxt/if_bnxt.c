@@ -201,6 +201,8 @@ static struct if_shared_ctx bnxt_sctx_init = {
 	.isc_ntxd = PAGE_SIZE / sizeof(struct tx_bd_short),
 	.isc_admin_intrcnt = 1,
 	.isc_vendor_info = bnxt_vendor_info_array,
+	.isc_txqsizes = {PAGE_SIZE},
+	.isc_rxqsizes = {PAGE_SIZE},
 };
 
 if_shared_ctx_t bnxt_sctx = &bnxt_sctx_init;
@@ -241,12 +243,14 @@ static int
 bnxt_if_attach_pre(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
+	if_softc_ctx_t scctx;
 	int		rc = 0;
 
 	softc->ctx = ctx;
 	softc->dev = iflib_get_dev(ctx);
 	softc->media = iflib_get_media(ctx);
 	softc->scctx = iflib_get_softc_ctx(ctx);
+	scctx = softc->scctx;
 
 	pci_enable_busmaster(softc->dev);
 
@@ -292,6 +296,12 @@ bnxt_if_attach_pre(if_ctx_t ctx)
 
 	/* Needs to be done after probing the phy */
 	bnxt_add_media_types(softc);
+
+	/* Now set up iflib sc */
+	scctx->isc_tx_nsegments = 1;
+	scctx->isc_tx_tso_segments_max = 1;
+	scctx->isc_tx_tso_size_max = BNXT_TSO_SIZE;
+	scctx->isc_tx_tso_segsize_max = PAGE_SIZE*4;
 
 	return (rc);
 
