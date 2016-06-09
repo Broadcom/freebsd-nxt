@@ -266,8 +266,6 @@ bnxt_hwrm_ver_get(struct bnxt_softc *softc)
 	if (resp->def_req_timeout)
 		softc->hwrm_cmd_timeo = le16toh(resp->def_req_timeout);
 
-	device_printf(softc->dev, "Version: %s\n", softc->fw_ver_str);
-
 fail:
 	BNXT_HWRM_UNLOCK(softc);
 	return rc;

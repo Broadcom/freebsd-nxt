@@ -349,7 +349,6 @@ struct bnxt_cp_ring {
 	struct bnxt_ring	ring;
 	struct if_irq		irq;
 	uint32_t		raw_cons;
-	struct iflib_dma_info	stats_dma;
 	struct ctx_hw_stats	*stats;
 	uint32_t		stats_ctx_id;
 };
@@ -416,14 +415,6 @@ struct bnxt_softc {
 	struct bnxt_vnic_info	*vnic_info;
 	int			num_vnics;
 
-	struct bnxt_tx_ring	*tx_rings;
-	struct bnxt_rx_ring	*rx_rings;
-	struct bnxt_cp_ring	*cp_rings;
-	struct bnxt_ag_ring	*ag_rings;
-	int			num_tx_rings;
-	int			num_rx_rings;
-	int			num_cp_rings;
-
 	struct bnxt_grp_info	*grp_info;
 
 #define BNXT_MAX_QUEUE		8
@@ -434,6 +425,11 @@ struct bnxt_softc {
 	struct iflib_dma_info	hw_tx_port_stats;
 	struct rx_port_stats	*rx_port_stats;
 	struct tx_port_stats	*tx_port_stats;
+
+	struct bnxt_tx_ring	*tx_rings;
+	struct bnxt_cp_ring	*tx_cp_rings;
+	struct iflib_dma_info	tx_stats;
+	int			ntxqsets;
 };
 
 struct bnxt_filter_info {

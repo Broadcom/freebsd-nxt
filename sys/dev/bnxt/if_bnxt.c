@@ -94,6 +94,7 @@ static int bnxt_if_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
     uint64_t *paddrs, int ntxqs, int ntxqsets);
 static int bnxt_if_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
     uint64_t *paddrs, int nrxqs, int nrxqsets);
+static void bnxt_if_queues_free(if_ctx_t ctx);
 
 /* Device setup and teardown */
 static int bnxt_if_attach_pre(if_ctx_t ctx);
@@ -153,6 +154,7 @@ MODULE_DEPEND(bnxt, iflib, 1, 1, 1);
 static device_method_t bnxt_if_methods[] = {
 	DEVMETHOD(ifdi_tx_queues_alloc, bnxt_if_tx_queues_alloc),
 	DEVMETHOD(ifdi_rx_queues_alloc, bnxt_if_rx_queues_alloc),
+	DEVMETHOD(ifdi_queues_free, bnxt_if_queues_free),
 
 	DEVMETHOD(ifdi_attach_pre, bnxt_if_attach_pre),
 	DEVMETHOD(ifdi_attach_post, bnxt_if_attach_post),
@@ -229,70 +231,133 @@ static int
 bnxt_if_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
     uint64_t *paddrs, int ntxqs, int ntxqsets)
 {
-	struct bnxt_cp_ring *cp_rings;
-	struct bnxt_tx_ring *tx_rings;
 	struct bnxt_softc *softc;
 	int i;
 	int rc;
 
 	softc = iflib_get_softc(ctx);
 
-	cp_rings = malloc(sizeof(struct bnxt_cp_ring) * ntxqsets, M_DEVBUF,
-	    M_NOWAIT | M_ZERO);
-	tx_rings = malloc(sizeof(struct bnxt_tx_ring) * ntxqsets, M_DEVBUF,
-	    M_NOWAIT | M_ZERO);
+	softc->tx_cp_rings = malloc(sizeof(struct bnxt_cp_ring) * ntxqsets,
+	    M_DEVBUF, M_NOWAIT | M_ZERO);
+	if (!softc->tx_cp_rings) {
+		device_printf(iflib_get_dev(ctx),
+		    "unable to allocate TX completion rings");
+		rc = ENOMEM;
+		goto cp_alloc_fail;
+	}
+	softc->tx_rings = malloc(sizeof(struct bnxt_tx_ring) * ntxqsets,
+	    M_DEVBUF, M_NOWAIT | M_ZERO);
+	if (!softc->tx_rings) {
+		device_printf(iflib_get_dev(ctx),
+		    "unable to allocate TX rings");
+		rc = ENOMEM;
+		goto ring_alloc_fail;
+	}
+	rc = iflib_dma_alloc(ctx, sizeof(struct ctx_hw_stats) * ntxqsets,
+	    &softc->tx_stats, 0);
+	if (rc)
+		goto dma_alloc_fail;
 
 	for (i = 0; i < ntxqsets; i++) {
-		cp_rings[i].ring.softc = softc;
-		cp_rings[i].ring.id = ntxqs * i + 1;
-		cp_rings[i].ring.ring_size = softc->sctx->isc_ntxd * 2;
-		cp_rings[i].ring.ring_mask = cp_rings[i].ring.ring_size - 1;
-		cp_rings[i].ring.vaddr = vaddrs[i * ntxqs];
-		cp_rings[i].ring.paddr = paddrs[i * ntxqs];
-		rc = bnxt_hwrm_ring_alloc(softc,
-		    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL, &cp_rings[i].ring,
-		    (uint16_t)HWRM_NA_SIGNATURE, HWRM_NA_SIGNATURE);
+		/* Allocate the statistics context */
+		rc = bnxt_hwrm_stat_ctx_alloc(softc, &softc->tx_cp_rings[i],
+		    softc->tx_stats.idi_paddr +
+		    (sizeof(struct ctx_hw_stats) * i));
 		if (rc) {
 			i--;
 			goto fail;
 		}
 
-		tx_rings[i].ring.softc = softc;
-		tx_rings[i].ring.id = cp_rings[i].ring.id + 1;
-		tx_rings[i].ring.ring_size = softc->sctx->isc_ntxd;
-		tx_rings[i].ring.ring_mask = tx_rings[i].ring.ring_size - 1;
-		cp_rings[i].ring.vaddr = vaddrs[i * ntxqs + 1];
-		cp_rings[i].ring.paddr = paddrs[i * ntxqs + 1];
-		tx_rings[i].cos_queue_id = softc->q_info[0].id;
-		tx_rings[i].cp_ring = &cp_rings[i];
+		/* Allocation the completion ring */
+		softc->tx_cp_rings[i].ring.softc = softc;
+		softc->tx_cp_rings[i].ring.id = ntxqs * i + 1;
+		softc->tx_cp_rings[i].ring.ring_size =
+		    softc->sctx->isc_ntxd * 2;
+		softc->tx_cp_rings[i].ring.ring_mask =
+		    softc->tx_cp_rings[i].ring.ring_size - 1;
+		softc->tx_cp_rings[i].ring.vaddr = vaddrs[i * ntxqs];
+		softc->tx_cp_rings[i].ring.paddr = paddrs[i * ntxqs];
 		rc = bnxt_hwrm_ring_alloc(softc,
-		    HWRM_RING_ALLOC_INPUT_RING_TYPE_TX, &tx_rings[i].ring,
-		    cp_rings[i].ring.phys_id, HWRM_NA_SIGNATURE);
+		    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
+		    &softc->tx_cp_rings[i].ring,
+		    (uint16_t)HWRM_NA_SIGNATURE,
+		    softc->tx_cp_rings[i].stats_ctx_id);
+		if (rc) {
+			i--;
+			bnxt_hwrm_stat_ctx_free(softc, &softc->tx_cp_rings[i]);;
+			goto fail;
+		}
+
+		/* Allocate the TX ring */
+		softc->tx_rings[i].ring.softc = softc;
+		softc->tx_rings[i].ring.id = softc->tx_cp_rings[i].ring.id + 1;
+		softc->tx_rings[i].ring.ring_size = softc->sctx->isc_ntxd;
+		softc->tx_rings[i].ring.ring_mask =
+		    softc->tx_rings[i].ring.ring_size - 1;
+		softc->tx_cp_rings[i].ring.vaddr = vaddrs[i * ntxqs + 1];
+		softc->tx_cp_rings[i].ring.paddr = paddrs[i * ntxqs + 1];
+		softc->tx_rings[i].cos_queue_id = softc->q_info[0].id;
+		softc->tx_rings[i].cp_ring = &softc->tx_cp_rings[i];
+		rc = bnxt_hwrm_ring_alloc(softc,
+		    HWRM_RING_ALLOC_INPUT_RING_TYPE_TX,
+		    &softc->tx_rings[i].ring,
+		    softc->tx_cp_rings[i].ring.phys_id,
+		    softc->tx_cp_rings[i].stats_ctx_id);
 		if (rc) {
 			bnxt_hwrm_ring_free(softc,
 			    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL,
-			    cp_rings[i].ring.phys_id);
+			    softc->tx_cp_rings[i].ring.phys_id);
 			i--;
 			goto fail;
 		}
 	}
 
-	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
-	rc = ENOSYS;
-	// fall-through (should be return rc)
+	softc->ntxqsets = ntxqsets;
+	return rc;
 
 fail:
 	for (; i>=0; i--) {
 		bnxt_hwrm_ring_free(softc,
 		    HWRM_RING_FREE_INPUT_RING_TYPE_TX,
-		    tx_rings[i].ring.phys_id);
+		    softc->tx_rings[i].ring.phys_id);
 		bnxt_hwrm_ring_free(softc,
 		    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL,
-		    cp_rings[i].ring.phys_id);
+		    softc->tx_cp_rings[i].ring.phys_id);
+		bnxt_hwrm_stat_ctx_free(softc, &softc->tx_cp_rings[i]);;
 	}
-	free(tx_rings, M_DEVBUF);
-	free(cp_rings, M_DEVBUF);
+	iflib_dma_free(&softc->tx_stats);
+dma_alloc_fail:
+	free(softc->tx_rings, M_DEVBUF);
+ring_alloc_fail:
+	free(softc->tx_cp_rings, M_DEVBUF);
+cp_alloc_fail:
 	return rc;
+}
+
+static void
+bnxt_if_queues_free(if_ctx_t ctx)
+{
+	struct bnxt_softc *softc = iflib_get_softc(ctx);
+	int i;
+
+	// Free TX queues
+	for (i = softc->ntxqsets-1; i>=0; i--) {
+		bnxt_hwrm_ring_free(softc,
+		    HWRM_RING_FREE_INPUT_RING_TYPE_TX,
+		    softc->tx_rings[i].ring.phys_id);
+		bnxt_hwrm_ring_free(softc,
+		    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL,
+		    softc->tx_cp_rings[i].ring.phys_id);
+		bnxt_hwrm_stat_ctx_free(softc, &softc->tx_cp_rings[i]);;
+	}
+	iflib_dma_free(&softc->tx_stats);
+	free(softc->tx_rings, M_DEVBUF);
+	softc->tx_rings = NULL;
+	free(softc->tx_cp_rings, M_DEVBUF);
+	softc->tx_cp_rings = NULL;
+	softc->ntxqsets = 0;
+
+	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
 }
 
 static int
