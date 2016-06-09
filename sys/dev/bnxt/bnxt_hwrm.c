@@ -37,6 +37,7 @@ __FBSDID("$FreeBSD$");
 #include "hsi_struct_def.h"
 //#include "decode_hsi.h"
 
+static int bnxt_hwrm_err_map(uint16_t err);
 static inline int _is_valid_ether_addr(uint8_t *);
 static inline void get_random_ether_addr(uint8_t *);
 static void	bnxt_hwrm_set_link_common(struct bnxt_softc *softc,
@@ -45,6 +46,34 @@ static void	bnxt_hwrm_set_pause_common(struct bnxt_softc *softc,
 		    struct hwrm_port_phy_cfg_input *req);
 static void	bnxt_hwrm_set_eee(struct bnxt_softc *softc,
 		    struct hwrm_port_phy_cfg_input *req);
+
+static int
+bnxt_hwrm_err_map(uint16_t err)
+{
+	int rc;
+
+	switch (err) {
+	case HWRM_ERR_CODE_SUCCESS:
+		return 0;
+	case HWRM_ERR_CODE_INVALID_PARAMS:
+	case HWRM_ERR_CODE_INVALID_FLAGS:
+	case HWRM_ERR_CODE_INVALID_ENABLES:
+		return EINVAL;
+	case HWRM_ERR_CODE_RESOURCE_ACCESS_DENIED:
+		return EACCES;
+	case HWRM_ERR_CODE_RESOURCE_ALLOC_ERROR:
+		return ENOMEM;
+	case HWRM_ERR_CODE_CMD_NOT_SUPPORTED:
+		return ENOSYS;
+	case HWRM_ERR_CODE_FAIL:
+	case HWRM_ERR_CODE_HWRM_ERROR:
+	case HWRM_ERR_CODE_UNKNOWN_ERR:
+	default:
+		return EDOOFUS;
+	}
+
+	return rc;
+}
 
 int
 bnxt_alloc_hwrm_dma_mem(struct bnxt_softc *softc)
@@ -85,6 +114,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 	int i;
 	uint16_t cp_ring_id;
 	uint8_t *valid;
+	uint16_t err;
 
 	req->seq_id = htole16(softc->hwrm_cmd_seq++);
 	memset(resp, 0, PAGE_SIZE);
@@ -121,7 +151,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 		    "(timeout: %d) msg {0x%x 0x%x} len:%d\n", softc->hwrm_cmd_timeo,
 		    le16toh(req->req_type), le16toh(req->seq_id),
 		    le16toh(resp->resp_len));
-			return -1;
+			return ETIMEDOUT;
 	}
 	/* Last byte of resp contains the valid key */
 	valid = (uint8_t *)resp + resp->resp_len - 1;
@@ -136,7 +166,14 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 		    softc->hwrm_cmd_timeo, le16toh(req->req_type),
 		    le16toh(req->seq_id), le16toh(resp->resp_len),
 		    *valid);
-		return -1;
+		return ETIMEDOUT;
+	}
+
+	err = le16toh(resp->error_code);
+	if (err) {
+		device_printf(softc->dev, "HWRM command returned error.  cmd:0x%02x err:0x%02x",
+		    le16toh(req->req_type), err);
+		return bnxt_hwrm_err_map(err);
 	}
 
 	//decode_hwrm_resp(resp);
@@ -205,9 +242,10 @@ bnxt_hwrm_ver_get(struct bnxt_softc *softc)
 	req.hwrm_intf_min = HWRM_VERSION_MINOR;
 	req.hwrm_intf_upd = HWRM_VERSION_UPDATE;
 
-	rc = hwrm_send_message(softc, &req, sizeof(req));
+	BNXT_HWRM_LOCK(softc);
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	if (rc)
-		return (rc);
+		goto fail;
 
 	if (resp->hwrm_intf_maj < 1) {
 		device_printf(softc->dev, "HWRM interface %d.%d.%d is older than 1.0.0.\n",
@@ -230,7 +268,9 @@ bnxt_hwrm_ver_get(struct bnxt_softc *softc)
 
 	device_printf(softc->dev, "Version: %s\n", softc->fw_ver_str);
 
-	return (0);
+fail:
+	BNXT_HWRM_UNLOCK(softc);
+	return rc;
 }
 
 int
@@ -260,7 +300,7 @@ bnxt_hwrm_func_drv_unrgtr(struct bnxt_softc *softc, bool shutdown)
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_FUNC_DRV_UNRGTR, -1, -1);
 	if (shutdown == true)
 		req.flags |= HWRM_FUNC_DRV_UNRGTR_INPUT_FLAGS_PREPARE_FOR_SHUTDOWN;
-	return _hwrm_send_message(softc, &req, sizeof(req));
+	return hwrm_send_message(softc, &req, sizeof(req));
 }
 
 
@@ -299,7 +339,7 @@ bnxt_hwrm_func_qcaps(struct bnxt_softc *softc)
 	BNXT_HWRM_LOCK(softc);
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	if (rc)
-		goto hwrm_func_qcaps_exit;
+		goto fail;
 
 	if (BNXT_PF(softc)) {
 		struct bnxt_pf_info *pf = &softc->pf;
@@ -342,7 +382,7 @@ bnxt_hwrm_func_qcaps(struct bnxt_softc *softc)
 		vf->max_stat_ctxs = le16toh(resp->max_stat_ctx);
 	}
 
-hwrm_func_qcaps_exit:
+fail:
 	BNXT_HWRM_UNLOCK(softc);
 	return rc;
 }
@@ -494,7 +534,7 @@ bnxt_hwrm_vnic_set_rss(struct bnxt_softc *softc, uint16_t vnic_id, bool set_rss)
 	struct bnxt_vnic_info *vnic = &softc->vnic_info[vnic_id];
 	struct hwrm_vnic_rss_cfg_input req = {0};
 	uint16_t *rss_table = (uint16_t *)vnic->rss.idi_vaddr;
-	uint32_t i, j, max_rings, rc;
+	uint32_t i, j, max_rings;
 
 	if ((vnic->fw_rss_cos_lb_ctx == (uint16_t)HWRM_NA_SIGNATURE) ||
 	    (!rss_table))
@@ -510,7 +550,7 @@ bnxt_hwrm_vnic_set_rss(struct bnxt_softc *softc, uint16_t vnic_id, bool set_rss)
 		req.hash_type = htole32(vnic->hash_type);
 
 		if (vnic->flags & BNXT_VNIC_RSS_FLAG)
-			max_rings = softc->num_rx_rings;
+			max_rings = softc->scctx->isc_nrxqsets;
 		else
 			max_rings = 1;
 
@@ -524,8 +564,7 @@ bnxt_hwrm_vnic_set_rss(struct bnxt_softc *softc, uint16_t vnic_id, bool set_rss)
 		req.hash_key_tbl_addr = htole64(vnic->rss.idi_paddr + vnic->rss_size);
 	}
 	req.rss_ctx_idx = htole16(vnic->fw_rss_cos_lb_ctx);
-	rc = hwrm_send_message(softc, &req, sizeof(req));
-	return (rc);
+	return hwrm_send_message(softc, &req, sizeof(req));
 }
 
 
@@ -535,7 +574,6 @@ bnxt_hwrm_vnic_set_hds(struct bnxt_softc *softc, uint16_t vnic_id)
 	struct bnxt_vnic_info *vnic = &softc->vnic_info[vnic_id];
 	struct hwrm_vnic_plcmodes_cfg_input req = {0};
 	struct hwrm_vnic_plcmodes_cfg_output *resp;
-	int rc, err;
 
 	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_VNIC_PLCMODES_CFG, -1, -1);
@@ -544,11 +582,7 @@ bnxt_hwrm_vnic_set_hds(struct bnxt_softc *softc, uint16_t vnic_id)
 				HWRM_VNIC_PLCMODES_CFG_INPUT_FLAGS_HDS_IPV6);
 
 	req.vnic_id = htole32(vnic->fw_vnic_id);
-	rc = hwrm_send_message(softc, &req, sizeof(req));
-	err = le16toh(resp->error_code);
-	if (rc || err)
-		printf("vnic set hds failed %d error %d\n", rc, err);
-	return (rc);
+	return hwrm_send_message(softc, &req, sizeof(req));
 }
 
 
@@ -557,7 +591,7 @@ bnxt_hwrm_vnic_ctx_alloc(struct bnxt_softc *softc, uint16_t vnic_id)
 {
 	struct hwrm_vnic_rss_cos_lb_ctx_alloc_input req = {0};
 	struct hwrm_vnic_rss_cos_lb_ctx_alloc_output *resp;
-	int rc, err;
+	int rc;
 
 	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
 
@@ -566,14 +600,14 @@ bnxt_hwrm_vnic_ctx_alloc(struct bnxt_softc *softc, uint16_t vnic_id)
 
 	BNXT_HWRM_LOCK(softc);
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
-	err = le16toh(resp->error_code);
-	if (rc || err)
-		printf("vnic ctx alloc failed %d error %d\n", rc, err);
-	if (!rc)
-		softc->vnic_info[vnic_id].fw_rss_cos_lb_ctx =
-			le16toh(resp->rss_cos_lb_ctx_id);
-	BNXT_HWRM_UNLOCK(softc);
+	if (rc)
+		goto fail;
 
+	softc->vnic_info[vnic_id].fw_rss_cos_lb_ctx =
+	    le16toh(resp->rss_cos_lb_ctx_id);
+
+fail:
+	BNXT_HWRM_UNLOCK(softc);
 	return (rc);
 }
 
@@ -581,7 +615,7 @@ bnxt_hwrm_vnic_ctx_alloc(struct bnxt_softc *softc, uint16_t vnic_id)
 int
 bnxt_hwrm_vnic_cfg(struct bnxt_softc *softc, uint16_t vnic_id)
 {
-	int grp_idx = 0, rc, err;
+	int grp_idx = 0;
 	struct bnxt_vnic_info *vnic = &softc->vnic_info[vnic_id];
 	struct hwrm_vnic_cfg_input req = {0};
 	struct hwrm_vnic_cfg_output *resp;
@@ -616,12 +650,7 @@ bnxt_hwrm_vnic_cfg(struct bnxt_softc *softc, uint16_t vnic_id)
 	if (softc->flags & BNXT_FLAG_STRIP_VLAN)
 		req.flags |= htole32(HWRM_VNIC_CFG_INPUT_FLAGS_VLAN_STRIP_MODE);
 
-	rc = hwrm_send_message(softc, &req, sizeof(req));
-	err = le16toh(resp->error_code);
-	if (rc || err)
-		printf("vnic cfg failed %d error %d\n", rc, err);
-
-	return (rc);
+	return hwrm_send_message(softc, &req, sizeof(req));
 }
 
 int
@@ -631,7 +660,7 @@ bnxt_hwrm_vnic_alloc(struct bnxt_softc *softc, uint16_t vnic_id,
 	struct hwrm_vnic_alloc_input req = {0};
 	struct hwrm_vnic_alloc_output *resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	uint16_t	end_index = start_index + num_rings;
-	int		rc = 0, i, j, err;
+	int		rc = 0, i, j;
 
 	/* map ring groups to this vnic */
 	for (i = start_index, j = 0; i < end_index; i++, j++) {
@@ -659,11 +688,12 @@ bnxt_hwrm_vnic_alloc(struct bnxt_softc *softc, uint16_t vnic_id,
 
 	BNXT_HWRM_LOCK(softc);
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
-	err = le16toh(resp->error_code);
-	if (rc || err)
-		device_printf(softc->dev, "vnic alloc failed %d error %d\n", rc, err);
-	if (!rc)
-		softc->vnic_info[vnic_id].fw_vnic_id = le32toh(resp->vnic_id);
+	if (rc)
+		goto fail;
+
+	softc->vnic_info[vnic_id].fw_vnic_id = le32toh(resp->vnic_id);
+
+fail:
 	BNXT_HWRM_UNLOCK(softc);
 	return (rc);
 }
@@ -672,10 +702,10 @@ bnxt_hwrm_vnic_alloc(struct bnxt_softc *softc, uint16_t vnic_id,
 int
 bnxt_hwrm_ring_grp_alloc(struct bnxt_softc *softc)
 {
-	int rc = 0, err = 0;
+	int rc = 0;
 
 	BNXT_HWRM_LOCK(softc);
-	for (int i = 0; i < softc->num_rx_rings; i++) {
+	for (int i = 0; i < softc->scctx->isc_nrxqsets; i++) {
 		struct hwrm_ring_grp_alloc_input req = {0};
 		struct hwrm_ring_grp_alloc_output *resp;
 
@@ -688,11 +718,8 @@ bnxt_hwrm_ring_grp_alloc(struct bnxt_softc *softc)
 		req.sc = htole16(softc->grp_info[i].stats_ctx);
 
 		rc = _hwrm_send_message(softc, &req, sizeof(req));
-		err = le16toh(resp->error_code);
-		if (rc || err) {
-			printf("ring grp alloc failed %d error %d\n", rc, err);
+		if (rc)
 			break;
-		}
 
 		softc->grp_info[i].fw_grp_id = le32toh(resp->ring_group_id);
 	}
@@ -709,7 +736,7 @@ bnxt_hwrm_ring_alloc(struct bnxt_softc *softc, uint8_t type,
 {
 	struct hwrm_ring_alloc_input req = {0};
 	struct hwrm_ring_alloc_output *resp;
-	int rc, err;
+	int rc;
 
 	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_RING_ALLOC, -1, -1);
@@ -730,16 +757,13 @@ bnxt_hwrm_ring_alloc(struct bnxt_softc *softc, uint8_t type,
 	req.int_mode = HWRM_RING_ALLOC_INPUT_INT_MODE_MSIX;
 	BNXT_HWRM_LOCK(softc);
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
-	err = le16toh(resp->error_code);
-	if (!rc)
-		ring->phys_id = le16toh(resp->ring_id);
+	if (rc)
+		goto fail;
+
+	ring->phys_id = le16toh(resp->ring_id);
+
+fail:
 	BNXT_HWRM_UNLOCK(softc);
-	if (rc || err) {
-		device_printf(softc->dev,
-		    "hwrm_ring_alloc failed. rc:%x err:%x\n",
-		    rc, err);
-		return (-1);
-	}
 	return rc;
 }
 
@@ -748,7 +772,6 @@ bnxt_hwrm_ring_free(struct bnxt_softc *softc, uint8_t type, uint16_t phys_id)
 {
 	struct hwrm_ring_free_input req = {0};
 	struct hwrm_ring_free_output *resp;
-	int rc, err;
 
 	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_RING_FREE, -1, -1);
@@ -756,22 +779,12 @@ bnxt_hwrm_ring_free(struct bnxt_softc *softc, uint8_t type, uint16_t phys_id)
 	req.ring_type = type;
 	req.ring_id = htole16(phys_id);
 
-	BNXT_HWRM_LOCK(softc);
-	rc = _hwrm_send_message(softc, &req, sizeof(req));
-	err = le16toh(resp->error_code);
-	BNXT_HWRM_UNLOCK(softc);
-
-	if (rc || err) {
-		device_printf(softc->dev,
-		    "hwrm_ring_alloc failed. rc:%x err:%x\n",
-		    rc, err);
-		return (-1);
-	}
-	return rc;
+	return hwrm_send_message(softc, &req, sizeof(req));
 }
 
 int
-bnxt_hwrm_stat_ctx_alloc(struct bnxt_softc *softc)
+bnxt_hwrm_stat_ctx_alloc(struct bnxt_softc *softc, struct bnxt_cp_ring *cpr,
+    uint64_t paddr)
 {
 	struct hwrm_stat_ctx_alloc_input req = {0};
 	struct hwrm_stat_ctx_alloc_output *resp;
@@ -781,20 +794,33 @@ bnxt_hwrm_stat_ctx_alloc(struct bnxt_softc *softc)
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_STAT_CTX_ALLOC, -1, -1);
 
 	req.update_period_ms = htole32(1000);
+	req.stats_dma_addr = htole64(paddr);
 
 	BNXT_HWRM_LOCK(softc);
-	for (int i = 0; i < softc->num_cp_rings; i++) {
-		struct bnxt_cp_ring *cpr = &softc->cp_rings[i];
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	if (rc)
+		goto fail;
 
-		req.stats_dma_addr = htole64(cpr->stats_dma.idi_paddr);
-		rc = _hwrm_send_message(softc, &req, sizeof(req));
-		if (rc)
-			break;
+	cpr->stats_ctx_id = le32toh(resp->stat_ctx_id);
 
-		cpr->stats_ctx_id = le32toh(resp->stat_ctx_id);
-	}
+fail:
 	BNXT_HWRM_UNLOCK(softc);
-	return 0;
+
+	return rc;
+}
+
+int
+bnxt_hwrm_stat_ctx_free(struct bnxt_softc *softc, struct bnxt_cp_ring *cpr)
+{
+	struct hwrm_stat_ctx_free_input req = {0};
+	struct hwrm_stat_ctx_free_output *resp;
+
+	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_STAT_CTX_FREE, -1, -1);
+
+	req.stat_ctx_id = htole16(cpr->stats_ctx_id);
+
+	return hwrm_send_message(softc, &req, sizeof(req));
 }
 
 int
@@ -803,7 +829,6 @@ bnxt_hwrm_port_qstats(struct bnxt_softc *softc)
 	struct bnxt_pf_info *pf = &softc->pf;
 	struct hwrm_port_qstats_input req = {0};
 	struct hwrm_port_qstats_output *resp;
-	int rc, err;
 
 	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_PORT_QSTATS, -1, -1);
@@ -812,11 +837,7 @@ bnxt_hwrm_port_qstats(struct bnxt_softc *softc)
 	req.tx_stat_host_addr = htole64(softc->hw_tx_port_stats.idi_paddr);
 	req.rx_stat_host_addr = htole64(softc->hw_rx_port_stats.idi_paddr);
 
-	rc = hwrm_send_message(softc, &req, sizeof(req));
-	err = le16toh(resp->error_code);
-	if (rc || err)
-		printf("hwrm_port_qstats failed. err = %x rc:%d\n", err, rc);
-	return (rc);
+	return hwrm_send_message(softc, &req, sizeof(req));
 }
 
 
@@ -843,8 +864,8 @@ bnxt_hwrm_set_filter(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic,
 {
 	struct hwrm_cfa_l2_filter_alloc_input	req = {0};
 	struct hwrm_cfa_l2_filter_alloc_output	*resp;
-	uint32_t					enables = 0;
-	int					rc = 0, err;
+	uint32_t enables = 0;
+	int rc = 0;
 
 	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
         bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_CFA_L2_FILTER_ALLOC, -1, -1);
@@ -869,13 +890,15 @@ bnxt_hwrm_set_filter(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic,
 
 	req.enables = htole32(enables);
 
-	rc = hwrm_send_message(softc, &req, sizeof(req));
-	err = le16toh(resp->error_code);
-	if (rc || err)
-		device_printf(softc->dev, "set filter failed %d error %d\n", rc, err);
-	else
-		filter->fw_l2_filter_id = le64toh(resp->l2_filter_id);
+	BNXT_HWRM_LOCK(softc);
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	if (rc)
+		goto fail;
 
+	filter->fw_l2_filter_id = le64toh(resp->l2_filter_id);
+
+fail:
+	BNXT_HWRM_UNLOCK(softc);
 	return (rc);
 }
 
@@ -885,7 +908,7 @@ bnxt_hwrm_clear_filter(struct bnxt_softc *softc, struct bnxt_filter_info *filter
 {
 	struct hwrm_cfa_l2_filter_free_input	req = {0};
 	struct hwrm_cfa_l2_filter_free_output	*resp;
-	int					rc = 0, err;
+	int rc = 0;
 
 	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_CFA_L2_FILTER_FREE, -1, -1);
@@ -893,11 +916,7 @@ bnxt_hwrm_clear_filter(struct bnxt_softc *softc, struct bnxt_filter_info *filter
 	req.l2_filter_id = htole64(filter->fw_l2_filter_id);
 
 	rc = hwrm_send_message(softc, &req, sizeof(req));
-	err = le16toh(resp->error_code);
-	if (rc || err)
-		device_printf(softc->dev, "set filter failed %d error %d\n", rc, err);
-	else
-		filter->fw_l2_filter_id = -1;
+	filter->fw_l2_filter_id = -1;
 
 	return (rc);
 }
