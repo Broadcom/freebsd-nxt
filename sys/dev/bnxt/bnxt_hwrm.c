@@ -35,6 +35,7 @@ __FBSDID("$FreeBSD$");
 #include "bnxt.h"
 #include "bnxt_hwrm.h"
 #include "hsi_struct_def.h"
+//#include "decode_hsi.h"
 
 static inline int _is_valid_ether_addr(uint8_t *);
 static inline void get_random_ether_addr(uint8_t *);
@@ -44,25 +45,6 @@ static void	bnxt_hwrm_set_pause_common(struct bnxt_softc *softc,
 		    struct hwrm_port_phy_cfg_input *req);
 static void	bnxt_hwrm_set_eee(struct bnxt_softc *softc,
 		    struct hwrm_port_phy_cfg_input *req);
-static void	bnxt_hwrm_vnic_ctx_free_one(struct bnxt_softc *softc, uint16_t vnic_id);
-static void	bnxt_hwrm_vnic_ctx_free(struct bnxt_softc *softc);
-static int	bnxt_hwrm_vnic_free_one(struct bnxt_softc *softc, uint16_t vnic_id);
-static void	bnxt_hwrm_vnic_free(struct bnxt_softc *softc);
-static int	bnxt_hwrm_ring_grp_free(struct bnxt_softc *softc);
-static int	hwrm_ring_alloc_send(struct bnxt_softc *softc, uint32_t type, int index);
-static int	hwrm_ring_free_send(struct bnxt_softc *softc, uint32_t type, int index);
-static int	bnxt_hwrm_stat_ctx_free(struct bnxt_softc *softc);
-static void	bnxt_hwrm_clear_vnic_rss(struct bnxt_softc *softc);
-#if 0
-static int	bnxt_hwrm_clear_vnic_filter(struct bnxt_softc *softc);
-#endif
-
-enum hwrm_ring_alloc_type {
-	HWRM_RING_ALLOC_TX,
-	HWRM_RING_ALLOC_RX,
-	HWRM_RING_ALLOC_AGG,
-	HWRM_RING_ALLOC_CMPL
-};
 
 int
 bnxt_alloc_hwrm_dma_mem(struct bnxt_softc *softc)
@@ -108,7 +90,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 	memset(resp, 0, PAGE_SIZE);
 	cp_ring_id = le16toh(req->cmpl_ring);
 
-	//decode_hwrm_req(NULL, req);
+	//decode_hwrm_req(req);
 
 	/* Write request msg to hwrm channel */
 	for (i = 0; i < msg_len; i += 4) {
@@ -116,7 +98,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 				  softc->bar[0].handle,
 				  i, *data);
 		data++;
-        }
+	}
 
 	/* Clear to the end of the request buffer */
 	for (i = msg_len; i < HWRM_MAX_REQ_LEN; i += 4)
@@ -157,7 +139,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 		return -1;
 	}
 
-	//decode_hwrm_resp(NULL, resp);
+	//decode_hwrm_resp(resp);
 	return 0;
 }
 
@@ -171,7 +153,6 @@ hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 	BNXT_HWRM_UNLOCK(softc);
 	return rc;
 }
-
 
 int
 bnxt_hwrm_queue_qportcfg(struct bnxt_softc *softc)
@@ -507,72 +488,6 @@ bnxt_hwrm_set_pause(struct bnxt_softc *softc)
 	return rc;
 }
 
-
-#if 0
-int
-bnxt_hwrm_set_vnic_filter(struct bnxt_softc *softc, uint16_t vnic_id, uint16_t idx, uint8_t *mac_addr)
-{
-	struct hwrm_cfa_l2_filter_alloc_input req = {0};
-	struct hwrm_cfa_l2_filter_alloc_output *resp;
-	uint32_t rc = 0, err;
-
-	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
-	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_CFA_L2_FILTER_ALLOC, -1, -1);
-
-// Set these in the filter 
-	req.flags = htole32(HWRM_CFA_L2_FILTER_ALLOC_INPUT_FLAGS_PATH_RX |
-				HWRM_CFA_L2_FILTER_ALLOC_INPUT_FLAGS_OUTERMOST);
-	req.dst_id = htole16(softc->vnic_info[vnic_id].fw_vnic_id);
-	req.enables = htole32(HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_ADDR |
-			    HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_ADDR_MASK);
-
-	memcpy(req.l2_addr, mac_addr, ETHER_ADDR_LEN);
-	req.l2_addr_mask[0] = 0xff;
-	req.l2_addr_mask[1] = 0xff;
-	req.l2_addr_mask[2] = 0xff;
-	req.l2_addr_mask[3] = 0xff;
-	req.l2_addr_mask[4] = 0xff;
-	req.l2_addr_mask[5] = 0xff;
-
-	BNXT_HWRM_LOCK(softc);
-	rc = _hwrm_send_message(softc, &req, sizeof(req));
-	err = le16toh(resp->error_code);
-	if (rc || err)
-		printf("set vnic filter failed %d error %d\n", rc, err);
-	if (!rc)
-		softc->vnic_info[vnic_id].fw_l2_filter_id[idx] =
-		    resp->l2_filter_id;
-	BNXT_HWRM_UNLOCK(softc);
-	return rc;
-}
-
-
-static int
-bnxt_hwrm_clear_vnic_filter(struct bnxt_softc *softc)
-{
-	int rc = 0;
-
-	/* Any associated ntuple filters will also be cleared by firmware. */
-	BNXT_HWRM_LOCK(softc);
-	for (int i = 0; i < softc->num_vnics; i++) {
-		struct bnxt_vnic_info *vnic = &softc->vnic_info[i];
-
-		for (int j = 0; j < vnic->uc_filter_count; j++) {
-			struct hwrm_cfa_l2_filter_free_input req = {0};
-
-			bnxt_hwrm_cmd_hdr_init(softc, &req,
-			    HWRM_CFA_L2_FILTER_FREE, -1, -1);
-			req.l2_filter_id = vnic->fw_l2_filter_id[j];
-			rc = _hwrm_send_message(softc, &req, sizeof(req));
-		}
-		vnic->uc_filter_count = 0;
-	}
-	BNXT_HWRM_UNLOCK(softc);
-
-	return rc;
-}
-#endif
-
 int
 bnxt_hwrm_vnic_set_rss(struct bnxt_softc *softc, uint16_t vnic_id, bool set_rss)
 {
@@ -634,33 +549,6 @@ bnxt_hwrm_vnic_set_hds(struct bnxt_softc *softc, uint16_t vnic_id)
 	if (rc || err)
 		printf("vnic set hds failed %d error %d\n", rc, err);
 	return (rc);
-}
-
-
-static void
-bnxt_hwrm_vnic_ctx_free_one(struct bnxt_softc *softc, uint16_t vnic_id)
-{
-	struct hwrm_vnic_rss_cos_lb_ctx_free_input req = {0};
-
-	bnxt_hwrm_cmd_hdr_init(softc, &req,
-	    HWRM_VNIC_RSS_COS_LB_CTX_FREE, -1, -1);
-	req.rss_cos_lb_ctx_id =
-	    htole16(softc->vnic_info[vnic_id].fw_rss_cos_lb_ctx);
-	hwrm_send_message(softc, &req, sizeof(req));
-	softc->vnic_info[vnic_id].fw_rss_cos_lb_ctx =
-	    (uint16_t)HWRM_NA_SIGNATURE;
-}
-
-
-static void
-bnxt_hwrm_vnic_ctx_free(struct bnxt_softc *softc)
-{
-	for (int i = 0; i < softc->num_vnics; i++) {
-		struct bnxt_vnic_info *vnic = &softc->vnic_info[i];
-
-		if (vnic->fw_rss_cos_lb_ctx != (uint16_t)HWRM_NA_SIGNATURE)
-			bnxt_hwrm_vnic_ctx_free_one(softc, i);
-	}
 }
 
 
@@ -735,38 +623,6 @@ bnxt_hwrm_vnic_cfg(struct bnxt_softc *softc, uint16_t vnic_id)
 
 	return (rc);
 }
-
-
-static int
-bnxt_hwrm_vnic_free_one(struct bnxt_softc *softc, uint16_t vnic_id)
-{
-	uint32_t rc = 0;
-
-	if (softc->vnic_info[vnic_id].fw_vnic_id !=
-	    (uint16_t)HWRM_NA_SIGNATURE) {
-		struct hwrm_vnic_free_input req = {0};
-
-		bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_VNIC_FREE, -1, -1);
-		req.vnic_id =
-			htole32(softc->vnic_info[vnic_id].fw_vnic_id);
-
-		rc = hwrm_send_message(softc, &req, sizeof(req));
-		if (rc)
-			return rc;
-		softc->vnic_info[vnic_id].fw_vnic_id =
-		    (uint16_t)HWRM_NA_SIGNATURE;
-	}
-	return rc;
-}
-
-
-static void
-bnxt_hwrm_vnic_free(struct bnxt_softc *softc)
-{
-	for (uint16_t i = 0; i < softc->num_vnics; i++)
-		bnxt_hwrm_vnic_free_one(softc, i);
-}
-
 
 int
 bnxt_hwrm_vnic_alloc(struct bnxt_softc *softc, uint16_t vnic_id,
@@ -844,275 +700,61 @@ bnxt_hwrm_ring_grp_alloc(struct bnxt_softc *softc)
 	return rc;
 }
 
-
-static int
-bnxt_hwrm_ring_grp_free(struct bnxt_softc *softc)
-{
-	struct hwrm_ring_grp_free_input req = {0};
-	int rc = 0;
-
-	if (!softc->grp_info)
-		return 0;
-
-	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_RING_GRP_FREE, -1, -1);
-
-	BNXT_HWRM_LOCK(softc);
-	for (int i = 0; i < softc->num_rx_rings; i++) {
-		if (softc->grp_info[i].fw_grp_id == (uint16_t)HWRM_NA_SIGNATURE)
-			continue;
-		req.ring_group_id =
-			htole32(softc->grp_info[i].fw_grp_id);
-		rc = _hwrm_send_message(softc, &req, sizeof(req));
-		if (rc)
-			break;
-		softc->grp_info[i].fw_grp_id = (uint16_t)HWRM_NA_SIGNATURE;
-	}
-	BNXT_HWRM_UNLOCK(softc);
-	return rc;
-}
-
-
 /*
  * Ring allocation message to the firmware
  */
-static int
-hwrm_ring_alloc_send(struct bnxt_softc *softc, enum hwrm_ring_alloc_type type, int index)
+int
+bnxt_hwrm_ring_alloc(struct bnxt_softc *softc, uint8_t type,
+    struct bnxt_ring *ring, uint16_t cmpl_ring_id, uint32_t stat_ctx_id)
 {
 	struct hwrm_ring_alloc_input req = {0};
 	struct hwrm_ring_alloc_output *resp;
-	struct bnxt_cp_ring	*cpr;
-	struct bnxt_rx_ring	*rxr;
-	struct bnxt_ag_ring	*agg;
-	struct bnxt_tx_ring	*txr;
-	iflib_dma_info_t	dma;
-	device_t		dev = softc->dev;
-	int			rc = 0, err = 0;
+	int rc, err;
 
 	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_RING_ALLOC, -1, -1);
 	req.enables = htole32(0);
 	req.fbo = htole32(0);
 
-	switch (type) {
-	case HWRM_RING_ALLOC_TX:
-		txr = &softc->tx_rings[index];
-		cpr = &softc->cp_rings[txr->id];
-		req.ring_type = HWRM_RING_ALLOC_INPUT_RING_TYPE_TX;
-		dma = &txr->dma;
-		req.page_tbl_addr = htole64(dma->idi_paddr);
-		/* Association of transmit ring with completion ring */
-		req.cmpl_ring_id = htole16(cpr->fw_ring_id);
-		req.length = htole32(txr->ring_size);
-		req.stat_ctx_id = htole32(cpr->stats_ctx_id);
-		req.queue_id = softc->q_info[0].id;
-		req.logical_id = htole16(txr->id);
-		BNXT_HWRM_LOCK(softc);
-		rc = _hwrm_send_message(softc, &req, sizeof(req));
-		err = le16toh(resp->error_code);
-		if (!rc)
-			txr->fw_ring_id = le16toh(resp->ring_id);
-		BNXT_HWRM_UNLOCK(softc);
-		break;
-	case HWRM_RING_ALLOC_RX:
-		rxr = &softc->rx_rings[index];
-		cpr = &softc->cp_rings[rxr->id];
-		req.ring_type = HWRM_RING_ALLOC_INPUT_RING_TYPE_RX;
-		req.cmpl_ring_id = htole16(cpr->fw_ring_id);
-		dma = &rxr->dma;
-		req.page_tbl_addr = htole64(dma->idi_paddr);
-		req.length = htole32(rxr->ring_size);
-		req.logical_id = htole16(rxr->id);
-		req.stat_ctx_id = htole32(cpr->stats_ctx_id);
-		req.enables |= HWRM_RING_ALLOC_INPUT_ENABLES_STAT_CTX_ID_VALID;
-		BNXT_HWRM_LOCK(softc);
-		rc = _hwrm_send_message(softc, &req, sizeof(req));
-		err = le16toh(resp->error_code);
-		if (!rc)
-			rxr->fw_ring_id = le16toh(resp->ring_id);
-		BNXT_HWRM_UNLOCK(softc);
-		break;
-	case HWRM_RING_ALLOC_AGG:
-		agg = &softc->ag_rings[index];
-		rxr = &softc->rx_rings[index];
-		cpr = &softc->cp_rings[rxr->id];
-		req.ring_type = HWRM_RING_ALLOC_INPUT_RING_TYPE_RX;
-		req.cmpl_ring_id = htole16(cpr->fw_ring_id);
-		dma = &agg->dma;
-		req.page_tbl_addr = htole64(dma->idi_paddr);
-		req.length = htole32(agg->ring_size);
-		req.logical_id = htole16(rxr->id + softc->num_rx_rings);
-		BNXT_HWRM_LOCK(softc);
-		rc = _hwrm_send_message(softc, &req, sizeof(req));
-		err = le16toh(resp->error_code);
-		if (!rc)
-			agg->fw_ring_id = le16toh(resp->ring_id);
-		BNXT_HWRM_UNLOCK(softc);
-		break;
-	case HWRM_RING_ALLOC_CMPL:
-		cpr = &softc->cp_rings[index];
-		req.ring_type = HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL;
-		req.length = htole32(cpr->ring_size);
-		req.logical_id = htole16(cpr->id);
-		dma = &cpr->ring_dma;
-		req.page_tbl_addr = htole64(dma->idi_paddr);
-		if (softc->total_msix)
-			req.int_mode = HWRM_RING_ALLOC_INPUT_INT_MODE_MSIX;
-		else
-			req.int_mode = HWRM_RING_ALLOC_INPUT_INT_MODE_LEGACY;
-		BNXT_HWRM_LOCK(softc);
-		rc = _hwrm_send_message(softc, &req, sizeof(req));
-		err = le16toh(resp->error_code);
-		if (!rc)
-			cpr->fw_ring_id = le16toh(resp->ring_id);
-		BNXT_HWRM_UNLOCK(softc);
-		break;
-	default:
-		device_printf(dev, "hwrm alloc invalid ring type %d\n", type);
-		return (-1);
+	if (stat_ctx_id != HWRM_NA_SIGNATURE) {
+		req.enables |= htole32(
+		    HWRM_RING_ALLOC_INPUT_ENABLES_STAT_CTX_ID_VALID);
+		req.stat_ctx_id = htole32(stat_ctx_id);
 	}
-
+	req.ring_type = type;
+	req.page_tbl_addr = htole64(ring->paddr);
+	req.length = htole32(ring->ring_size);
+	req.logical_id = htole16(ring->id);
+	req.cmpl_ring_id = htole16(cmpl_ring_id);
+	req.queue_id = htole16(softc->q_info[0].id);
+	req.int_mode = HWRM_RING_ALLOC_INPUT_INT_MODE_MSIX;
+	BNXT_HWRM_LOCK(softc);
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	err = le16toh(resp->error_code);
+	if (!rc)
+		ring->phys_id = le16toh(resp->ring_id);
+	BNXT_HWRM_UNLOCK(softc);
 	if (rc || err) {
-		switch (type) {
-		case HWRM_RING_ALLOC_CMPL:
-			device_printf(dev,
-			    "hwrm_ring_alloc CP failed. rc:%x err:%x\n",
-			    rc, err);
-			return (-1);
-
-		case HWRM_RING_ALLOC_RX:
-			device_printf(dev,
-			    "hwrm_ring_alloc RX failed. rc:%x err:%x\n",
-			    rc, err);
-			return (-1);
-
-		case HWRM_RING_ALLOC_TX:
-			device_printf(dev,
-			    "hwrm_ring_alloc TX failed. rc:%x err:%x\n",
-			    rc, err);
-			return (-1);
-
-		case HWRM_RING_ALLOC_AGG:
-			device_printf(dev,
-			    "hwrm_ring_alloc AGG failed. rc:%x err:%x\n",
-			    rc, err);
-			return (-1);
-
-		default:
-			device_printf(softc->dev, "Invalid ring\n");
-			return (-1);
-		}
-	}
-
-	return (0);
-}
-
-
-/*
- * Inform the FW of the rings
- */
-int
-bnxt_hwrm_alloc_rings(struct bnxt_softc *softc)
-{
-	struct bnxt_cp_ring	*cpr;
-	int			rc = 0;
-
-	/* Completion Rings */
-	for (int i = 0; i < softc->num_cp_rings; i++) {
-		struct bnxt_cp_ring *cpr = &softc->cp_rings[i];
-		rc = hwrm_ring_alloc_send(softc, HWRM_RING_ALLOC_CMPL, i);
-		if (rc) {
-			printf("bnxt_hwrm_alloc_rings CMPL failure\n");
-			return (rc);
-		}
-		cpr->doorbell = softc->bar[1].kva + (cpr->id * 0x80);
-		BNXT_CP_DISABLE_DB(cpr, cpr->raw_cons);
-	}
-
-	/* Transmit Rings */
-	for (int i = 0; i < softc->num_tx_rings; i++) {
-		struct bnxt_tx_ring *txr = &softc->tx_rings[i];
-
-		rc = hwrm_ring_alloc_send(softc, HWRM_RING_ALLOC_TX, i);
-		if (rc) {
-			printf("bnxt_hwrm_alloc_rings TX failure\n");
-			return (rc);
-		}
-		txr->doorbell = softc->bar[1].kva + (txr->id * 0x80);
-		BNXT_TX_DB(txr->doorbell, txr->prod);
-	}
-
-	/* Receive Rings */
-	for (int i = 0; i < softc->num_rx_rings; i++) {
-		struct bnxt_rx_ring *rxr = &softc->rx_rings[i];
-		struct bnxt_ag_ring *agg = &softc->ag_rings[i];
-
-		rc = hwrm_ring_alloc_send(softc, HWRM_RING_ALLOC_RX, i);
-		if (rc) {
-			printf("bnxt_hwrm_alloc_rings RX failure\n");
-			return (rc);
-		}
-		rxr->doorbell = softc->bar[1].kva + rxr->id * 0x80;
-		BNXT_RX_DB(rxr->doorbell, rxr->prod);
-		softc->grp_info[i].rx_ring_id = rxr->fw_ring_id;
-		/* RX Completion Ring */
-		cpr = &softc->cp_rings[rxr->id];
-		/* Set up the Aggregation ring */
-		rc = hwrm_ring_alloc_send(softc, HWRM_RING_ALLOC_AGG, i);
-		if (rc) {
-			printf("bnxt_hwrm_alloc_rings AGG failure\n");
-			return (rc);
-		}
-		agg->doorbell = softc->bar[1].kva + (rxr->id + softc->num_rx_rings) * 0x80;
-		BNXT_RX_DB(agg->doorbell, agg->prod);
-		/* Set up the group info data here */
-		softc->grp_info[i].cp_ring_id = cpr->fw_ring_id;
-		softc->grp_info[i].ag_ring_id = agg->fw_ring_id;
-		softc->grp_info[i].stats_ctx = cpr->stats_ctx_id;
-	}
-
-	return (0);
-}
-
-
-static int
-hwrm_ring_free_send(struct bnxt_softc *softc, uint32_t type, int index)
-{
-	device_t		dev = softc->dev;
-	struct bnxt_tx_ring	*txr;
-	struct bnxt_rx_ring	*rxr;
-	struct bnxt_cp_ring	*cpr;
-	uint16_t		err, fw_ring_id = (uint16_t)HWRM_NA_SIGNATURE;
-	int			rc;
-
-	struct hwrm_ring_free_input req = {0};
-	struct hwrm_ring_free_output *resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
-
-	switch (type) {
-	case HWRM_RING_FREE_INPUT_RING_TYPE_TX:
-		txr = &softc->tx_rings[index];
-		bnxt_hwrm_cmd_hdr_init(softc, &req,
-		    HWRM_RING_FREE, fw_ring_id, -1);
-		req.ring_type = type;
-		req.ring_id = htole16(fw_ring_id);
-		break;
-	case HWRM_RING_FREE_INPUT_RING_TYPE_RX:
-		rxr = &softc->rx_rings[index];
-		bnxt_hwrm_cmd_hdr_init(softc, &req,
-		   HWRM_RING_FREE, fw_ring_id, -1);
-		req.ring_type = type;
-		req.ring_id = htole16(fw_ring_id);
-		break;
-	case HWRM_RING_FREE_INPUT_RING_TYPE_CMPL:
-		cpr = &softc->cp_rings[index];
-		bnxt_hwrm_cmd_hdr_init(softc, &req,
-		    HWRM_RING_FREE, fw_ring_id, -1);
-		req.ring_type = type;
-		req.ring_id = htole16(fw_ring_id);
-		break;
-	default:
-		device_printf(dev, "hwrm free invalid ring type %d\n", type);
+		device_printf(softc->dev,
+		    "hwrm_ring_alloc failed. rc:%x err:%x\n",
+		    rc, err);
 		return (-1);
 	}
+	return rc;
+}
+
+int
+bnxt_hwrm_ring_free(struct bnxt_softc *softc, uint8_t type, uint16_t phys_id)
+{
+	struct hwrm_ring_free_input req = {0};
+	struct hwrm_ring_free_output *resp;
+	int rc, err;
+
+	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_RING_FREE, -1, -1);
+
+	req.ring_type = type;
+	req.ring_id = htole16(phys_id);
 
 	BNXT_HWRM_LOCK(softc);
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
@@ -1120,97 +762,13 @@ hwrm_ring_free_send(struct bnxt_softc *softc, uint32_t type, int index)
 	BNXT_HWRM_UNLOCK(softc);
 
 	if (rc || err) {
-		switch (type) {
-		case HWRM_RING_FREE_INPUT_RING_TYPE_CMPL:
-			device_printf(dev,
-			    "hwrm_ring_free cp failed. err = %x rc:%d\n", err, rc);
-			return (rc);
-		case HWRM_RING_FREE_INPUT_RING_TYPE_RX:
-			device_printf(dev,
-			    "hwrm_ring_free rx failed. err = %x rc:%d\n", err, rc);
-			return (rc);
-		case HWRM_RING_FREE_INPUT_RING_TYPE_TX:
-			device_printf(dev,
-			    "hwrm_ring_free tx failed. err = %x rc:%d\n", err, rc);
-			return (rc);
-		default:
-			device_printf(dev, "Invalid ring\n");
-			return (-1);
-		}
+		device_printf(softc->dev,
+		    "hwrm_ring_alloc failed. rc:%x err:%x\n",
+		    rc, err);
+		return (-1);
 	}
-	return (0);
-}
-
-
-void
-bnxt_hwrm_free_rings(struct bnxt_softc *softc)
-{
-
-	// JFV need some sanity test here??
-
-	for (int i = 0; i < softc->num_cp_rings; i++) {
-		struct bnxt_cp_ring *cpr = &softc->cp_rings[i];
-
-		if (cpr->fw_ring_id != (uint16_t)HWRM_NA_SIGNATURE) {
-			hwrm_ring_free_send(softc,
-			    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL, cpr->id);
-			cpr->fw_ring_id = (uint16_t)HWRM_NA_SIGNATURE;
-		}
-	}
-
-	for (int i = 0; i < softc->num_tx_rings; i++) {
-		struct bnxt_tx_ring *txr = &softc->tx_rings[i];
-
-		if (txr->fw_ring_id != (uint16_t)HWRM_NA_SIGNATURE) {
-			hwrm_ring_free_send(softc,
-			    HWRM_RING_FREE_INPUT_RING_TYPE_TX, i);
-			txr->fw_ring_id = (uint16_t)HWRM_NA_SIGNATURE;
-		}
-	}
-
-	for (int i = 0; i < softc->num_rx_rings; i++) {
-		struct bnxt_rx_ring *rxr = &softc->rx_rings[i];
-
-		if (rxr->fw_ring_id != (uint16_t)HWRM_NA_SIGNATURE) {
-			hwrm_ring_free_send(softc,
-			    HWRM_RING_FREE_INPUT_RING_TYPE_RX, i);
-			rxr->fw_ring_id = (uint16_t)HWRM_NA_SIGNATURE;
-			softc->grp_info[rxr->index].rx_ring_id =
-			    (uint16_t)HWRM_NA_SIGNATURE;
-			softc->grp_info[rxr->index].cp_ring_id =
-			    (uint16_t)HWRM_NA_SIGNATURE;
-		}
-	}
-
-	return;
-}
-
-
-static int
-bnxt_hwrm_stat_ctx_free(struct bnxt_softc *softc)
-{
-	int rc = 0, i;
-	struct hwrm_stat_ctx_free_input req = {0};
-
-	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_STAT_CTX_FREE, -1, -1);
-
-	BNXT_HWRM_LOCK(softc);
-	for (i = 0; i < softc->num_cp_rings; i++) {
-		struct bnxt_cp_ring *cpr = &softc->cp_rings[i];
-
-		if (cpr->stats_ctx_id != HWRM_NA_SIGNATURE) {
-			req.stat_ctx_id = htole32(cpr->stats_ctx_id);
-
-			rc = _hwrm_send_message(softc, &req, sizeof(req));
-			if (rc)
-				break;
-			cpr->stats_ctx_id = HWRM_NA_SIGNATURE;
-		}
-	}
-	BNXT_HWRM_UNLOCK(softc);
 	return rc;
 }
-
 
 int
 bnxt_hwrm_stat_ctx_alloc(struct bnxt_softc *softc)
@@ -1238,32 +796,6 @@ bnxt_hwrm_stat_ctx_alloc(struct bnxt_softc *softc)
 	BNXT_HWRM_UNLOCK(softc);
 	return 0;
 }
-
-
-static void
-bnxt_hwrm_clear_vnic_rss(struct bnxt_softc *softc)
-{
-	for (int i = 0; i < softc->num_vnics; i++)
-		bnxt_hwrm_vnic_set_rss(softc, i, false);
-}
-
-
-void
-bnxt_hwrm_free_resources(struct bnxt_softc *softc)
-{
-	if (softc->vnic_info) {
-		bnxt_hwrm_clear_vnic_rss(softc);
-		bnxt_hwrm_vnic_ctx_free(softc);
-		bnxt_hwrm_vnic_free(softc);
-	}
-
-	bnxt_hwrm_ring_grp_free(softc);
-
-	bnxt_hwrm_stat_ctx_free(softc);
-
-	bnxt_hwrm_free_rings(softc);
-}
-
 
 int
 bnxt_hwrm_port_qstats(struct bnxt_softc *softc)

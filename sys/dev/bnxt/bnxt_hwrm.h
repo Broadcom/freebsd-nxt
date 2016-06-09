@@ -36,9 +36,9 @@ __FBSDID("$FreeBSD$");
 /* HWRM Function Prototypes */
 int bnxt_alloc_hwrm_dma_mem(struct bnxt_softc *);
 void bnxt_free_hwrm_dma_mem(struct bnxt_softc *);
-void bnxt_hwrm_free_resources(struct bnxt_softc *);
-int bnxt_hwrm_alloc_rings(struct bnxt_softc *);
-void bnxt_hwrm_free_rings(struct bnxt_softc *);
+int bnxt_hwrm_ring_alloc(struct bnxt_softc *softc, uint8_t type,
+    struct bnxt_ring *ring, uint16_t cmpl_ring_id, uint32_t stat_ctx_id);
+int bnxt_hwrm_ring_free(struct bnxt_softc *softc, uint8_t type, uint16_t phys_id);
 void bnxt_hwrm_cmd_hdr_init(struct bnxt_softc *, void *, uint16_t, uint16_t, uint16_t);
 int _hwrm_send_message(struct bnxt_softc *, void *, uint32_t);
 int hwrm_send_message(struct bnxt_softc *, void *, uint32_t);

@@ -101,17 +101,17 @@ __FBSDID("$FreeBSD$");
 #define DB_CP_FLAGS		(DB_KEY_CP | DB_IDX_VALID | DB_IRQ_DIS)
 #define DB_CP_DIS_FLAGS		(DB_KEY_CP | DB_IRQ_DIS)
 
-#define DB_REARM(cpr, cons) (DB_CP_REARM_FLAGS | RING_CMP(cpr, cons))
-#define DB_DISABLE(cpr, cons) (DB_CP_DIS_FLAGS | RING_CMP(cpr, cons))
-#define DB_RING(cpr, cons) (DB_CP_FLAGS | RING_CMP(cpr, cons))
+#define DB_REARM(cpr, cons) (DB_CP_REARM_FLAGS | RING_CMP(&cpr->ring, cons))
+#define DB_DISABLE(cpr, cons) (DB_CP_DIS_FLAGS | RING_CMP(&cpr->ring, cons))
+#define DB_RING(cpr, cons) (DB_CP_FLAGS | RING_CMP(&cpr->ring, cons))
 
 #define BNXT_TX_DB(db, value) *(uint32_t *)db = (DB_KEY_TX | value)
 #define BNXT_RX_DB(db, value) *(uint32_t *)db = (DB_KEY_RX | value)
 
 #define BNXT_CP_DISABLE_DB(cpr, cons)					    \
-	    *(uint32_t *)cpr->doorbell = DB_DISABLE(cpr, cons)
-#define BNXT_CP_ARM_DB(cpr, cons) *(uint32_t *)cpr->doorbell = DB_REARM(cpr, cons)
-#define BNXT_CP_DB(cpr, cons) *(uint32_t *)cpr->doorbell = DB_RING(cpr, cons)
+	    *(uint32_t *)cpr->ring.doorbell = DB_DISABLE(cpr, cons)
+#define BNXT_CP_ARM_DB(cpr, cons) *(uint32_t *)cpr->ring.doorbell = DB_REARM(cpr, cons)
+#define BNXT_CP_DB(cpr, cons) *(uint32_t *)cpr->ring.doorbell = DB_RING(cpr, cons)
 
 /* Lock macros */
 #define BNXT_HWRM_LOCK_INIT(_softc, _name) \
@@ -122,7 +122,7 @@ __FBSDID("$FreeBSD$");
 #define BNXT_HWRM_LOCK_ASSERT(_softc)	mtx_assert(&(_softc)->hwrm_lock, MA_OWNED)
 
 /* Chip info */
-#define BNXT_TSO_SIZE	65536
+#define BNXT_TSO_SIZE	UINT16_MAX
 #define BNXT_BARS	3
 
 struct bnxt_bar_info {
@@ -218,28 +218,6 @@ enum bnxt_cp_type {
 	BNXT_TX,
 	BNXT_RX,
 	BNXT_SHARED
-};
-
-/* Completion ring */
-struct bnxt_cp_ring {
-	struct bnxt		*softc;
-	struct bnxt_irq		irq;
-	uint16_t		index;
-	uint16_t		id;
-	uint32_t		locked;
-	uint32_t		ring_size;
-	uint32_t		ring_mask;
-	uint32_t		raw_cons;
-	vm_offset_t		doorbell;
-	struct iflib_dma_info	ring_dma;
-	struct tx_cmpl		*base;
-	struct iflib_dma_info	stats_dma;
-	struct ctx_hw_stats	*stats;
-	uint32_t		stats_ctx_id;
-	uint16_t		fw_ring_id;
-	struct task		cp_task;
-	struct taskqueue	*tq;
-	enum bnxt_cp_type	type;
 };
 
 struct bnxt_cos_queue {
@@ -356,61 +334,48 @@ struct bnxt_grp_info {
 	uint16_t	ag_ring_id;
 };
 
+struct bnxt_ring {
+	uint64_t		paddr;
+	vm_offset_t		doorbell;
+	caddr_t			vaddr;
+	struct bnxt_softc	*softc;
+	uint32_t		ring_size;	// Must be a power of two
+	uint32_t		ring_mask;	// Mask for ring_size (ring_size-1)
+	uint16_t		id;		// Logical ID
+	uint16_t		phys_id;
+};
+
+struct bnxt_cp_ring {
+	struct bnxt_ring	ring;
+	struct if_irq		irq;
+	uint32_t		raw_cons;
+	struct iflib_dma_info	stats_dma;
+	struct ctx_hw_stats	*stats;
+	uint32_t		stats_ctx_id;
+};
+
 struct bnxt_tx_ring {
-	struct bnxt		*bp;
-	uint8_t			index;
-	uint8_t			queue_id;
-	uint16_t		id;
-	uint32_t		ring_size;
-	uint32_t		ring_mask;
-	struct mtx		lock;
-	char			name[16];
+	struct bnxt_ring	ring;
+	uint8_t			cos_queue_id;
 	uint16_t		prod; /* Producer index */
 	uint16_t		cons; /* Consumer index */
-	uint16_t		active;
-	uint16_t		fw_ring_id;
-	vm_offset_t		doorbell;
-	struct iflib_dma_info	dma;
-	bus_dma_tag_t		tag;
-	struct tx_bd_short	*base;
-	struct bnxt_tx_info	*tx_info;
-	struct buf_ring		*br;
-	struct task		tx_task;
-	struct taskqueue	*tq;
-	struct bnxt_cp_ring	*cpr;
-
-	/* TX Soft stats */
-	uint64_t		tso_frames;
-	uint64_t		tso_hdr_fail;
-	uint64_t		tx_eno_desc;
-	uint64_t		tx_frags;
+	struct bnxt_cp_ring	*cp_ring;
 };
 
 struct bnxt_ag_ring {
-	uint32_t		ring_size;
-	uint32_t		ring_mask;
+	struct bnxt_ring	ring;
 	uint16_t		mbuf_sz;
-	uint16_t		fw_ring_id;
 	uint16_t		prod;
 	uint16_t		cons;
-	vm_offset_t		doorbell;
-	struct iflib_dma_info	dma;
 	struct rx_prod_pkt_bd	*base;	/* The descriptor ring */
 	struct bnxt_ag_info	*ag_info;
 };
 
 struct bnxt_rx_ring {
-	struct bnxt		*bp;
-	uint16_t		index;
-	uint16_t		id;
-	uint32_t		ring_size;
-	uint32_t		ring_mask;
+	struct bnxt_ring	ring;
 	uint16_t		mbuf_sz;
-	uint16_t		fw_ring_id;
 	uint16_t		prod;
 	uint16_t		cons;
-	vm_offset_t		doorbell;
-	struct iflib_dma_info	dma;
 	bus_dma_tag_t		tag;
 	struct rx_prod_pkt_bd	*base;
 	struct bnxt_rx_info	*rx_info;
@@ -425,6 +390,7 @@ struct bnxt_softc {
 	device_t	dev;
 	if_ctx_t	ctx;
 	if_softc_ctx_t	scctx;
+	if_shared_ctx_t	sctx;
 	struct ifmedia	*media;
 
 	struct bnxt_bar_info	bar[3]; 

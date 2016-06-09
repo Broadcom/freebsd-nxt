@@ -188,21 +188,24 @@ static struct if_shared_ctx bnxt_sctx_init = {
 	.isc_magic = IFLIB_MAGIC,
 	.isc_txrx = &bnxt_txrx,
 	.isc_driver = &bnxt_if_driver,
-	.isc_nfl = 1,
+	.isc_nfl = 2,				// Number of Free Lists
 	.isc_q_align = PAGE_SIZE,
-	.isc_tx_maxsize = BNXT_TSO_SIZE,
-	.isc_tx_maxsegsize = PAGE_SIZE*4,
-	.isc_rx_maxsize = PAGE_SIZE*4,
-	.isc_rx_maxsegsize = PAGE_SIZE*4,
+	/* We really don't have a maximum here... what is this really? */
+	.isc_tx_maxsize = UINT32_MAX * sizeof(struct tx_bd_short),
+	.isc_tx_maxsegsize = UINT32_MAX * sizeof(struct tx_bd_short),
+	.isc_rx_maxsize = UINT32_MAX * sizeof(struct rx_pkt_cmpl),
+	.isc_rx_maxsegsize = UINT32_MAX * sizeof(struct rx_pkt_cmpl),
+
+	// Only use a single segment to avoid page size constraints
 	.isc_rx_nsegments = 1,
-	.isc_ntxqs = 1,
-	.isc_nrxqs = 1,
+	.isc_ntxqs = 2,
+	.isc_nrxqs = 3,
 	.isc_nrxd = PAGE_SIZE / sizeof(struct rx_pkt_cmpl),
 	.isc_ntxd = PAGE_SIZE / sizeof(struct tx_bd_short),
 	.isc_admin_intrcnt = 1,
 	.isc_vendor_info = bnxt_vendor_info_array,
-	.isc_txqsizes = {PAGE_SIZE},
-	.isc_rxqsizes = {PAGE_SIZE},
+	.isc_txqsizes = {PAGE_SIZE*2, PAGE_SIZE},
+	.isc_rxqsizes = {PAGE_SIZE*2, PAGE_SIZE, PAGE_SIZE},
 };
 
 if_shared_ctx_t bnxt_sctx = &bnxt_sctx_init;
@@ -226,8 +229,70 @@ static int
 bnxt_if_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
     uint64_t *paddrs, int ntxqs, int ntxqsets)
 {
+	struct bnxt_cp_ring *cp_rings;
+	struct bnxt_tx_ring *tx_rings;
+	struct bnxt_softc *softc;
+	int i;
+	int rc;
+
+	softc = iflib_get_softc(ctx);
+
+	cp_rings = malloc(sizeof(struct bnxt_cp_ring) * ntxqsets, M_DEVBUF,
+	    M_NOWAIT | M_ZERO);
+	tx_rings = malloc(sizeof(struct bnxt_tx_ring) * ntxqsets, M_DEVBUF,
+	    M_NOWAIT | M_ZERO);
+
+	for (i = 0; i < ntxqsets; i++) {
+		cp_rings[i].ring.softc = softc;
+		cp_rings[i].ring.id = ntxqs * i + 1;
+		cp_rings[i].ring.ring_size = softc->sctx->isc_ntxd * 2;
+		cp_rings[i].ring.ring_mask = cp_rings[i].ring.ring_size - 1;
+		cp_rings[i].ring.vaddr = vaddrs[i * ntxqs];
+		cp_rings[i].ring.paddr = paddrs[i * ntxqs];
+		rc = bnxt_hwrm_ring_alloc(softc,
+		    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL, &cp_rings[i].ring,
+		    (uint16_t)HWRM_NA_SIGNATURE, HWRM_NA_SIGNATURE);
+		if (rc) {
+			i--;
+			goto fail;
+		}
+
+		tx_rings[i].ring.softc = softc;
+		tx_rings[i].ring.id = cp_rings[i].ring.id + 1;
+		tx_rings[i].ring.ring_size = softc->sctx->isc_ntxd;
+		tx_rings[i].ring.ring_mask = tx_rings[i].ring.ring_size - 1;
+		cp_rings[i].ring.vaddr = vaddrs[i * ntxqs + 1];
+		cp_rings[i].ring.paddr = paddrs[i * ntxqs + 1];
+		tx_rings[i].cos_queue_id = softc->q_info[0].id;
+		tx_rings[i].cp_ring = &cp_rings[i];
+		rc = bnxt_hwrm_ring_alloc(softc,
+		    HWRM_RING_ALLOC_INPUT_RING_TYPE_TX, &tx_rings[i].ring,
+		    cp_rings[i].ring.phys_id, HWRM_NA_SIGNATURE);
+		if (rc) {
+			bnxt_hwrm_ring_free(softc,
+			    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL,
+			    cp_rings[i].ring.phys_id);
+			i--;
+			goto fail;
+		}
+	}
+
 	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
-	return ENOSYS;
+	rc = ENOSYS;
+	// fall-through (should be return rc)
+
+fail:
+	for (; i>=0; i--) {
+		bnxt_hwrm_ring_free(softc,
+		    HWRM_RING_FREE_INPUT_RING_TYPE_TX,
+		    tx_rings[i].ring.phys_id);
+		bnxt_hwrm_ring_free(softc,
+		    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL,
+		    cp_rings[i].ring.phys_id);
+	}
+	free(tx_rings, M_DEVBUF);
+	free(cp_rings, M_DEVBUF);
+	return rc;
 }
 
 static int
@@ -250,6 +315,7 @@ bnxt_if_attach_pre(if_ctx_t ctx)
 	softc->dev = iflib_get_dev(ctx);
 	softc->media = iflib_get_media(ctx);
 	softc->scctx = iflib_get_softc_ctx(ctx);
+	softc->sctx = iflib_get_sctx(ctx);
 	scctx = softc->scctx;
 
 	pci_enable_busmaster(softc->dev);
@@ -298,10 +364,15 @@ bnxt_if_attach_pre(if_ctx_t ctx)
 	bnxt_add_media_types(softc);
 
 	/* Now set up iflib sc */
-	scctx->isc_tx_nsegments = 1;
-	scctx->isc_tx_tso_segments_max = 1;
+	scctx->isc_tx_nsegments = 1,
+	scctx->isc_tx_tso_segments_max = 32;
 	scctx->isc_tx_tso_size_max = BNXT_TSO_SIZE;
-	scctx->isc_tx_tso_segsize_max = PAGE_SIZE*4;
+	scctx->isc_tx_tso_segsize_max = BNXT_TSO_SIZE;
+
+	/* Now perform a function reset */
+	rc = bnxt_hwrm_func_reset(softc);
+	if (rc)
+		goto failed;
 
 	return (rc);
 
