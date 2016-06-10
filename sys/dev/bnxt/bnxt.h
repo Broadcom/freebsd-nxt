@@ -328,7 +328,7 @@ struct bnxt_vnic_info {
 
 struct bnxt_grp_info {
 	uint16_t	stats_ctx;
-	uint16_t	fw_grp_id;
+	uint16_t	grp_id;
 	uint16_t	rx_ring_id;
 	uint16_t	cp_ring_id;
 	uint16_t	ag_ring_id;
@@ -375,14 +375,7 @@ struct bnxt_rx_ring {
 	uint16_t		mbuf_sz;
 	uint16_t		prod;
 	uint16_t		cons;
-	bus_dma_tag_t		tag;
-	struct rx_prod_pkt_bd	*base;
-	struct bnxt_rx_info	*rx_info;
-	struct bnxt_cp_ring	*cpr;
 	struct bnxt_ag_ring	*agg;
-
-	/* RX Soft stats */
-	uint64_t		rx_l2_err;
 };
 
 struct bnxt_softc {
@@ -426,10 +419,18 @@ struct bnxt_softc {
 	struct rx_port_stats	*rx_port_stats;
 	struct tx_port_stats	*tx_port_stats;
 
+	int			num_cp_rings;
+
 	struct bnxt_tx_ring	*tx_rings;
 	struct bnxt_cp_ring	*tx_cp_rings;
 	struct iflib_dma_info	tx_stats;
 	int			ntxqsets;
+
+	struct bnxt_ag_ring	*ag_rings;
+	struct bnxt_rx_ring	*rx_rings;
+	struct bnxt_cp_ring	*rx_cp_rings;
+	struct iflib_dma_info	rx_stats;
+	int			nrxqsets;
 };
 
 struct bnxt_filter_info {

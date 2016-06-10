@@ -57,7 +57,8 @@ int bnxt_hwrm_vnic_set_hds(struct bnxt_softc *, uint16_t);
 int bnxt_hwrm_stat_ctx_alloc(struct bnxt_softc *softc, struct bnxt_cp_ring *cpr,
     uint64_t paddr);
 int bnxt_hwrm_stat_ctx_free(struct bnxt_softc *softc, struct bnxt_cp_ring *cpr);
-int bnxt_hwrm_ring_grp_alloc(struct bnxt_softc *);
+int bnxt_hwrm_ring_grp_alloc(struct bnxt_softc *, struct bnxt_grp_info *grp);
+int bnxt_hwrm_ring_grp_free(struct bnxt_softc *softc, struct bnxt_grp_info *grp);
 int bnxt_hwrm_vnic_alloc(struct bnxt_softc *, uint16_t, uint16_t, uint16_t);
 int bnxt_hwrm_set_vnic_filter(struct bnxt_softc *, uint16_t, uint16_t, uint8_t *);
 int bnxt_hwrm_set_coal(struct bnxt_softc *);

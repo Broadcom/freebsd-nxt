@@ -150,7 +150,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 		device_printf(softc->dev, "Timeout sending hwrm msg: "
 		    "(timeout: %d) msg {0x%x 0x%x} len:%d\n", softc->hwrm_cmd_timeo,
 		    le16toh(req->req_type), le16toh(req->seq_id),
-		    le16toh(resp->resp_len));
+		    msg_len);
 			return ETIMEDOUT;
 	}
 	/* Last byte of resp contains the valid key */
@@ -164,7 +164,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 		device_printf(softc->dev, "Timeout sending hwrm msg: "
 		    "(timeout: %d) msg {0x%x 0x%x} len:%d v: %d\n",
 		    softc->hwrm_cmd_timeo, le16toh(req->req_type),
-		    le16toh(req->seq_id), le16toh(resp->resp_len),
+		    le16toh(req->seq_id), msg_len,
 		    *valid);
 		return ETIMEDOUT;
 	}
@@ -633,7 +633,7 @@ bnxt_hwrm_vnic_cfg(struct bnxt_softc *softc, uint16_t vnic_id)
 #endif
 
 	req.vnic_id = htole16(vnic->fw_vnic_id);
-	req.dflt_ring_grp = htole16(softc->grp_info[grp_idx].fw_grp_id);
+	req.dflt_ring_grp = htole16(softc->grp_info[grp_idx].grp_id);
 
 	req.rss_rule = htole16(vnic->fw_rss_cos_lb_ctx);
 	req.cos_rule = htole16(0xffff);
@@ -663,7 +663,7 @@ bnxt_hwrm_vnic_alloc(struct bnxt_softc *softc, uint16_t vnic_id,
 	/* map ring groups to this vnic */
 	for (i = start_index, j = 0; i < end_index; i++, j++) {
 		// JFV - is 'i' here the MSIX index as it should be??
-		if (softc->grp_info[i].fw_grp_id ==
+		if (softc->grp_info[i].grp_id ==
 		    (uint16_t)HWRM_NA_SIGNATURE) {
 			device_printf(softc->dev,
 			    "Not enough ring groups avail:%x req:%x\n",
@@ -671,7 +671,7 @@ bnxt_hwrm_vnic_alloc(struct bnxt_softc *softc, uint16_t vnic_id,
 			break;
 		}
 		softc->vnic_info[vnic_id].fw_grp_ids[j] =
-					softc->grp_info[i].fw_grp_id;
+					softc->grp_info[i].grp_id;
 	}
 
 	softc->vnic_info[vnic_id].fw_rss_cos_lb_ctx =
@@ -698,31 +698,44 @@ fail:
 
 
 int
-bnxt_hwrm_ring_grp_alloc(struct bnxt_softc *softc)
+bnxt_hwrm_ring_grp_alloc(struct bnxt_softc *softc, struct bnxt_grp_info *grp)
 {
+	struct hwrm_ring_grp_alloc_input req = {0};
+	struct hwrm_ring_grp_alloc_output *resp;
 	int rc = 0;
 
+	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_RING_GRP_ALLOC, -1, -1);
+	req.cr = htole16(grp->cp_ring_id);
+	req.rr = htole16(grp->rx_ring_id);
+	req.ar = htole16(grp->ag_ring_id);
+	req.sc = htole16(grp->stats_ctx);
+
 	BNXT_HWRM_LOCK(softc);
-	for (int i = 0; i < softc->scctx->isc_nrxqsets; i++) {
-		struct hwrm_ring_grp_alloc_input req = {0};
-		struct hwrm_ring_grp_alloc_output *resp;
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	if (rc)
+		goto fail;
 
-		resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
-		bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_RING_GRP_ALLOC,
-		    -1, -1);
-		req.cr = htole16(softc->grp_info[i].cp_ring_id);
-		req.rr = htole16(softc->grp_info[i].rx_ring_id);
-		req.ar = htole16(softc->grp_info[i].ag_ring_id);
-		req.sc = htole16(softc->grp_info[i].stats_ctx);
+	grp->grp_id = le32toh(resp->ring_group_id);
 
-		rc = _hwrm_send_message(softc, &req, sizeof(req));
-		if (rc)
-			break;
-
-		softc->grp_info[i].fw_grp_id = le32toh(resp->ring_group_id);
-	}
+fail:
 	BNXT_HWRM_UNLOCK(softc);
 	return rc;
+}
+
+int
+bnxt_hwrm_ring_grp_free(struct bnxt_softc *softc, struct bnxt_grp_info *grp)
+{
+	struct hwrm_ring_grp_free_input req = {0};
+	struct hwrm_ring_grp_free_output *resp;
+
+	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_RING_GRP_FREE, -1, -1);
+
+	req.ring_group_id = htole16(grp->grp_id);
+	grp->grp_id = (uint16_t)HWRM_NA_SIGNATURE;
+
+	return hwrm_send_message(softc, &req, sizeof(req));
 }
 
 /*
