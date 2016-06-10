@@ -572,7 +572,7 @@ bnxt_if_attach_pre(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	if_softc_ctx_t scctx;
-	int		rc = 0;
+	int rc = 0;
 
 	softc->ctx = ctx;
 	softc->dev = iflib_get_dev(ctx);
@@ -610,6 +610,7 @@ bnxt_if_attach_pre(if_ctx_t ctx)
 	rc = bnxt_hwrm_func_qcaps(softc);
 	if (rc)
 		goto failed;
+	iflib_set_mac(ctx, softc->pf.mac_addr);
 
 	/* Get the queue config */
 	rc = bnxt_hwrm_queue_qportcfg(softc);
@@ -646,6 +647,8 @@ static int
 bnxt_if_attach_post(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
+	if_t ifp = iflib_get_ifp(ctx);
+	int capabilities, enabling;
 	int rc;
 
 	/* Update link state etc... */
@@ -655,8 +658,28 @@ bnxt_if_attach_post(if_ctx_t ctx)
 
 	/* Needs to be done after probing the phy */
 	bnxt_add_media_types(softc);
-
 	ifmedia_set(softc->media, IFM_ETHER | IFM_AUTO);
+
+	if_sethwassist(ifp, (CSUM_TCP | CSUM_UDP | CSUM_TCP_IPV6 | CSUM_UDP_IPV6 | CSUM_TSO));
+
+	capabilities =
+	    IFCAP_VLAN_MTU | IFCAP_VLAN_HWTAGGING | IFCAP_VLAN_HWTSO |
+	    IFCAP_VLAN_HWFILTER | IFCAP_VLAN_HWCSUM | IFCAP_HWCSUM |
+	    IFCAP_RXCSUM_IPV6 | IFCAP_TXCSUM_IPV6 |
+	    IFCAP_JUMBO_MTU | IFCAP_LRO | IFCAP_TSO4 | IFCAP_TSO6;
+
+	if_setcapabilities(ifp, capabilities);
+
+	/* Don't enable TSO by default until its fixed */
+	enabling =
+	    IFCAP_VLAN_MTU | IFCAP_VLAN_HWTAGGING | IFCAP_VLAN_HWTSO |
+	    IFCAP_VLAN_HWFILTER | IFCAP_VLAN_HWCSUM | IFCAP_HWCSUM |
+	    IFCAP_HWCSUM_IPV6 | IFCAP_JUMBO_MTU | IFCAP_LRO;
+
+	if_setcapenable(ifp, enabling);
+
+	// JFV - This needs to be set according to the adapter
+	if_setbaudrate(ifp, IF_Gbps(25));
 
 failed:
 	return rc;
