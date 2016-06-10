@@ -448,7 +448,7 @@ bnxt_if_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		/* Allocation the completion ring */
 		softc->rx_cp_rings[i].ring.softc = softc;
 		softc->rx_cp_rings[i].ring.id =
-		    softc->scctx->isc_ntxqsets + 1 + (i * 2);
+		    softc->scctx->isc_ntxqsets + 1 + i;
 		softc->rx_cp_rings[i].ring.ring_size =
 		    softc->sctx->isc_nrxd * 2;
 		softc->rx_cp_rings[i].ring.ring_mask =
@@ -490,7 +490,7 @@ bnxt_if_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 
 		/* Allocate the AG ring */
 		softc->ag_rings[i].ring.softc = softc;
-		softc->ag_rings[i].ring.id = i * 2 + 1;
+		softc->ag_rings[i].ring.id = (i * 2) + 1;
 		softc->ag_rings[i].ring.ring_size = softc->sctx->isc_nrxd;
 		softc->ag_rings[i].ring.ring_mask =
 		    softc->ag_rings[i].ring.ring_size - 1;
@@ -618,24 +618,16 @@ bnxt_if_attach_pre(if_ctx_t ctx)
 		goto failed;
 	}
 
-	/* Update link state etc... */
-	rc = bnxt_probe_phy(softc);
+	/* Now perform a function reset */
+	rc = bnxt_hwrm_func_reset(softc);
 	if (rc)
 		goto failed;
-
-	/* Needs to be done after probing the phy */
-	bnxt_add_media_types(softc);
 
 	/* Now set up iflib sc */
 	scctx->isc_tx_nsegments = 1,
 	scctx->isc_tx_tso_segments_max = 32;
 	scctx->isc_tx_tso_size_max = BNXT_TSO_SIZE;
 	scctx->isc_tx_tso_segsize_max = BNXT_TSO_SIZE;
-
-	/* Now perform a function reset */
-	rc = bnxt_hwrm_func_reset(softc);
-	if (rc)
-		goto failed;
 
 	return (rc);
 
@@ -653,8 +645,21 @@ dma_fail:
 static int
 bnxt_if_attach_post(if_ctx_t ctx)
 {
-	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
-	return 0;
+	struct bnxt_softc *softc = iflib_get_softc(ctx);
+	int rc;
+
+	/* Update link state etc... */
+	rc = bnxt_probe_phy(softc);
+	if (rc)
+		goto failed;
+
+	/* Needs to be done after probing the phy */
+	bnxt_add_media_types(softc);
+
+	ifmedia_set(softc->media, IFM_ETHER | IFM_AUTO);
+
+failed:
+	return rc;
 }
 
 static int
@@ -880,6 +885,8 @@ bnxt_add_media_types(struct bnxt_softc *softc)
 	if (supported &  BNXT_LINK_SPEED_MSK_50GB)
 		ifmedia_add(softc->media, IFM_ETHER | IFM_50G_CR2, 0, NULL);
 
+	ifmedia_add(softc->media, IFM_ETHER | IFM_AUTO, 0, NULL);
+
 	return;
 }
 
@@ -1011,4 +1018,3 @@ bnxt_report_link(struct bnxt_softc *softc)
 		    flow_ctrl);
         }
 }
-
