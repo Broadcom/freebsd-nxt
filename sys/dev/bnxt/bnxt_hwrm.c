@@ -773,7 +773,6 @@ bnxt_hwrm_ring_alloc(struct bnxt_softc *softc, uint8_t type,
 		goto fail;
 
 	ring->phys_id = le16toh(resp->ring_id);
-	device_printf(softc->dev, "Allocated logical %d ring %d as physical %d\n", type, req.logical_id, ring->phys_id);
 
 fail:
 	BNXT_HWRM_UNLOCK(softc);
