@@ -701,7 +701,60 @@ bnxt_if_mtu_set(if_ctx_t ctx, uint32_t mtu)
 static void
 bnxt_if_media_status(if_ctx_t ctx, struct ifmediareq * ifmr)
 {
-	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
+	struct bnxt_softc *softc = iflib_get_softc(ctx);
+	struct bnxt_link_info *link_info = &softc->link_info;
+
+	bnxt_update_link(softc, true);
+
+	ifmr->ifm_status = IFM_AVALID;
+	ifmr->ifm_active = IFM_ETHER;
+
+        if (link_info->link_up)
+		ifmr->ifm_status |= IFM_ACTIVE;
+	else
+		ifmr->ifm_status &= ~IFM_ACTIVE;
+
+	if (link_info->duplex == BNXT_LINK_DUPLEX_FULL)
+		ifmr->ifm_active |= IFM_FDX;
+	else
+		ifmr->ifm_active |= IFM_HDX;
+
+	switch (link_info->link_speed) {
+        case BNXT_LINK_SPEED_100MB:
+		ifmr->ifm_active |= IFM_100_TX;
+                break;
+        case BNXT_LINK_SPEED_1GB:
+		ifmr->ifm_active |= IFM_1000_T;
+                break;
+        case BNXT_LINK_SPEED_2_5GB:
+		ifmr->ifm_active |= IFM_2500_SX;
+                break;
+        case BNXT_LINK_SPEED_10GB:
+		ifmr->ifm_active |= IFM_10G_T;
+                break;
+        case BNXT_LINK_SPEED_20GB:
+		ifmr->ifm_active |= IFM_20G_KR2;
+                break;
+        case BNXT_LINK_SPEED_25GB:
+		ifmr->ifm_active |= IFM_25G_CR;
+                break;
+        case BNXT_LINK_SPEED_40GB:
+		ifmr->ifm_active |= IFM_40G_CR4;
+                break;
+        case BNXT_LINK_SPEED_50GB:
+		ifmr->ifm_active |= IFM_50G_CR2;
+                break;
+        default:
+		return;
+	}
+
+	if (link_info->pause == BNXT_LINK_PAUSE_BOTH) 
+		ifmr->ifm_active |= (IFM_ETH_RXPAUSE | IFM_ETH_TXPAUSE);
+	else if (link_info->pause == BNXT_LINK_PAUSE_TX)
+		ifmr->ifm_active |= IFM_ETH_TXPAUSE;
+	else if (link_info->pause == BNXT_LINK_PAUSE_RX)
+		ifmr->ifm_active |= IFM_ETH_RXPAUSE;
+
 	return;
 }
 
@@ -722,14 +775,19 @@ bnxt_if_promisc_set(if_ctx_t ctx, int flags)
 static uint64_t
 bnxt_if_get_counter(if_ctx_t ctx, ift_counter cnt)
 {
-	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
+	if_t ifp = iflib_get_ifp(ctx);
+
+	if (cnt < IFCOUNTERS)
+		return if_get_counter_default(ifp, cnt);
+
+	device_printf(iflib_get_dev(ctx), "STUB: %s(ctx, %d >= %d) @ %s:%d\n", __func__, cnt, IFCOUNTERS, __FILE__, __LINE__);
 	return 0;
 }
 
 static void
 bnxt_if_update_admin_status(if_ctx_t ctx)
 {
-	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
+	/* TODO: do we need to do anything here? */
 	return;
 }
 

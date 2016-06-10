@@ -120,8 +120,6 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 	memset(resp, 0, PAGE_SIZE);
 	cp_ring_id = le16toh(req->cmpl_ring);
 
-	//decode_hwrm_req(req);
-
 	/* Write request msg to hwrm channel */
 	for (i = 0; i < msg_len; i += 4) {
 		bus_space_write_4(softc->bar[0].tag,
@@ -151,7 +149,8 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 		    "(timeout: %d) msg {0x%x 0x%x} len:%d\n", softc->hwrm_cmd_timeo,
 		    le16toh(req->req_type), le16toh(req->seq_id),
 		    msg_len);
-			return ETIMEDOUT;
+		//decode_hwrm_req(req);
+		return ETIMEDOUT;
 	}
 	/* Last byte of resp contains the valid key */
 	valid = (uint8_t *)resp + resp->resp_len - 1;
@@ -166,6 +165,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 		    softc->hwrm_cmd_timeo, le16toh(req->req_type),
 		    le16toh(req->seq_id), msg_len,
 		    *valid);
+		//decode_hwrm_req(req);
 		return ETIMEDOUT;
 	}
 
@@ -173,10 +173,11 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 	if (err) {
 		device_printf(softc->dev, "HWRM command returned error.  cmd:0x%02x err:0x%02x",
 		    le16toh(req->req_type), err);
+		//decode_hwrm_req(req);
+		//decode_hwrm_resp(resp);
 		return bnxt_hwrm_err_map(err);
 	}
 
-	//decode_hwrm_resp(resp);
 	return 0;
 }
 
@@ -772,6 +773,7 @@ bnxt_hwrm_ring_alloc(struct bnxt_softc *softc, uint8_t type,
 		goto fail;
 
 	ring->phys_id = le16toh(resp->ring_id);
+	device_printf(softc->dev, "Allocated logical %d ring %d as physical %d\n", type, req.logical_id, ring->phys_id);
 
 fail:
 	BNXT_HWRM_UNLOCK(softc);
