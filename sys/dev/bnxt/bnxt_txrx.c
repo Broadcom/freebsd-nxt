@@ -32,6 +32,7 @@ __FBSDID("$FreeBSD$");
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/endian.h>
 #include <net/if.h>
 #include <net/if_var.h>
 #include <net/ethernet.h>
@@ -110,8 +111,22 @@ bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
 				caddr_t *vaddrs, uint16_t count)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
+	struct bnxt_rx_ring *rx_ring;
+	struct rx_prod_pkt_bd *rxbd;
+	uint16_t i;
 
-	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
+	if (flid == 0) {
+		rx_ring = &softc->rx_rings[rxqid];
+		rxbd = (void *)rx_ring->ring.vaddr;
+	}
+	else {
+		rx_ring = &softc->ag_rings[rxqid];
+		rxbd = (void *)rx_ring->ring.vaddr;
+	}
+	for (i=0; i<count; i++) {
+		rxbd[rx_ring->prod].addr = htole64(paddrs[pidx + i]);
+		rx_ring->prod = RING_NEXT(&rx_ring->ring, rx_ring->prod);
+	}
 	return;
 }
 
@@ -122,6 +137,14 @@ bnxt_isc_rxd_flush(void *sc, uint16_t rxqid, uint8_t flid,
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 
 	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
+	struct bnxt_rx_ring *rx_ring;
+
+	if (flid == 0)
+		rx_ring = &softc->rx_rings[rxqid];
+	else
+		rx_ring = &softc->ag_rings[rxqid];
+
+	BNXT_RX_DB(rx_ring->ring.doorbell, rx_ring->prod);
 	return;
 }
 

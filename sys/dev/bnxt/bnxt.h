@@ -101,17 +101,17 @@ __FBSDID("$FreeBSD$");
 #define DB_CP_FLAGS		(DB_KEY_CP | DB_IDX_VALID | DB_IRQ_DIS)
 #define DB_CP_DIS_FLAGS		(DB_KEY_CP | DB_IRQ_DIS)
 
-#define DB_REARM(cpr, cons) (DB_CP_REARM_FLAGS | RING_CMP(&cpr->ring, cons))
-#define DB_DISABLE(cpr, cons) (DB_CP_DIS_FLAGS | RING_CMP(&cpr->ring, cons))
-#define DB_RING(cpr, cons) (DB_CP_FLAGS | RING_CMP(&cpr->ring, cons))
+#define DB_REARM(cpr, cons) (DB_CP_REARM_FLAGS | RING_CMP(&((cpr)->ring), cons))
+#define DB_DISABLE(cpr, cons) (DB_CP_DIS_FLAGS | RING_CMP(&((cpr)->ring), cons))
+#define DB_RING(cpr, cons) (DB_CP_FLAGS | RING_CMP(&((cpr)->ring), cons))
 
 #define BNXT_TX_DB(db, value) *(uint32_t *)db = (DB_KEY_TX | value)
 #define BNXT_RX_DB(db, value) *(uint32_t *)db = (DB_KEY_RX | value)
 
 #define BNXT_CP_DISABLE_DB(cpr, cons)					    \
-	    *(uint32_t *)cpr->ring.doorbell = DB_DISABLE(cpr, cons)
-#define BNXT_CP_ARM_DB(cpr, cons) *(uint32_t *)cpr->ring.doorbell = DB_REARM(cpr, cons)
-#define BNXT_CP_DB(cpr, cons) *(uint32_t *)cpr->ring.doorbell = DB_RING(cpr, cons)
+	    *(uint32_t *)((cpr)->ring.doorbell) = DB_DISABLE(cpr, cons)
+#define BNXT_CP_ARM_DB(cpr, cons) *(uint32_t *)((cpr)->ring.doorbell) = DB_REARM(cpr, cons)
+#define BNXT_CP_DB(cpr, cons) *(uint32_t *)((cpr)->ring.doorbell) = DB_RING(cpr, cons)
 
 /* Lock macros */
 #define BNXT_HWRM_LOCK_INIT(_softc, _name) \
@@ -205,12 +205,6 @@ struct bnxt_link_info {
 	 * to report link info to VF
 	 */
 	struct hwrm_port_phy_qcfg_output phy_qcfg_resp;
-};
-
-struct bnxt_irq {
-	struct resource	*res;
-	int		rid;
-	void		*tag;
 };
 
 enum bnxt_cp_type {
@@ -361,21 +355,11 @@ struct bnxt_tx_ring {
 	struct bnxt_cp_ring	*cp_ring;
 };
 
-struct bnxt_ag_ring {
-	struct bnxt_ring	ring;
-	uint16_t		mbuf_sz;
-	uint16_t		prod;
-	uint16_t		cons;
-	struct rx_prod_pkt_bd	*base;	/* The descriptor ring */
-	struct bnxt_ag_info	*ag_info;
-};
-
 struct bnxt_rx_ring {
 	struct bnxt_ring	ring;
 	uint16_t		mbuf_sz;
 	uint16_t		prod;
 	uint16_t		cons;
-	struct bnxt_ag_ring	*agg;
 };
 
 struct bnxt_softc {
@@ -401,7 +385,7 @@ struct bnxt_softc {
 	uint16_t		hwrm_cmd_timeo;	/* milliseconds */
 	struct iflib_dma_info	hwrm_cmd_resp;
 	/* Interrupt info for HWRM */
-//	struct bnxt_irq		irq;
+	struct if_irq		irq;
 	struct mtx		hwrm_lock;
 	uint16_t		hwrm_max_req_len;
 
@@ -426,11 +410,14 @@ struct bnxt_softc {
 	struct iflib_dma_info	tx_stats;
 	int			ntxqsets;
 
-	struct bnxt_ag_ring	*ag_rings;
+	struct bnxt_rx_ring	*ag_rings;
 	struct bnxt_rx_ring	*rx_rings;
 	struct bnxt_cp_ring	*rx_cp_rings;
 	struct iflib_dma_info	rx_stats;
 	int			nrxqsets;
+
+	struct bnxt_cp_ring	def_cp_ring;
+	struct iflib_dma_info	def_cp_ring_mem;
 };
 
 struct bnxt_filter_info {
