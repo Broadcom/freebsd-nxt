@@ -142,7 +142,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 	for (i = 0; i < softc->hwrm_cmd_timeo; i++) {
 		if (resp->resp_len && resp->resp_len <= 4096)
 			break;
-		DELAY(100);
+		DELAY(1000);
 	}
 	if (i >= softc->hwrm_cmd_timeo) {
 		device_printf(softc->dev, "Timeout sending hwrm msg: "
@@ -157,7 +157,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 	for (i = 0; i < softc->hwrm_cmd_timeo; i++) {
 		if (*valid == HWRM_RESP_VALID_KEY)
 			break;
-		DELAY(100);
+		DELAY(1000);
 	}
 	if (i >= softc->hwrm_cmd_timeo) {
 		device_printf(softc->dev, "Timeout sending hwrm msg: "
