@@ -78,12 +78,101 @@ struct if_txrx bnxt_txrx  = {
  * Device Dependent Packet Transmit and Receive Functions
  */
 
+static const uint16_t bnxt_tx_lhint[] = {
+	TX_BD_SHORT_FLAGS_LHINT_LT512,
+	TX_BD_SHORT_FLAGS_LHINT_LT1K,
+	TX_BD_SHORT_FLAGS_LHINT_LT2K,
+	TX_BD_SHORT_FLAGS_LHINT_LT2K,
+	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
+	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
+	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
+	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
+	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
+	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
+	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
+	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
+	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
+	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
+	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
+	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
+	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
+	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
+	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
+};
+
 static int
 bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
+	struct bnxt_tx_ring *txr = &softc->tx_rings[pi->ipi_qsidx];
+	struct tx_bd_long *tbd;
+	struct tx_bd_long_hi *tbdh;
+	bool need_hi = false;
+	uint16_t flags_type;
+	uint16_t lflags;
+	uint32_t cfa_meta;
+	int seg = 0;
 
-	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
+	/* If we have offloads enabled, we need to use two BDs. */
+	if ((pi->ipi_csum_flags & (CSUM_OFFLOAD | CSUM_TSO | CSUM_IP)) ||
+	    pi->ipi_mflags & M_VLANTAG)
+		need_hi = true;
+
+	pi->ipi_new_pidx = pi->ipi_pidx;
+	tbd = &((struct tx_bd_long *)&txr->ring.vaddr)[pi->ipi_new_pidx];
+	pi->ipi_ndescs = 1;
+	tbd->opaque = pi->ipi_new_pidx;
+	tbd->len = htole16(pi->ipi_segs[seg].ds_len);
+	tbd->addr = htole64(pi->ipi_segs[seg++].ds_addr);
+	flags_type = (pi->ipi_nsegs + need_hi) << TX_BD_SHORT_FLAGS_BD_CNT_SFT;
+	flags_type |= bnxt_tx_lhint[pi->ipi_len >> 9];
+
+	if (need_hi) {
+		flags_type |= TX_BD_LONG_TYPE_TX_BD_LONG;
+		tbd->flags_type = htole16(flags_type);
+
+		pi->ipi_new_pidx = RING_NEXT(&txr->ring, pi->ipi_new_pidx);
+		pi->ipi_ndescs++;
+		tbdh = &((struct tx_bd_long_hi *)&txr->ring.vaddr)[pi->ipi_new_pidx];
+		tbdh->mss = htole16(pi->ipi_tso_segsz);
+		tbdh->hdr_size = htole16(pi->ipi_ehdrlen + pi->ipi_ip_hlen + pi->ipi_tcp_hlen);
+		tbdh->cfa_action = 0;
+		lflags = 0;
+		cfa_meta = 0;
+		if (pi->ipi_mflags & M_VLANTAG) {
+			/* TODO: Do we need to byte-swap the vtag here? */
+			cfa_meta = TX_BD_LONG_CFA_META_KEY_VLAN_TAG | pi->ipi_vtag;
+			cfa_meta |= TX_BD_LONG_CFA_META_VLAN_TPID_TPID8100;
+		}
+		tbdh->cfa_meta = htole32(cfa_meta);
+		if (pi->ipi_csum_flags & CSUM_TSO) {
+			lflags |= TX_BD_LONG_LFLAGS_LSO | TX_BD_LONG_LFLAGS_T_IPID;
+		}
+		else if(pi->ipi_csum_flags & CSUM_OFFLOAD) {
+			lflags |= TX_BD_LONG_LFLAGS_TCP_UDP_CHKSUM;
+		}
+		else if(pi->ipi_csum_flags & CSUM_IP) {
+			lflags |= TX_BD_LONG_LFLAGS_T_IP_CHKSUM;
+		}
+		tbdh->lflags = htole16(lflags);
+	}
+	else {
+		flags_type |= TX_BD_SHORT_TYPE_TX_BD_SHORT;
+	}
+
+	for (; seg < pi->ipi_nsegs; seg++) {
+		tbd->flags_type = htole16(flags_type);
+		pi->ipi_new_pidx = RING_NEXT(&txr->ring, pi->ipi_new_pidx);
+		pi->ipi_ndescs++;
+		tbd = &((struct tx_bd_long *)&txr->ring.vaddr)[pi->ipi_new_pidx];
+		tbd->len = htole16(pi->ipi_segs[seg].ds_len);
+		tbd->addr = htole64(pi->ipi_segs[seg].ds_addr);
+		flags_type = TX_BD_SHORT_TYPE_TX_BD_SHORT;
+	}
+	flags_type |= TX_BD_SHORT_FLAGS_PACKET_END;
+	tbd->flags_type = htole16(flags_type);
+	pi->ipi_new_pidx = RING_NEXT(&txr->ring, pi->ipi_new_pidx);
+
 	return ENOSYS;
 }
 
@@ -91,8 +180,11 @@ static void
 bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t pidx)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
+	struct bnxt_tx_ring *tx_ring;
 
-	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
+	tx_ring = &softc->tx_rings[txqid];
+
+	BNXT_TX_DB(tx_ring->ring.doorbell, pidx);
 	return;
 }
 
@@ -136,7 +228,6 @@ bnxt_isc_rxd_flush(void *sc, uint16_t rxqid, uint8_t flid,
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 
-	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
 	struct bnxt_rx_ring *rx_ring;
 
 	if (flid == 0)
@@ -152,9 +243,30 @@ static int
 bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
+	struct bnxt_cp_ring *cpr = &softc->rx_cp_rings[rxqid];
+	struct rx_pkt_cmpl *rcp;
+	struct rx_pkt_cmpl_hi *rcph;
+	int avail;
+	uint32_t raw = cpr->raw_cons;
+	uint32_t cons;
 
-	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
-	return 0;	// No error return?
+	for (raw = cpr->raw_cons; RING_CMP(&cpr->ring, raw) != idx; raw++)
+		;
+
+	for (avail = 0 ; ; avail++) {
+		cons = RING_CMP(&cpr->ring, raw);
+		rcp = &((struct rx_pkt_cmpl *)cpr->ring.vaddr)[cons];
+
+		if (!CMP_VALID(rcp, raw, &cpr->ring))
+			break;
+
+		raw++;
+		cons = RING_CMP(&cpr->ring, raw);
+		rcph = &((struct rx_pkt_cmpl_hi *)cpr->ring.vaddr)[cons];
+		if (!CMP_VALID(rcp, raw, &cpr->ring))
+			break;
+	}
+	return avail;
 }
 
 static int

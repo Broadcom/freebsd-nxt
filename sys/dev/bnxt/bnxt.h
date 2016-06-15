@@ -56,6 +56,10 @@ __FBSDID("$FreeBSD$");
 #define BCM57404	0x16D1
 #define BCM57406	0x16D2
 
+#define CSUM_OFFLOAD		(CSUM_IP_TSO|CSUM_IP6_TSO|CSUM_IP| \
+				 CSUM_IP_UDP|CSUM_IP_TCP|CSUM_IP_SCTP| \
+				 CSUM_IP6_UDP|CSUM_IP6_TCP|CSUM_IP6_SCTP)
+
 /* Completion related defines */
 #define CMP_VALID(cmp, raw_cons, ring)					    \
 	(!!(((struct cmpl_base *)(cmp))->info3_v & htole32(CMPL_BASE_V)) == \

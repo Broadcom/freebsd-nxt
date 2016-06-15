@@ -643,7 +643,7 @@ bnxt_if_attach_pre(if_ctx_t ctx)
 		goto failed;
 
 	/* Now set up iflib sc */
-	scctx->isc_tx_nsegments = 1,
+	scctx->isc_tx_nsegments = 32,
 	scctx->isc_tx_tso_segments_max = 32;
 	scctx->isc_tx_tso_size_max = BNXT_TSO_SIZE;
 	scctx->isc_tx_tso_segsize_max = BNXT_TSO_SIZE;
@@ -884,8 +884,6 @@ bnxt_if_enable_intr(if_ctx_t ctx)
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	int i;
 
-	for (i = 0; i < softc->ntxqsets; i++)
-		BNXT_CP_ARM_DB(&softc->tx_cp_rings[i], softc->tx_cp_rings[i].raw_cons);
 	for (i = 0; i < softc->nrxqsets; i++)
 		BNXT_CP_ARM_DB(&softc->rx_cp_rings[i], softc->rx_cp_rings[i].raw_cons);
 	return;
@@ -1164,18 +1162,18 @@ bnxt_init_rxbds(struct bnxt_ring *ring, uint16_t type, uint16_t len)
 static int
 bnxt_handle_rx_cp(void *arg)
 {
-	struct bnxt_cp_ring *cpr = arg;
-	struct bnxt_softc *softc = cpr->ring.softc;
+//	struct bnxt_cp_ring *cpr = arg;
+//	struct bnxt_softc *softc = cpr->ring.softc;
 
-	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
-	return 0;
+//	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
+	return FILTER_HANDLED;
 }
 
 static int
 bnxt_handle_def_cp(void *arg)
 {
-	struct bnxt_softc *softc = arg;
+//	struct bnxt_softc *softc = arg;
 
-	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
-	return 0;
+//	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
+	return FILTER_HANDLED;
 }
