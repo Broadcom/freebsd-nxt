@@ -60,7 +60,6 @@ static void bnxt_isc_rxd_flush(void *sc, uint16_t rxqid, uint8_t flid,
 static int bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx);
 static int bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri);
 
-extern void bnxt_if_enable_intr(if_ctx_t ctx);
 static int bnxt_intr(void *sc);
 
 struct if_txrx bnxt_txrx  = {

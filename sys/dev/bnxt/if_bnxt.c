@@ -90,33 +90,33 @@ static pci_vendor_info_t bnxt_vendor_info_array[] =
 static void *bnxt_register(device_t dev);
 
 /* Soft queue setup and teardown */
-static int bnxt_if_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
+static int bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
     uint64_t *paddrs, int ntxqs, int ntxqsets);
-static int bnxt_if_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
+static int bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
     uint64_t *paddrs, int nrxqs, int nrxqsets);
-static void bnxt_if_queues_free(if_ctx_t ctx);
+static void bnxt_queues_free(if_ctx_t ctx);
 
 /* Device setup and teardown */
-static int bnxt_if_attach_pre(if_ctx_t ctx);
-static int bnxt_if_attach_post(if_ctx_t ctx);
-static int bnxt_if_detach(if_ctx_t ctx);
+static int bnxt_attach_pre(if_ctx_t ctx);
+static int bnxt_attach_post(if_ctx_t ctx);
+static int bnxt_detach(if_ctx_t ctx);
 
 /* Device configuration */
-static void bnxt_if_init(if_ctx_t ctx);
-static void bnxt_if_stop(if_ctx_t ctx);
-static void bnxt_if_multi_set(if_ctx_t ctx);
-static int bnxt_if_mtu_set(if_ctx_t ctx, uint32_t mtu);
-static void bnxt_if_media_status(if_ctx_t ctx, struct ifmediareq * ifmr);
-static int bnxt_if_media_change(if_ctx_t ctx);
-static int bnxt_if_promisc_set(if_ctx_t ctx, int flags);
-static uint64_t	bnxt_if_get_counter(if_ctx_t, ift_counter);
-static void bnxt_if_update_admin_status(if_ctx_t ctx);
+static void bnxt_init(if_ctx_t ctx);
+static void bnxt_stop(if_ctx_t ctx);
+static void bnxt_multi_set(if_ctx_t ctx);
+static int bnxt_mtu_set(if_ctx_t ctx, uint32_t mtu);
+static void bnxt_media_status(if_ctx_t ctx, struct ifmediareq * ifmr);
+static int bnxt_media_change(if_ctx_t ctx);
+static int bnxt_promisc_set(if_ctx_t ctx, int flags);
+static uint64_t	bnxt_get_counter(if_ctx_t, ift_counter);
+static void bnxt_update_admin_status(if_ctx_t ctx);
 
 /* Interrupt enable / disable */
-static void bnxt_if_enable_intr(if_ctx_t ctx);
-static void bnxt_if_queue_intr_enable(if_ctx_t ctx, uint16_t qid);
-static void bnxt_if_disable_intr(if_ctx_t ctx);
-static int bnxt_if_msix_intr_assign(if_ctx_t ctx, int msix);
+static void bnxt_enable_intr(if_ctx_t ctx);
+static void bnxt_queue_intr_enable(if_ctx_t ctx, uint16_t qid);
+static void bnxt_disable_intr(if_ctx_t ctx);
+static int bnxt_msix_intr_assign(if_ctx_t ctx, int msix);
 
 /* Internal support functions */
 static int bnxt_probe_phy(struct bnxt_softc *softc);
@@ -159,35 +159,35 @@ MODULE_DEPEND(bnxt, pci, 1, 1, 1);
 MODULE_DEPEND(bnxt, ether, 1, 1, 1);
 MODULE_DEPEND(bnxt, iflib, 1, 1, 1);
 
-static device_method_t bnxt_if_methods[] = {
-	DEVMETHOD(ifdi_tx_queues_alloc, bnxt_if_tx_queues_alloc),
-	DEVMETHOD(ifdi_rx_queues_alloc, bnxt_if_rx_queues_alloc),
-	DEVMETHOD(ifdi_queues_free, bnxt_if_queues_free),
+static device_method_t bnxt_iflib_methods[] = {
+	DEVMETHOD(ifdi_tx_queues_alloc, bnxt_tx_queues_alloc),
+	DEVMETHOD(ifdi_rx_queues_alloc, bnxt_rx_queues_alloc),
+	DEVMETHOD(ifdi_queues_free, bnxt_queues_free),
 
-	DEVMETHOD(ifdi_attach_pre, bnxt_if_attach_pre),
-	DEVMETHOD(ifdi_attach_post, bnxt_if_attach_post),
-	DEVMETHOD(ifdi_detach, bnxt_if_detach),
+	DEVMETHOD(ifdi_attach_pre, bnxt_attach_pre),
+	DEVMETHOD(ifdi_attach_post, bnxt_attach_post),
+	DEVMETHOD(ifdi_detach, bnxt_detach),
 
-	DEVMETHOD(ifdi_init, bnxt_if_init),
-	DEVMETHOD(ifdi_stop, bnxt_if_stop),
-	DEVMETHOD(ifdi_multi_set, bnxt_if_multi_set),
-	DEVMETHOD(ifdi_mtu_set, bnxt_if_mtu_set),
-	DEVMETHOD(ifdi_media_status, bnxt_if_media_status),
-	DEVMETHOD(ifdi_media_change, bnxt_if_media_change),
-	DEVMETHOD(ifdi_promisc_set, bnxt_if_promisc_set),
-	DEVMETHOD(ifdi_get_counter, bnxt_if_get_counter),
-	DEVMETHOD(ifdi_update_admin_status, bnxt_if_update_admin_status),
+	DEVMETHOD(ifdi_init, bnxt_init),
+	DEVMETHOD(ifdi_stop, bnxt_stop),
+	DEVMETHOD(ifdi_multi_set, bnxt_multi_set),
+	DEVMETHOD(ifdi_mtu_set, bnxt_mtu_set),
+	DEVMETHOD(ifdi_media_status, bnxt_media_status),
+	DEVMETHOD(ifdi_media_change, bnxt_media_change),
+	DEVMETHOD(ifdi_promisc_set, bnxt_promisc_set),
+	DEVMETHOD(ifdi_get_counter, bnxt_get_counter),
+	DEVMETHOD(ifdi_update_admin_status, bnxt_update_admin_status),
 
-	DEVMETHOD(ifdi_intr_enable, bnxt_if_enable_intr),
-	DEVMETHOD(ifdi_queue_intr_enable, bnxt_if_queue_intr_enable),
-	DEVMETHOD(ifdi_intr_disable, bnxt_if_disable_intr),
-	DEVMETHOD(ifdi_msix_intr_assign, bnxt_if_msix_intr_assign),
+	DEVMETHOD(ifdi_intr_enable, bnxt_enable_intr),
+	DEVMETHOD(ifdi_queue_intr_enable, bnxt_queue_intr_enable),
+	DEVMETHOD(ifdi_intr_disable, bnxt_disable_intr),
+	DEVMETHOD(ifdi_msix_intr_assign, bnxt_msix_intr_assign),
 
 	DEVMETHOD_END
 };
 
-static driver_t bnxt_if_driver = {
-	"bnxt", bnxt_if_methods, sizeof(struct bnxt_softc)
+static driver_t bnxt_iflib_driver = {
+	"bnxt", bnxt_iflib_methods, sizeof(struct bnxt_softc)
 };
 
 /*
@@ -198,7 +198,7 @@ extern struct if_txrx bnxt_txrx;
 static struct if_shared_ctx bnxt_sctx_init = {
 	.isc_magic = IFLIB_MAGIC,
 	.isc_txrx = &bnxt_txrx,
-	.isc_driver = &bnxt_if_driver,
+	.isc_driver = &bnxt_iflib_driver,
 	.isc_nfl = 2,				// Number of Free Lists
 	.isc_q_align = PAGE_SIZE,
 
@@ -238,7 +238,7 @@ bnxt_register(device_t dev)
 
 /* Soft queue setup and teardown */
 static int
-bnxt_if_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
+bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
     uint64_t *paddrs, int ntxqs, int ntxqsets)
 {
 	struct bnxt_softc *softc;
@@ -308,7 +308,7 @@ cp_alloc_fail:
 }
 
 static void
-bnxt_if_queues_free(if_ctx_t ctx)
+bnxt_queues_free(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	int i;
@@ -362,7 +362,7 @@ bnxt_if_queues_free(if_ctx_t ctx)
 }
 
 static int
-bnxt_if_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
+bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
     uint64_t *paddrs, int nrxqs, int nrxqsets)
 {
 	struct bnxt_softc *softc;
@@ -509,7 +509,7 @@ cp_alloc_fail:
 
 /* Device setup and teardown */
 static int
-bnxt_if_attach_pre(if_ctx_t ctx)
+bnxt_attach_pre(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	if_softc_ctx_t scctx;
@@ -602,7 +602,7 @@ dma_fail:
 }
 
 static int
-bnxt_if_attach_post(if_ctx_t ctx)
+bnxt_attach_post(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	if_t ifp = iflib_get_ifp(ctx);
@@ -646,7 +646,7 @@ failed:
 }
 
 static int
-bnxt_if_detach(if_ctx_t ctx)
+bnxt_detach(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	int i;
@@ -670,7 +670,7 @@ bnxt_if_detach(if_ctx_t ctx)
 
 /* Device configuration */
 static void
-bnxt_if_init(if_ctx_t ctx)
+bnxt_init(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	struct ifnet *ifp = iflib_get_ifp(ctx);
@@ -802,7 +802,7 @@ fail:
 }
 
 static void
-bnxt_if_stop(if_ctx_t ctx)
+bnxt_stop(if_ctx_t ctx)
 {
 	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
 	if_setdrvflagbits(iflib_get_ifp(ctx), 0, IFF_DRV_RUNNING);
@@ -810,7 +810,7 @@ bnxt_if_stop(if_ctx_t ctx)
 }
 
 static void
-bnxt_if_multi_set(if_ctx_t ctx)
+bnxt_multi_set(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	struct bnxt_vnic_info *vnic;
@@ -842,14 +842,14 @@ bnxt_if_multi_set(if_ctx_t ctx)
 }
 
 static int
-bnxt_if_mtu_set(if_ctx_t ctx, uint32_t mtu)
+bnxt_mtu_set(if_ctx_t ctx, uint32_t mtu)
 {
 	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
 	return ENOSYS;
 }
 
 static void
-bnxt_if_media_status(if_ctx_t ctx, struct ifmediareq * ifmr)
+bnxt_media_status(if_ctx_t ctx, struct ifmediareq * ifmr)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	struct bnxt_link_info *link_info = &softc->link_info;
@@ -909,21 +909,21 @@ bnxt_if_media_status(if_ctx_t ctx, struct ifmediareq * ifmr)
 }
 
 static int
-bnxt_if_media_change(if_ctx_t ctx)
+bnxt_media_change(if_ctx_t ctx)
 {
 	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
 	return ENOSYS;
 }
 
 static int
-bnxt_if_promisc_set(if_ctx_t ctx, int flags)
+bnxt_promisc_set(if_ctx_t ctx, int flags)
 {
 	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
 	return ENOSYS;
 }
 
 static uint64_t
-bnxt_if_get_counter(if_ctx_t ctx, ift_counter cnt)
+bnxt_get_counter(if_ctx_t ctx, ift_counter cnt)
 {
 	if_t ifp = iflib_get_ifp(ctx);
 
@@ -935,7 +935,7 @@ bnxt_if_get_counter(if_ctx_t ctx, ift_counter cnt)
 }
 
 static void
-bnxt_if_update_admin_status(if_ctx_t ctx)
+bnxt_update_admin_status(if_ctx_t ctx)
 {
 	/* TODO: do we need to do anything here? */
 	return;
@@ -943,7 +943,7 @@ bnxt_if_update_admin_status(if_ctx_t ctx)
 
 /* Interrupt enable / disable */
 static void
-bnxt_if_enable_intr(if_ctx_t ctx)
+bnxt_enable_intr(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	int i;
@@ -955,7 +955,7 @@ bnxt_if_enable_intr(if_ctx_t ctx)
 }
 
 static void
-bnxt_if_queue_intr_enable(if_ctx_t ctx, uint16_t qid)
+bnxt_queue_intr_enable(if_ctx_t ctx, uint16_t qid)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 
@@ -965,7 +965,7 @@ bnxt_if_queue_intr_enable(if_ctx_t ctx, uint16_t qid)
 }
 
 static void
-bnxt_if_disable_intr(if_ctx_t ctx)
+bnxt_disable_intr(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	int i;
@@ -979,7 +979,7 @@ bnxt_if_disable_intr(if_ctx_t ctx)
 }
 
 static int
-bnxt_if_msix_intr_assign(if_ctx_t ctx, int msix)
+bnxt_msix_intr_assign(if_ctx_t ctx, int msix)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	int vector = 1;
