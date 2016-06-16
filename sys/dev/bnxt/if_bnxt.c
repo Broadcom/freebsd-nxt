@@ -1006,7 +1006,7 @@ bnxt_msix_intr_assign(if_ctx_t ctx, int msix)
 	}
 
 	for (i=0; i<softc->scctx->isc_ntxqsets; i++)
-		iflib_softirq_alloc_generic(ctx, vector, IFLIB_INTR_TX, &softc->tx_cp_rings[i], i, "tx_cp");
+		iflib_softirq_alloc_generic(ctx, vector, IFLIB_INTR_TX, NULL, i, "tx_cp");
 
 	return rc;
 
