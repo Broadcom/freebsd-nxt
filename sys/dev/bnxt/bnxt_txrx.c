@@ -113,6 +113,8 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 	uint32_t cfa_meta;
 	int seg = 0;
 
+	/* TODO: Clean the TX ring */
+
 	/* If we have offloads enabled, we need to use two BDs. */
 	if ((pi->ipi_csum_flags & (CSUM_OFFLOAD | CSUM_TSO | CSUM_IP)) ||
 	    pi->ipi_mflags & M_VLANTAG)
