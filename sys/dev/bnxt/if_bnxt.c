@@ -128,6 +128,9 @@ static void bnxt_init_rxbds(struct bnxt_ring *ring, uint16_t type,
     uint16_t len);
 static int bnxt_handle_def_cp(void *arg);
 static int bnxt_handle_rx_cp(void *arg);
+static void bnxt_clear_ids(struct bnxt_softc *softc);
+static void bnxt_allmulticast_enable(struct bnxt_softc *softc,
+    struct bnxt_vnic_info *vnic);
 
 /*
  * Device Interface Declaration
@@ -266,16 +269,10 @@ bnxt_if_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		goto dma_alloc_fail;
 
 	for (i = 0; i < ntxqsets; i++) {
-		/* Allocate the statistics context */
-		rc = bnxt_hwrm_stat_ctx_alloc(softc, &softc->tx_cp_rings[i],
-		    softc->tx_stats.idi_paddr +
-		    (sizeof(struct ctx_hw_stats) * i));
-		if (rc) {
-			i--;
-			goto fail;
-		}
-
-		/* Allocate the completion ring */
+		/* Set up the completion ring */
+		softc->tx_cp_rings[i].stats_ctx_id = HWRM_NA_SIGNATURE;
+		softc->tx_cp_rings[i].ring.phys_id =
+		    (uint16_t)HWRM_NA_SIGNATURE;
 		softc->tx_cp_rings[i].ring.softc = softc;
 		softc->tx_cp_rings[i].ring.id =
 		    softc->scctx->isc_nrxqsets + i + 1;
@@ -286,18 +283,9 @@ bnxt_if_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		    softc->tx_cp_rings[i].ring.ring_size - 1;
 		softc->tx_cp_rings[i].ring.vaddr = vaddrs[i * ntxqs];
 		softc->tx_cp_rings[i].ring.paddr = paddrs[i * ntxqs];
-		rc = bnxt_hwrm_ring_alloc(softc,
-		    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
-		    &softc->tx_cp_rings[i].ring,
-		    (uint16_t)HWRM_NA_SIGNATURE,
-		    softc->tx_cp_rings[i].stats_ctx_id);
-		if (rc) {
-			bnxt_hwrm_stat_ctx_free(softc, &softc->tx_cp_rings[i]);;
-			i--;
-			goto fail;
-		}
 
-		/* Allocate the TX ring */
+		/* Set up the TX ring */
+		softc->tx_rings[i].ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->tx_rings[i].ring.softc = softc;
 		softc->tx_rings[i].ring.id = i;
 		softc->tx_rings[i].ring.doorbell = softc->bar[1].kva + (softc->tx_rings[i].ring.id * 0x80);
@@ -306,36 +294,11 @@ bnxt_if_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		    softc->tx_rings[i].ring.ring_size - 1;
 		softc->tx_rings[i].ring.vaddr = vaddrs[i * ntxqs + 1];
 		softc->tx_rings[i].ring.paddr = paddrs[i * ntxqs + 1];
-
-		rc = bnxt_hwrm_ring_alloc(softc,
-		    HWRM_RING_ALLOC_INPUT_RING_TYPE_TX,
-		    &softc->tx_rings[i].ring,
-		    softc->tx_cp_rings[i].ring.phys_id,
-		    softc->tx_cp_rings[i].stats_ctx_id);
-		if (rc) {
-			bnxt_hwrm_ring_free(softc,
-			    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL,
-			    softc->tx_cp_rings[i].ring.phys_id);
-			bnxt_hwrm_stat_ctx_free(softc, &softc->tx_cp_rings[i]);;
-			i--;
-			goto fail;
-		}
 	}
 
 	softc->ntxqsets = ntxqsets;
 	return rc;
 
-fail:
-	for (; i>=0; i--) {
-		bnxt_hwrm_ring_free(softc,
-		    HWRM_RING_FREE_INPUT_RING_TYPE_TX,
-		    softc->tx_rings[i].ring.phys_id);
-		bnxt_hwrm_ring_free(softc,
-		    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL,
-		    softc->tx_cp_rings[i].ring.phys_id);
-		bnxt_hwrm_stat_ctx_free(softc, &softc->tx_cp_rings[i]);;
-	}
-	iflib_dma_free(&softc->tx_stats);
 dma_alloc_fail:
 	free(softc->tx_rings, M_DEVBUF);
 ring_alloc_fail:
@@ -354,10 +317,10 @@ bnxt_if_queues_free(if_ctx_t ctx)
 	for (i = softc->ntxqsets-1; i>=0; i--) {
 		bnxt_hwrm_ring_free(softc,
 		    HWRM_RING_FREE_INPUT_RING_TYPE_TX,
-		    softc->tx_rings[i].ring.phys_id);
+		    &softc->tx_rings[i].ring);
 		bnxt_hwrm_ring_free(softc,
 		    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL,
-		    softc->tx_cp_rings[i].ring.phys_id);
+		    &softc->tx_cp_rings[i].ring);
 		bnxt_hwrm_stat_ctx_free(softc, &softc->tx_cp_rings[i]);;
 	}
 	iflib_dma_free(&softc->tx_stats);
@@ -369,19 +332,21 @@ bnxt_if_queues_free(if_ctx_t ctx)
 
 	// Free RX queues
 	for (i = softc->nrxqsets-1; i>=0; i--) {
+		bnxt_hwrm_vnic_free(softc, &softc->vnic_info[i]);
 		bnxt_hwrm_ring_grp_free(softc, &softc->grp_info[i]);
 		bnxt_hwrm_ring_free(softc,
 		    HWRM_RING_FREE_INPUT_RING_TYPE_RX,
-		    softc->ag_rings[i].ring.phys_id);
+		    &softc->ag_rings[i].ring);
 		bnxt_hwrm_ring_free(softc,
 		    HWRM_RING_FREE_INPUT_RING_TYPE_RX,
-		    softc->rx_rings[i].ring.phys_id);
+		    &softc->rx_rings[i].ring);
 		bnxt_hwrm_ring_free(softc,
 		    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL,
-		    softc->rx_cp_rings[i].ring.phys_id);
+		    &softc->rx_cp_rings[i].ring);
 		bnxt_hwrm_stat_ctx_free(softc, &softc->rx_cp_rings[i]);;
 	}
 	iflib_dma_free(&softc->rx_stats);
+	free(softc->vnic_info, M_DEVBUF);
 	free(softc->grp_info, M_DEVBUF);
 	free(softc->ag_rings, M_DEVBUF);
 	free(softc->rx_rings, M_DEVBUF);
@@ -438,6 +403,14 @@ bnxt_if_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		rc = ENOMEM;
 		goto grp_alloc_fail;
 	}
+	softc->vnic_info = malloc(sizeof(struct bnxt_vnic_info) * nrxqsets,
+	    M_DEVBUF, M_NOWAIT | M_ZERO);
+	if (!softc->vnic_info) {
+		device_printf(iflib_get_dev(ctx),
+		    "unable to allocate ring groups");
+		rc = ENOMEM;
+		goto vnic_alloc_fail;
+	}
 
 	rc = iflib_dma_alloc(ctx, sizeof(struct ctx_hw_stats) * nrxqsets,
 	    &softc->rx_stats, 0);
@@ -445,16 +418,10 @@ bnxt_if_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		goto dma_alloc_fail;
 
 	for (i = 0; i < nrxqsets; i++) {
-		/* Allocate the statistics context */
-		rc = bnxt_hwrm_stat_ctx_alloc(softc, &softc->rx_cp_rings[i],
-		    softc->rx_stats.idi_paddr +
-		    (sizeof(struct ctx_hw_stats) * i));
-		if (rc) {
-			i--;
-			goto fail;
-		}
-
 		/* Allocation the completion ring */
+		softc->rx_cp_rings[i].stats_ctx_id = HWRM_NA_SIGNATURE;
+		softc->rx_cp_rings[i].ring.phys_id =
+		    (uint16_t)HWRM_NA_SIGNATURE;
 		softc->rx_cp_rings[i].ring.softc = softc;
 		softc->rx_cp_rings[i].ring.id = i + 1;
 		softc->rx_cp_rings[i].ring.doorbell = softc->bar[1].kva + (softc->rx_cp_rings[i].ring.id * 0x80);
@@ -464,18 +431,9 @@ bnxt_if_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		    softc->rx_cp_rings[i].ring.ring_size - 1;
 		softc->rx_cp_rings[i].ring.vaddr = vaddrs[i * nrxqs];
 		softc->rx_cp_rings[i].ring.paddr = paddrs[i * nrxqs];
-		rc = bnxt_hwrm_ring_alloc(softc,
-		    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
-		    &softc->rx_cp_rings[i].ring,
-		    (uint16_t)HWRM_NA_SIGNATURE,
-		    softc->rx_cp_rings[i].stats_ctx_id);
-		if (rc) {
-			bnxt_hwrm_stat_ctx_free(softc, &softc->rx_cp_rings[i]);;
-			i--;
-			goto fail;
-		}
 
 		/* Allocate the RX ring */
+		softc->rx_rings[i].ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->rx_rings[i].ring.softc = softc;
 		softc->rx_rings[i].ring.id = i * 2;
 		softc->rx_rings[i].ring.doorbell = softc->bar[1].kva + (softc->rx_rings[i].ring.id * 0x80);
@@ -484,21 +442,9 @@ bnxt_if_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		    softc->rx_rings[i].ring.ring_size - 1;
 		softc->rx_rings[i].ring.vaddr = vaddrs[i * nrxqs + 1];
 		softc->rx_rings[i].ring.paddr = paddrs[i * nrxqs + 1];
-		rc = bnxt_hwrm_ring_alloc(softc,
-		    HWRM_RING_ALLOC_INPUT_RING_TYPE_RX,
-		    &softc->rx_rings[i].ring,
-		    (uint16_t)HWRM_NA_SIGNATURE,
-		    softc->rx_cp_rings[i].stats_ctx_id);
-		if (rc) {
-			bnxt_hwrm_ring_free(softc,
-			    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL,
-			    softc->rx_cp_rings[i].ring.phys_id);
-			bnxt_hwrm_stat_ctx_free(softc, &softc->rx_cp_rings[i]);;
-			i--;
-			goto fail;
-		}
 
 		/* Allocate the AG ring */
+		softc->ag_rings[i].ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->ag_rings[i].ring.softc = softc;
 		softc->ag_rings[i].ring.id = (i * 2) + 1;
 		softc->ag_rings[i].ring.doorbell = softc->bar[1].kva + (softc->ag_rings[i].ring.id * 0x80);
@@ -507,44 +453,14 @@ bnxt_if_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		    softc->ag_rings[i].ring.ring_size - 1;
 		softc->ag_rings[i].ring.vaddr = vaddrs[i * nrxqs + 2];
 		softc->ag_rings[i].ring.paddr = paddrs[i * nrxqs + 2];
-		rc = bnxt_hwrm_ring_alloc(softc,
-		    HWRM_RING_ALLOC_INPUT_RING_TYPE_RX,
-		    &softc->ag_rings[i].ring,
-		    (uint16_t)HWRM_NA_SIGNATURE,
-		    softc->rx_cp_rings[i].stats_ctx_id);
-		if (rc) {
-			bnxt_hwrm_ring_free(softc,
-			    HWRM_RING_FREE_INPUT_RING_TYPE_RX,
-			    softc->rx_rings[i].ring.phys_id);
-			bnxt_hwrm_ring_free(softc,
-			    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL,
-			    softc->rx_cp_rings[i].ring.phys_id);
-			bnxt_hwrm_stat_ctx_free(softc, &softc->rx_cp_rings[i]);;
-			i--;
-			goto fail;
-		}
 
 		/* Allocate the ring group */
+		softc->grp_info[i].grp_id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->grp_info[i].stats_ctx =
 		    softc->rx_cp_rings[i].stats_ctx_id;
-		softc->grp_info[i].rx_ring_id = softc->rx_rings[i].ring.id;
-		softc->grp_info[i].ag_ring_id = softc->ag_rings[i].ring.id;
-		softc->grp_info[i].cp_ring_id = softc->rx_cp_rings[i].ring.id;
-		rc = bnxt_hwrm_ring_grp_alloc(softc, &softc->grp_info[i]);
-		if (rc) {
-			bnxt_hwrm_ring_free(softc,
-			    HWRM_RING_FREE_INPUT_RING_TYPE_RX,
-			    softc->ag_rings[i].ring.phys_id);
-			bnxt_hwrm_ring_free(softc,
-			    HWRM_RING_FREE_INPUT_RING_TYPE_RX,
-			    softc->rx_rings[i].ring.phys_id);
-			bnxt_hwrm_ring_free(softc,
-			    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL,
-			    softc->rx_cp_rings[i].ring.phys_id);
-			bnxt_hwrm_stat_ctx_free(softc, &softc->rx_cp_rings[i]);;
-			i--;
-			goto fail;
-		}
+		softc->grp_info[i].rx_ring_id = softc->rx_rings[i].ring.phys_id;
+		softc->grp_info[i].ag_ring_id = softc->ag_rings[i].ring.phys_id;
+		softc->grp_info[i].cp_ring_id = softc->rx_cp_rings[i].ring.phys_id;
 
 		bnxt_init_rxbds(&softc->rx_rings[i].ring,
 		    RX_PROD_PKT_BD_TYPE_RX_PROD_PKT,
@@ -552,27 +468,34 @@ bnxt_if_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		bnxt_init_rxbds(&softc->ag_rings[i].ring,
 		    RX_PROD_AGG_BD_TYPE_RX_PROD_AGG,
 		    softc->scctx->isc_max_frame_size);
+
+		/* And finally, the VNIC */
+		softc->vnic_info[i].id = i;
+		softc->vnic_info[i].ring_grp = (uint16_t)HWRM_NA_SIGNATURE;
+		softc->vnic_info[i].rss_rule = (uint16_t)HWRM_NA_SIGNATURE;
+		softc->vnic_info[i].cos_rule = (uint16_t)HWRM_NA_SIGNATURE;
+		softc->vnic_info[i].lb_rule = (uint16_t)HWRM_NA_SIGNATURE;
+		softc->vnic_info[i].mru = softc->scctx->isc_max_frame_size;
+		softc->vnic_info[i].mc_list_count = 0;
+		softc->vnic_info[i].mc_list_size =
+		    BNXT_MAX_MC_ADDRS * ETHER_ADDR_LEN;
+		rc = iflib_dma_alloc(ctx, softc->vnic_info[i].mc_list_size,
+		    &softc->vnic_info[i].mc_list, 0);
+		if (rc) {
+			i--;
+			goto mc_alloc_fail;
+		}
 	}
 
 	softc->nrxqsets = nrxqsets;
 	return rc;
 
-fail:
-	for (; i>=0; i--) {
-		bnxt_hwrm_ring_grp_free(softc, &softc->grp_info[i]);
-		bnxt_hwrm_ring_free(softc,
-		    HWRM_RING_FREE_INPUT_RING_TYPE_RX,
-		    softc->ag_rings[i].ring.phys_id);
-		bnxt_hwrm_ring_free(softc,
-		    HWRM_RING_FREE_INPUT_RING_TYPE_RX,
-		    softc->rx_rings[i].ring.phys_id);
-		bnxt_hwrm_ring_free(softc,
-		    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL,
-		    softc->rx_cp_rings[i].ring.phys_id);
-		bnxt_hwrm_stat_ctx_free(softc, &softc->rx_cp_rings[i]);;
-	}
-	iflib_dma_free(&softc->rx_stats);
+mc_alloc_fail:
+	for (; i >= 0; i--)
+		iflib_dma_free(&softc->vnic_info[i].mc_list);
 dma_alloc_fail:
+	free(softc->vnic_info, M_DEVBUF);
+vnic_alloc_fail:
 	free(softc->grp_info, M_DEVBUF);
 grp_alloc_fail:
 	free(softc->ag_rings, M_DEVBUF);
@@ -653,6 +576,8 @@ bnxt_if_attach_pre(if_ctx_t ctx)
 	scctx->isc_msix_bar = -1;
 
 	/* Allocate the default completion ring */
+	softc->def_cp_ring.stats_ctx_id = HWRM_NA_SIGNATURE;
+	softc->def_cp_ring.ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 	softc->def_cp_ring.ring.softc = softc;
 	softc->def_cp_ring.ring.id = 0;
 	softc->def_cp_ring.ring.doorbell = softc->bar[1].kva + (softc->def_cp_ring.ring.id * 0x80);
@@ -662,13 +587,6 @@ bnxt_if_attach_pre(if_ctx_t ctx)
 	    &softc->def_cp_ring_mem, 0);
 	softc->def_cp_ring.ring.vaddr = softc->def_cp_ring_mem.idi_vaddr;
 	softc->def_cp_ring.ring.paddr = softc->def_cp_ring_mem.idi_paddr;
-	rc = bnxt_hwrm_ring_alloc(softc,
-	    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
-	    &softc->def_cp_ring.ring,
-	    (uint16_t)HWRM_NA_SIGNATURE,
-	    softc->def_cp_ring.stats_ctx_id);
-	if (rc)
-		goto failed;
 
 	return (rc);
 
@@ -735,11 +653,13 @@ bnxt_if_detach(if_ctx_t ctx)
 
 	bnxt_hwrm_ring_free(softc,
 	    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL,
-	    softc->def_cp_ring.ring.phys_id);
+	    &softc->def_cp_ring.ring);
 	iflib_irq_free(ctx, &softc->def_cp_ring.irq);
 	/* We need to free() these here... */
-	for (i = softc->nrxqsets-1; i>=0; i--)
+	for (i = softc->nrxqsets-1; i>=0; i--) {
 		iflib_irq_free(ctx, &softc->rx_cp_rings[i].irq);
+		iflib_dma_free(&softc->vnic_info[i].mc_list);
+	}
 	iflib_dma_free(&softc->def_cp_ring_mem);
 	/* hwrm is cleaned up in queues_free() since it's called later */
 	pci_disable_busmaster(softc->dev);
@@ -753,12 +673,131 @@ static void
 bnxt_if_init(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
+	struct ifnet *ifp = iflib_get_ifp(ctx);
+	int i;
 	int rc;
 
 	rc = bnxt_hwrm_func_reset(softc);
 	if (rc)
 		return;
-	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
+	bnxt_clear_ids(softc);
+
+	/* Allocate the default completion ring */
+	rc = bnxt_hwrm_ring_alloc(softc,
+	    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
+	    &softc->def_cp_ring.ring,
+	    (uint16_t)HWRM_NA_SIGNATURE,
+	    softc->def_cp_ring.stats_ctx_id);
+	if (rc)
+		goto fail;
+
+	for (i = 0; i < softc->nrxqsets; i++) {
+		/* Allocate the statistics context */
+		rc = bnxt_hwrm_stat_ctx_alloc(softc, &softc->rx_cp_rings[i],
+		    softc->rx_stats.idi_paddr +
+		    (sizeof(struct ctx_hw_stats) * i));
+		if (rc)
+			goto fail;
+
+		/* Allocation the completion ring */
+		rc = bnxt_hwrm_ring_alloc(softc,
+		    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
+		    &softc->rx_cp_rings[i].ring,
+		    (uint16_t)HWRM_NA_SIGNATURE,
+		    softc->rx_cp_rings[i].stats_ctx_id);
+		if (rc)
+			goto fail;
+
+		/* Allocate the RX ring */
+		rc = bnxt_hwrm_ring_alloc(softc,
+		    HWRM_RING_ALLOC_INPUT_RING_TYPE_RX,
+		    &softc->rx_rings[i].ring,
+		    (uint16_t)HWRM_NA_SIGNATURE,
+		    softc->rx_cp_rings[i].stats_ctx_id);
+		if (rc)
+			goto fail;
+
+		/* Allocate the AG ring */
+		rc = bnxt_hwrm_ring_alloc(softc,
+		    HWRM_RING_ALLOC_INPUT_RING_TYPE_RX,
+		    &softc->ag_rings[i].ring,
+		    (uint16_t)HWRM_NA_SIGNATURE,
+		    softc->rx_cp_rings[i].stats_ctx_id);
+		if (rc)
+			goto fail;
+
+		/* Allocate the ring group */
+		softc->grp_info[i].stats_ctx =
+		    softc->rx_cp_rings[i].stats_ctx_id;
+		softc->grp_info[i].rx_ring_id = softc->rx_rings[i].ring.phys_id;
+		softc->grp_info[i].ag_ring_id = softc->ag_rings[i].ring.phys_id;
+		softc->grp_info[i].cp_ring_id = softc->rx_cp_rings[i].ring.phys_id;
+		rc = bnxt_hwrm_ring_grp_alloc(softc, &softc->grp_info[i]);
+		if (rc)
+			goto fail;
+
+		bnxt_init_rxbds(&softc->rx_rings[i].ring,
+		    RX_PROD_PKT_BD_TYPE_RX_PROD_PKT,
+		    softc->scctx->isc_max_frame_size);
+		bnxt_init_rxbds(&softc->ag_rings[i].ring,
+		    RX_PROD_AGG_BD_TYPE_RX_PROD_AGG,
+		    softc->scctx->isc_max_frame_size);
+
+		/* Allocate the vnic */
+		softc->vnic_info[i].ring_grp = softc->grp_info[i].grp_id;
+		rc = bnxt_hwrm_vnic_alloc(softc, &softc->vnic_info[i]);
+		if (rc)
+			goto fail;
+		rc = bnxt_hwrm_vnic_cfg(softc, &softc->vnic_info[i]);
+		if (rc)
+			goto fail;
+	}
+
+	for (i = 0; i < softc->ntxqsets; i++) {
+		/* Allocate the statistics context */
+		rc = bnxt_hwrm_stat_ctx_alloc(softc, &softc->tx_cp_rings[i],
+		    softc->tx_stats.idi_paddr +
+		    (sizeof(struct ctx_hw_stats) * i));
+		if (rc) {
+			i--;
+			goto fail;
+		}
+
+		/* Allocate the completion ring */
+		rc = bnxt_hwrm_ring_alloc(softc,
+		    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
+		    &softc->tx_cp_rings[i].ring,
+		    (uint16_t)HWRM_NA_SIGNATURE,
+		    softc->tx_cp_rings[i].stats_ctx_id);
+		if (rc) {
+			bnxt_hwrm_stat_ctx_free(softc, &softc->tx_cp_rings[i]);;
+			i--;
+			goto fail;
+		}
+
+		/* Allocate the TX ring */
+		rc = bnxt_hwrm_ring_alloc(softc,
+		    HWRM_RING_ALLOC_INPUT_RING_TYPE_TX,
+		    &softc->tx_rings[i].ring,
+		    softc->tx_cp_rings[i].ring.phys_id,
+		    softc->tx_cp_rings[i].stats_ctx_id);
+		if (rc) {
+			bnxt_hwrm_ring_free(softc,
+			    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL,
+			    &softc->tx_cp_rings[i].ring);
+			bnxt_hwrm_stat_ctx_free(softc, &softc->tx_cp_rings[i]);;
+			i--;
+			goto fail;
+		}
+	}
+
+	ifp->if_drv_flags |= IFF_DRV_RUNNING;
+	return;
+
+fail:
+	bnxt_hwrm_func_reset(softc);
+	bnxt_clear_ids(softc);
+	ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
 	return;
 }
 
@@ -773,8 +812,33 @@ bnxt_if_stop(if_ctx_t ctx)
 static void
 bnxt_if_multi_set(if_ctx_t ctx)
 {
-	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
-	return;
+	struct bnxt_softc *softc = iflib_get_softc(ctx);
+	struct bnxt_vnic_info *vnic;
+	if_t ifp = iflib_get_ifp(ctx);
+	uint8_t *mta;
+	int cnt, mcnt;
+	int i;
+
+	mcnt = if_multiaddr_count(ifp, -1);
+
+	for (i = 0; i < softc->nrxqsets; i++) {
+		vnic = &softc->vnic_info[i];
+		if (mcnt > BNXT_MAX_MC_ADDRS)
+			bnxt_allmulticast_enable(softc, vnic);
+		else {
+			vnic->rx_mask &=
+			    ~HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_ALL_MCAST;
+			mta = vnic->mc_list.idi_vaddr;
+			bzero(mta, vnic->mc_list_size);
+			if_multiaddr_array(ifp, mta, &cnt, mcnt);
+			vnic->mc_list_count = cnt;
+			vnic->rx_mask |=
+			    HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_MCAST;
+			if (bnxt_hwrm_cfa_l2_set_rx_mask(softc, vnic))
+				device_printf(softc->dev,
+				    "set_multi: rx_mask set failed\n");
+		}
+	}
 }
 
 static int
@@ -884,6 +948,7 @@ bnxt_if_enable_intr(if_ctx_t ctx)
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	int i;
 
+	BNXT_CP_ARM_DB(&softc->def_cp_ring, softc->def_cp_ring.raw_cons);
 	for (i = 0; i < softc->nrxqsets; i++)
 		BNXT_CP_ARM_DB(&softc->rx_cp_rings[i], softc->rx_cp_rings[i].raw_cons);
 	return;
@@ -892,7 +957,10 @@ bnxt_if_enable_intr(if_ctx_t ctx)
 static void
 bnxt_if_queue_intr_enable(if_ctx_t ctx, uint16_t qid)
 {
-	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
+	struct bnxt_softc *softc = iflib_get_softc(ctx);
+
+	BNXT_CP_ARM_DB(&softc->rx_cp_rings[qid],
+	    softc->rx_cp_rings[qid].raw_cons);
 	return;
 }
 
@@ -902,6 +970,7 @@ bnxt_if_disable_intr(if_ctx_t ctx)
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	int i;
 
+	BNXT_CP_DISABLE_DB(&softc->def_cp_ring, softc->def_cp_ring.raw_cons);
 	for (i = 0; i < softc->ntxqsets; i++)
 		BNXT_CP_DISABLE_DB(&softc->tx_cp_rings[i], softc->tx_cp_rings[i].raw_cons);
 	for (i = 0; i < softc->nrxqsets; i++)
@@ -935,6 +1004,9 @@ bnxt_if_msix_intr_assign(if_ctx_t ctx, int msix)
 			goto fail;
 		}
 	}
+
+	for (i=0; i<softc->scctx->isc_ntxqsets; i++)
+		iflib_softirq_alloc_generic(ctx, vector, IFLIB_INTR_TX, &softc->tx_cp_rings[i], i, "tx_cp");
 
 	return rc;
 
@@ -1162,18 +1234,50 @@ bnxt_init_rxbds(struct bnxt_ring *ring, uint16_t type, uint16_t len)
 static int
 bnxt_handle_rx_cp(void *arg)
 {
-//	struct bnxt_cp_ring *cpr = arg;
-//	struct bnxt_softc *softc = cpr->ring.softc;
+	struct bnxt_cp_ring *cpr = arg;
+	struct bnxt_softc *softc = cpr->ring.softc;
 
-//	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
+	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
 	return FILTER_HANDLED;
 }
 
 static int
 bnxt_handle_def_cp(void *arg)
 {
-//	struct bnxt_softc *softc = arg;
+	struct bnxt_softc *softc = arg;
 
-//	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
+	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
 	return FILTER_HANDLED;
 }
+
+static void
+bnxt_clear_ids(struct bnxt_softc *softc)
+{
+	int i;
+
+	softc->def_cp_ring.stats_ctx_id = HWRM_NA_SIGNATURE;
+	softc->def_cp_ring.ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
+	for (i = 0; i < softc->ntxqsets; i++) {
+		softc->tx_cp_rings[i].stats_ctx_id = HWRM_NA_SIGNATURE;
+		softc->tx_cp_rings[i].ring.phys_id =
+		    (uint16_t)HWRM_NA_SIGNATURE;
+		softc->tx_rings[i].ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
+	}
+	for (i = 0; i < softc->nrxqsets; i++) {
+		softc->rx_cp_rings[i].stats_ctx_id = HWRM_NA_SIGNATURE;
+		softc->rx_cp_rings[i].ring.phys_id =
+		    (uint16_t)HWRM_NA_SIGNATURE;
+		softc->rx_rings[i].ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
+		softc->ag_rings[i].ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
+		softc->grp_info[i].grp_id = (uint16_t)HWRM_NA_SIGNATURE;
+		softc->vnic_info[i].id = (uint16_t)HWRM_NA_SIGNATURE;
+	}
+}
+
+static void
+bnxt_allmulticast_enable(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
+{
+	vnic->rx_mask |= HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_ALL_MCAST;
+	bnxt_hwrm_cfa_l2_set_rx_mask(softc, vnic);
+}
+

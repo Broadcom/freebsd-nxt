@@ -295,33 +295,21 @@ struct bnxt_vf_info {
 #define BNXT_VF(softc)		((softc)->flags & BNXT_FLAG_VF)
 
 struct bnxt_vnic_info {
-	uint16_t	fw_vnic_id;
-	uint16_t	fw_rss_cos_lb_ctx;
-	uint16_t	fw_l2_ctx_id;
-#define MAX_TRAFFIC_CLASSES	8
-#define MAX_RSS_QUEUES_PER_VNIC	16
-#define MAX_QUEUES_PER_VNIC (MAX_RSS_QUEUES_PER_VNIC + MAX_TRAFFIC_CLASSES)
-	uint16_t	start_grp_id;
-	uint16_t	end_grp_id;
-	uint16_t	fw_grp_ids[MAX_QUEUES_PER_VNIC];
-	uint16_t	hash_type;
-	struct iflib_dma_info rss;
-	vm_offset_t	rss_key_vaddr;
-	uint32_t	rss_size;
-	uint32_t	rx_mask;
+	uint16_t	id;
+	uint16_t	ring_grp;
+	uint16_t	rss_rule;
+	uint16_t	cos_rule;
+	uint16_t	lb_rule;
+	uint16_t	mru;
 
+	uint32_t	rx_mask;
 	struct iflib_dma_info mc_list;
 	int		mc_list_size;
 	int		mc_list_count;
+
 #define BNXT_MAX_MC_ADDRS	16
 #define BNXT_VNIC_INFO_PROMISC	(1 << 0)
 #define BNXT_VNIC_INFO_ALLMULTI	(1 << 1)
-	uint32_t	flags;
-#define BNXT_VNIC_RSS_FLAG	1
-#define BNXT_VNIC_RFS_FLAG	2
-#define BNXT_VNIC_MCAST_FLAG	4
-#define BNXT_VNIC_UCAST_FLAG	8
-	STAILQ_HEAD(, bnxt_filter_info) filter;
 };
 
 struct bnxt_grp_info {
@@ -393,10 +381,6 @@ struct bnxt_softc {
 	struct mtx		hwrm_lock;
 	uint16_t		hwrm_max_req_len;
 
-	struct bnxt_vnic_info	*vnic_info;
-	int			num_vnics;
-
-	struct bnxt_grp_info	*grp_info;
 
 #define BNXT_MAX_QUEUE		8
 	uint8_t			max_tc;
@@ -417,6 +401,8 @@ struct bnxt_softc {
 	struct bnxt_rx_ring	*ag_rings;
 	struct bnxt_rx_ring	*rx_rings;
 	struct bnxt_cp_ring	*rx_cp_rings;
+	struct bnxt_vnic_info	*vnic_info;
+	struct bnxt_grp_info	*grp_info;
 	struct iflib_dma_info	rx_stats;
 	int			nrxqsets;
 
