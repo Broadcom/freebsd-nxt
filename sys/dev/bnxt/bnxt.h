@@ -302,14 +302,16 @@ struct bnxt_vnic_info {
 	uint16_t	lb_rule;
 	uint16_t	mru;
 
+	uint16_t	ctx_id;
+
 	uint32_t	rx_mask;
 	struct iflib_dma_info mc_list;
 	int		mc_list_size;
 	int		mc_list_count;
-
 #define BNXT_MAX_MC_ADDRS	16
-#define BNXT_VNIC_INFO_PROMISC	(1 << 0)
-#define BNXT_VNIC_INFO_ALLMULTI	(1 << 1)
+
+	uint32_t	flags;
+#define BNXT_VNIC_FLAG_DEFAULT	1
 };
 
 struct bnxt_grp_info {
