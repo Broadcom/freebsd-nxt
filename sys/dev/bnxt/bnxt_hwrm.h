@@ -37,7 +37,7 @@ __FBSDID("$FreeBSD$");
 int bnxt_alloc_hwrm_dma_mem(struct bnxt_softc *);
 void bnxt_free_hwrm_dma_mem(struct bnxt_softc *);
 int bnxt_hwrm_ring_alloc(struct bnxt_softc *softc, uint8_t type,
-    struct bnxt_ring *ring, uint16_t cmpl_ring_id, uint32_t stat_ctx_id);
+    struct bnxt_ring *ring, uint16_t cmpl_ring_id, uint32_t stat_ctx_id, bool irq);
 int bnxt_hwrm_ring_free(struct bnxt_softc *softc, uint8_t type, struct bnxt_ring *ring);
 void bnxt_hwrm_cmd_hdr_init(struct bnxt_softc *, void *, uint16_t, uint16_t, uint16_t);
 int _hwrm_send_message(struct bnxt_softc *, void *, uint32_t);
@@ -50,7 +50,8 @@ int bnxt_hwrm_func_qcaps(struct bnxt_softc *);
 int bnxt_hwrm_func_reset(struct bnxt_softc *);
 int bnxt_hwrm_set_link_setting(struct bnxt_softc *, bool, bool);
 int bnxt_hwrm_set_pause(struct bnxt_softc *);
-int bnxt_hwrm_vnic_ctx_alloc(struct bnxt_softc *, uint16_t);
+int bnxt_hwrm_vnic_ctx_alloc(struct bnxt_softc *, struct bnxt_vnic_info *);
+int bnxt_hwrm_vnic_ctx_free(struct bnxt_softc *, struct bnxt_vnic_info *);
 int bnxt_hwrm_vnic_cfg(struct bnxt_softc *, struct bnxt_vnic_info *);
 int bnxt_hwrm_stat_ctx_alloc(struct bnxt_softc *softc, struct bnxt_cp_ring *cpr,
     uint64_t paddr);
