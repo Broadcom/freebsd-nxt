@@ -109,8 +109,8 @@ __FBSDID("$FreeBSD$");
 #define DB_DISABLE(cpr, cons) (DB_CP_DIS_FLAGS | RING_CMP(&((cpr)->ring), cons))
 #define DB_RING(cpr, cons) (DB_CP_FLAGS | RING_CMP(&((cpr)->ring), cons))
 
-#define BNXT_TX_DB(db, value) *(uint32_t *)db = (DB_KEY_TX | value)
-#define BNXT_RX_DB(db, value) *(uint32_t *)db = (DB_KEY_RX | value)
+#define BNXT_TX_DB(db, value) *(uint32_t *)(db) = (DB_KEY_TX | value)
+#define BNXT_RX_DB(db, value) *(uint32_t *)(db) = (DB_KEY_RX | value)
 
 #define BNXT_CP_DISABLE_DB(cpr, cons)					    \
 	    *(uint32_t *)((cpr)->ring.doorbell) = DB_DISABLE(cpr, cons)
