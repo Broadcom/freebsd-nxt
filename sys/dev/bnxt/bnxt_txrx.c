@@ -112,15 +112,13 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 	uint32_t cfa_meta;
 	int seg = 0;
 
-	/* TODO: Clean the TX ring */
-
 	/* If we have offloads enabled, we need to use two BDs. */
 	if ((pi->ipi_csum_flags & (CSUM_OFFLOAD | CSUM_TSO | CSUM_IP)) ||
 	    pi->ipi_mflags & M_VLANTAG)
 		need_hi = true;
 
 	pi->ipi_new_pidx = pi->ipi_pidx;
-	tbd = &((struct tx_bd_long *)&txr->ring.vaddr)[pi->ipi_new_pidx];
+	tbd = &((struct tx_bd_long *)txr->ring.vaddr)[pi->ipi_new_pidx];
 	pi->ipi_ndescs = 1;
 	tbd->opaque = pi->ipi_new_pidx;
 	tbd->len = htole16(pi->ipi_segs[seg].ds_len);
@@ -134,7 +132,7 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 
 		pi->ipi_new_pidx = RING_NEXT(&txr->ring, pi->ipi_new_pidx);
 		pi->ipi_ndescs++;
-		tbdh = &((struct tx_bd_long_hi *)&txr->ring.vaddr)[pi->ipi_new_pidx];
+		tbdh = &((struct tx_bd_long_hi *)txr->ring.vaddr)[pi->ipi_new_pidx];
 		tbdh->mss = htole16(pi->ipi_tso_segsz);
 		tbdh->hdr_size = htole16(pi->ipi_ehdrlen + pi->ipi_ip_hlen + pi->ipi_tcp_hlen);
 		tbdh->cfa_action = 0;
@@ -165,7 +163,7 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 		tbd->flags_type = htole16(flags_type);
 		pi->ipi_new_pidx = RING_NEXT(&txr->ring, pi->ipi_new_pidx);
 		pi->ipi_ndescs++;
-		tbd = &((struct tx_bd_long *)&txr->ring.vaddr)[pi->ipi_new_pidx];
+		tbd = &((struct tx_bd_long *)txr->ring.vaddr)[pi->ipi_new_pidx];
 		tbd->len = htole16(pi->ipi_segs[seg].ds_len);
 		tbd->addr = htole64(pi->ipi_segs[seg].ds_addr);
 		flags_type = TX_BD_SHORT_TYPE_TX_BD_SHORT;
@@ -174,28 +172,51 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 	tbd->flags_type = htole16(flags_type);
 	pi->ipi_new_pidx = RING_NEXT(&txr->ring, pi->ipi_new_pidx);
 
-	return ENOSYS;
+	return 0;
 }
 
 static void
 bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t pidx)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
-	struct bnxt_tx_ring *tx_ring;
+	struct bnxt_tx_ring *tx_ring = &softc->tx_rings[txqid];
 
-	tx_ring = &softc->tx_rings[txqid];
-
-	BNXT_TX_DB(tx_ring->ring.doorbell, pidx);
+	tx_ring->prod += pidx;
+	tx_ring->prod &= tx_ring->ring.ring_mask;
+	BNXT_TX_DB(tx_ring->ring.doorbell, tx_ring->prod);
 	return;
 }
 
 static int
-bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t cidx, bool clear)
+bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
+	struct bnxt_cp_ring *cpr = &softc->tx_cp_rings[txqid];
+	struct tx_cmpl *tcp;
+	int avail;
+	uint32_t raw = cpr->raw_cons;
+	uint32_t cons;
 
-	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
-	return 0;	// No error return?
+	/* This should never do anything, so is a candidate for removal */
+	for (raw = cpr->raw_cons; RING_CMP(&cpr->ring, raw) != idx; raw++)
+		device_printf(softc->dev, "TXD chasing IDX raw=%u idx=%u\n", raw, idx);
+
+	for (avail = 0 ; ; avail++) {
+		cons = RING_CMP(&cpr->ring, raw);
+		tcp = &((struct tx_cmpl *)cpr->ring.vaddr)[cons];
+
+		if (!CMP_VALID(tcp, raw, &cpr->ring))
+			break;
+
+		if (clear)
+			cpr->raw_cons = raw;
+		raw++;
+	}
+
+	if (clear)
+		BNXT_CP_DB(cpr, cpr->raw_cons);
+
+	return avail;
 }
 
 static void
