@@ -536,8 +536,9 @@ bnxt_hwrm_vnic_cfg(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
 	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_VNIC_CFG, -1, -1);
 
+	if (vnic->flags & BNXT_VNIC_FLAG_DEFAULT)
+		req.flags = htole32(HWRM_VNIC_ALLOC_INPUT_FLAGS_DEFAULT);
 	req.enables = htole32(HWRM_VNIC_CFG_INPUT_ENABLES_DFLT_RING_GRP);
-
 	req.vnic_id = htole16(vnic->id);
 	req.dflt_ring_grp = htole16(vnic->ring_grp);
 	req.rss_rule = htole16(vnic->rss_rule);
@@ -556,12 +557,20 @@ int
 bnxt_hwrm_vnic_alloc(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
 {
 	struct hwrm_vnic_alloc_input req = {0};
-	struct hwrm_vnic_alloc_output *resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	struct hwrm_vnic_alloc_output *resp =
+	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	int rc;
+
+	if (vnic->id != (uint16_t)HWRM_NA_SIGNATURE) {
+		device_printf(softc->dev,
+		    "Attempt to re-allocate vnic %04x\n", vnic->id);
+		return EDOOFUS;
+	}
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_VNIC_ALLOC, -1, -1);
 
-	req.flags = htole32(HWRM_VNIC_ALLOC_INPUT_FLAGS_DEFAULT);
+	if (vnic->flags & BNXT_VNIC_FLAG_DEFAULT)
+		req.flags = htole32(HWRM_VNIC_ALLOC_INPUT_FLAGS_DEFAULT);
 
 	BNXT_HWRM_LOCK(softc);
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
@@ -581,6 +590,12 @@ bnxt_hwrm_vnic_free(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
 	struct hwrm_vnic_free_input req = {0};
 	int rc;
 
+	if (vnic->id == (uint16_t)HWRM_NA_SIGNATURE) {
+		device_printf(softc->dev,
+		    "Attempt to free unallocated vnic group\n");
+		return EDOOFUS;
+	}
+
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_VNIC_FREE, -1, -1);
 
 	req.vnic_id = htole16(vnic->id);
@@ -597,6 +612,63 @@ fail:
 	return (rc);
 }
 
+int
+bnxt_hwrm_vnic_ctx_alloc(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
+{
+	struct hwrm_vnic_rss_cos_lb_ctx_alloc_input req = {0};
+	struct hwrm_vnic_rss_cos_lb_ctx_alloc_output *resp =
+	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	int rc;
+
+	if (vnic->ctx_id != (uint16_t)HWRM_NA_SIGNATURE) {
+		device_printf(softc->dev,
+		    "Attempt to re-allocate vnic ctx %04x\n", vnic->ctx_id);
+		return EDOOFUS;
+	}
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_VNIC_RSS_COS_LB_CTX_ALLOC,
+	    -1, -1);
+
+	BNXT_HWRM_LOCK(softc);
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	if (rc)
+		goto fail;
+
+	vnic->ctx_id = le32toh(resp->rss_cos_lb_ctx_id);
+
+fail:
+	BNXT_HWRM_UNLOCK(softc);
+	return (rc);
+}
+
+int
+bnxt_hwrm_vnic_ctx_free(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
+{
+	struct hwrm_vnic_rss_cos_lb_ctx_free_input req = {0};
+	int rc;
+
+	if (vnic->ctx_id == (uint16_t)HWRM_NA_SIGNATURE) {
+		device_printf(softc->dev,
+		    "Attempt to free unallocated vnic ctx\n");
+		return EDOOFUS;
+	}
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_VNIC_RSS_COS_LB_CTX_FREE,
+	    -1, -1);
+
+	req.rss_cos_lb_ctx_id = htole16(vnic->ctx_id);
+
+	BNXT_HWRM_LOCK(softc);
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	if (rc)
+		goto fail;
+
+	vnic->ctx_id = (uint16_t)HWRM_NA_SIGNATURE;
+
+fail:
+	BNXT_HWRM_UNLOCK(softc);
+	return (rc);
+}
 
 int
 bnxt_hwrm_ring_grp_alloc(struct bnxt_softc *softc, struct bnxt_grp_info *grp)
@@ -656,7 +728,7 @@ bnxt_hwrm_ring_grp_free(struct bnxt_softc *softc, struct bnxt_grp_info *grp)
  */
 int
 bnxt_hwrm_ring_alloc(struct bnxt_softc *softc, uint8_t type,
-    struct bnxt_ring *ring, uint16_t cmpl_ring_id, uint32_t stat_ctx_id)
+    struct bnxt_ring *ring, uint16_t cmpl_ring_id, uint32_t stat_ctx_id, bool irq)
 {
 	struct hwrm_ring_alloc_input req = {0};
 	struct hwrm_ring_alloc_output *resp;
@@ -684,7 +756,15 @@ bnxt_hwrm_ring_alloc(struct bnxt_softc *softc, uint8_t type,
 	req.logical_id = htole16(ring->id);
 	req.cmpl_ring_id = htole16(cmpl_ring_id);
 	req.queue_id = htole16(softc->q_info[0].id);
+#if 0
+	/* MODE_POLL appears to crash the firmware */
+	if (irq)
+		req.int_mode = HWRM_RING_ALLOC_INPUT_INT_MODE_MSIX;
+	else
+		req.int_mode = HWRM_RING_ALLOC_INPUT_INT_MODE_POLL;
+#else
 	req.int_mode = HWRM_RING_ALLOC_INPUT_INT_MODE_MSIX;
+#endif
 	BNXT_HWRM_LOCK(softc);
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	if (rc)
@@ -800,16 +880,15 @@ int
 bnxt_hwrm_cfa_l2_set_rx_mask(struct bnxt_softc *softc,
     struct bnxt_vnic_info *vnic)
 {
-        struct hwrm_cfa_l2_set_rx_mask_input req = {0};
+	struct hwrm_cfa_l2_set_rx_mask_input req = {0};
 
-        bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_CFA_L2_SET_RX_MASK, -1, -1);
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_CFA_L2_SET_RX_MASK, -1, -1);
 
-        req.vnic_id = htole32(vnic->id);
-
-        req.num_mc_entries = htole32(vnic->mc_list_count);
-        req.mc_tbl_addr = htole64(vnic->mc_list.idi_paddr);
-        req.mask = htole32(vnic->rx_mask);
-        return hwrm_send_message(softc, &req, sizeof(req));
+	req.vnic_id = htole32(vnic->id);
+	req.mask = htole32(vnic->rx_mask);
+	req.mc_tbl_addr = htole64(vnic->mc_list.idi_paddr);
+	req.num_mc_entries = htole32(vnic->mc_list_count);
+	return hwrm_send_message(softc, &req, sizeof(req));
 }
 
 
