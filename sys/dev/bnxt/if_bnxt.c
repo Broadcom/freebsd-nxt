@@ -203,10 +203,19 @@ static struct if_shared_ctx bnxt_sctx_init = {
 	.isc_q_align = PAGE_SIZE,
 
 	/* We really don't have a maximum here */
+#if 0
+	// But specifying that messes stuff up.
 	.isc_tx_maxsize = UINT32_MAX * sizeof(struct tx_bd_short),
 	.isc_tx_maxsegsize = UINT32_MAX * sizeof(struct tx_bd_short),
 	.isc_rx_maxsize = UINT32_MAX * sizeof(struct rx_pkt_cmpl),
 	.isc_rx_maxsegsize = UINT32_MAX * sizeof(struct rx_pkt_cmpl),
+#else
+	// TODO: Play around with these...
+	.isc_tx_maxsize = BNXT_TSO_SIZE,
+	.isc_tx_maxsegsize = BNXT_TSO_SIZE,
+	.isc_rx_maxsize = BNXT_TSO_SIZE,
+	.isc_rx_maxsegsize = BNXT_TSO_SIZE,
+#endif
 
 	// Only use a single segment to avoid page size constraints
 	.isc_rx_nsegments = 1,
@@ -216,8 +225,15 @@ static struct if_shared_ctx bnxt_sctx_init = {
 	.isc_ntxd = PAGE_SIZE / sizeof(struct tx_bd_short),
 	.isc_admin_intrcnt = 1,
 	.isc_vendor_info = bnxt_vendor_info_array,
-	.isc_txqsizes = {PAGE_SIZE*2, PAGE_SIZE},
-	.isc_rxqsizes = {PAGE_SIZE*2, PAGE_SIZE, PAGE_SIZE},
+	/*
+	 * TODO: Previously completion rings were twice the size of
+	 * the other rings.  This is because overrunning the completion
+	 * ring hands the hardware, and we can get more completions than
+	 * what we produce.  Unfortunately, using the pidx method makes
+	 * this a bit tricky, so they're the same size for now.
+	 */
+	.isc_txqsizes = {PAGE_SIZE, PAGE_SIZE},
+	.isc_rxqsizes = {PAGE_SIZE, PAGE_SIZE, PAGE_SIZE},
 };
 
 if_shared_ctx_t bnxt_sctx = &bnxt_sctx_init;
@@ -277,8 +293,7 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->tx_cp_rings[i].ring.id =
 		    softc->scctx->isc_nrxqsets + i + 1;
 		softc->tx_cp_rings[i].ring.doorbell = softc->bar[1].kva + (softc->tx_cp_rings[i].ring.id * 0x80);
-		softc->tx_cp_rings[i].ring.ring_size =
-		    softc->sctx->isc_ntxd * 2;
+		softc->tx_cp_rings[i].ring.ring_size = softc->sctx->isc_ntxd;
 		softc->tx_cp_rings[i].ring.ring_mask =
 		    softc->tx_cp_rings[i].ring.ring_size - 1;
 		softc->tx_cp_rings[i].ring.vaddr = vaddrs[i * ntxqs];
@@ -292,6 +307,7 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->tx_rings[i].ring.ring_size = softc->sctx->isc_ntxd;
 		softc->tx_rings[i].ring.ring_mask =
 		    softc->tx_rings[i].ring.ring_size - 1;
+		softc->tx_rings[i].prod = softc->tx_rings[i].ring.ring_mask;
 		softc->tx_rings[i].ring.vaddr = vaddrs[i * ntxqs + 1];
 		softc->tx_rings[i].ring.paddr = paddrs[i * ntxqs + 1];
 	}
@@ -425,8 +441,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->rx_cp_rings[i].ring.softc = softc;
 		softc->rx_cp_rings[i].ring.id = i + 1;
 		softc->rx_cp_rings[i].ring.doorbell = softc->bar[1].kva + (softc->rx_cp_rings[i].ring.id * 0x80);
-		softc->rx_cp_rings[i].ring.ring_size =
-		    softc->sctx->isc_nrxd * 2;
+		softc->rx_cp_rings[i].ring.ring_size = softc->sctx->isc_nrxd;
 		softc->rx_cp_rings[i].ring.ring_mask =
 		    softc->rx_cp_rings[i].ring.ring_size - 1;
 		softc->rx_cp_rings[i].ring.vaddr = vaddrs[i * nrxqs];
@@ -440,6 +455,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->rx_rings[i].ring.ring_size = softc->sctx->isc_nrxd;
 		softc->rx_rings[i].ring.ring_mask =
 		    softc->rx_rings[i].ring.ring_size - 1;
+		softc->rx_rings[i].prod = softc->rx_rings[i].ring.ring_mask;
 		softc->rx_rings[i].ring.vaddr = vaddrs[i * nrxqs + 1];
 		softc->rx_rings[i].ring.paddr = paddrs[i * nrxqs + 1];
 
@@ -451,6 +467,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->ag_rings[i].ring.ring_size = softc->sctx->isc_nrxd;
 		softc->ag_rings[i].ring.ring_mask =
 		    softc->ag_rings[i].ring.ring_size - 1;
+		softc->ag_rings[i].prod = softc->ag_rings[i].ring.ring_mask;
 		softc->ag_rings[i].ring.vaddr = vaddrs[i * nrxqs + 2];
 		softc->ag_rings[i].ring.paddr = paddrs[i * nrxqs + 2];
 
