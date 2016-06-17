@@ -35,7 +35,7 @@ __FBSDID("$FreeBSD$");
 #include "bnxt.h"
 #include "bnxt_hwrm.h"
 #include "hsi_struct_def.h"
-#include "decode_hsi.h"
+//#include "decode_hsi.h"
 
 static int bnxt_hwrm_err_map(uint16_t err);
 static inline int _is_valid_ether_addr(uint8_t *);
@@ -149,7 +149,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 		    "(timeout: %d) msg {0x%x 0x%x} len:%d\n", softc->hwrm_cmd_timeo,
 		    le16toh(req->req_type), le16toh(req->seq_id),
 		    msg_len);
-		decode_hwrm_req(req);
+		//decode_hwrm_req(req);
 		return ETIMEDOUT;
 	}
 	/* Last byte of resp contains the valid key */
@@ -165,7 +165,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 		    softc->hwrm_cmd_timeo, le16toh(req->req_type),
 		    le16toh(req->seq_id), msg_len,
 		    *valid);
-		decode_hwrm_req(req);
+		//decode_hwrm_req(req);
 		return ETIMEDOUT;
 	}
 
@@ -173,8 +173,8 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 	if (err) {
 		device_printf(softc->dev, "HWRM command returned error.  cmd:0x%02x err:0x%02x\n",
 		    le16toh(req->req_type), err);
-		decode_hwrm_req(req);
-		decode_hwrm_resp(resp);
+		//decode_hwrm_req(req);
+		//decode_hwrm_resp(resp);
 		return bnxt_hwrm_err_map(err);
 	}
 
