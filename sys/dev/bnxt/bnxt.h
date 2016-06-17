@@ -109,13 +109,13 @@ __FBSDID("$FreeBSD$");
 #define DB_DISABLE(ring, cons) (DB_CP_DIS_FLAGS | RING_CMP(ring, cons))
 #define DB_RING(ring, cons) (DB_CP_FLAGS | RING_CMP(ring, cons))
 
-#define BNXT_TX_DB(db, value) *(uint32_t *)(db) = (DB_KEY_TX | value)
-#define BNXT_RX_DB(db, value) *(uint32_t *)(db) = (DB_KEY_RX | value)
+#define BNXT_TX_DB(db, value) *(volatile uint32_t *)(db) = (DB_KEY_TX | value)
+#define BNXT_RX_DB(db, value) *(volatile uint32_t *)(db) = (DB_KEY_RX | value)
 
 #define BNXT_CP_DISABLE_DB(ring, cons)					    \
-	    *(uint32_t *)((ring)->doorbell) = DB_DISABLE(ring, cons)
-#define BNXT_CP_ARM_DB(ring, cons) *(uint32_t *)((ring)->doorbell) = DB_REARM(ring, cons)
-#define BNXT_CP_DB(ring, cons) *(uint32_t *)((ring)->doorbell) = DB_RING(ring, cons)
+	    *(volatile uint32_t *)((ring)->doorbell) = DB_DISABLE(ring, cons)
+#define BNXT_CP_ARM_DB(ring, cons) *(volatile uint32_t *)((ring)->doorbell) = DB_REARM(ring, cons)
+#define BNXT_CP_DB(ring, cons) *(volatile uint32_t *)((ring)->doorbell) = DB_RING(ring, cons)
 
 /* Lock macros */
 #define BNXT_HWRM_LOCK_INIT(_softc, _name) \
@@ -127,7 +127,7 @@ __FBSDID("$FreeBSD$");
 
 /* Chip info */
 #define BNXT_TSO_SIZE	UINT16_MAX
-#define BNXT_BARS	3
+#define BNXT_BARS	2
 
 struct bnxt_bar_info {
 	struct resource		*res;

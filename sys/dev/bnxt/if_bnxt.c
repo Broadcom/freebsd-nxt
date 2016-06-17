@@ -573,7 +573,7 @@ bnxt_attach_pre(if_ctx_t ctx)
 	scctx->isc_vectors = softc->pf.max_cp_rings;
 
 	/* -1 means "Trust me, I know what I'm doing" */
-	scctx->isc_msix_bar = -1;
+	scctx->isc_msix_bar = pci_msix_table_bar(softc->dev);
 
 	/* Allocate the default completion ring */
 	softc->def_cp_ring.stats_ctx_id = HWRM_NA_SIGNATURE;
@@ -640,6 +640,7 @@ bnxt_attach_post(if_ctx_t ctx)
 	if_setbaudrate(ifp, IF_Gbps(25));
 
 	softc->scctx->isc_max_frame_size = ifp->if_mtu + ETHER_HDR_LEN + ETHER_CRC_LEN;
+device_printf(softc->dev, "msix bar: %u\n", pci_msix_table_bar(softc->dev));
 
 failed:
 	return rc;
@@ -1093,7 +1094,7 @@ bnxt_pci_mapping(struct bnxt_softc *softc)
 {
 	uint32_t	flag;
 
-	/* Map BAR0, BAR2, and BAR4 */
+	/* Map BAR0, BAR2, (BAR4 is allocated by iflib for msix) */
 	for (int i = 0; i < BNXT_BARS; i++) {
 		softc->bar[i].rid = PCIR_BAR(2 * i);
 		flag = (i == 0) ? RF_ACTIVE | RF_SHAREABLE : RF_ACTIVE;
