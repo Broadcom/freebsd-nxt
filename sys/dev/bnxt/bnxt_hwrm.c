@@ -145,9 +145,9 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 		DELAY(1000);
 	}
 	if (i >= softc->hwrm_cmd_timeo) {
-		device_printf(softc->dev, "Timeout sending hwrm msg: "
-		    "(timeout: %d) msg {0x%x 0x%x} len:%d\n", softc->hwrm_cmd_timeo,
-		    le16toh(req->req_type), le16toh(req->seq_id),
+		device_printf(softc->dev, "Timeout sending %s: "
+		    "(timeout: %d) msg {0x%x 0x%x} len:%d\n", GET_HWRM_REQ_TYPE(req->req_type),
+		    softc->hwrm_cmd_timeo, le16toh(req->req_type), le16toh(req->seq_id),
 		    msg_len);
 		//decode_hwrm_req(req);
 		return ETIMEDOUT;
@@ -160,8 +160,9 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 		DELAY(1000);
 	}
 	if (i >= softc->hwrm_cmd_timeo) {
-		device_printf(softc->dev, "Timeout sending hwrm msg: "
+		device_printf(softc->dev, "Timeout sending %s: "
 		    "(timeout: %d) msg {0x%x 0x%x} len:%d v: %d\n",
+		    GET_HWRM_REQ_TYPE(req->req_type),
 		    softc->hwrm_cmd_timeo, le16toh(req->req_type),
 		    le16toh(req->seq_id), msg_len,
 		    *valid);
@@ -171,7 +172,8 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 
 	err = le16toh(resp->error_code);
 	if (err) {
-		device_printf(softc->dev, "HWRM command returned error.  cmd:0x%02x err:0x%02x\n",
+		device_printf(softc->dev, "%s command returned %s error.  cmd:0x%02x err:0x%02x\n",
+		    GET_HWRM_REQ_TYPE(req->req_type), GET_HWRM_ERROR_CODE(err),
 		    le16toh(req->req_type), err);
 		//decode_hwrm_req(req);
 		//decode_hwrm_resp(resp);
