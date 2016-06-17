@@ -312,6 +312,9 @@ struct bnxt_vnic_info {
 
 	uint32_t	flags;
 #define BNXT_VNIC_FLAG_DEFAULT	1
+
+	uint64_t	filter_id;
+	uint32_t	flow_id;
 };
 
 struct bnxt_grp_info {

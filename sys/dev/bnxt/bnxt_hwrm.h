@@ -66,7 +66,7 @@ int bnxt_hwrm_port_qstats(struct bnxt_softc *);
 int bnxt_hwrm_cfa_l2_set_rx_mask(struct bnxt_softc *softc,
     struct bnxt_vnic_info *vnic);
 int bnxt_hwrm_set_filter(struct bnxt_softc *,
-			 struct bnxt_vnic_info *, struct bnxt_filter_info *);
-int bnxt_hwrm_clear_filter(struct bnxt_softc *, struct bnxt_filter_info *);
+			 struct bnxt_vnic_info *);
+int bnxt_hwrm_clear_filter(struct bnxt_softc *, struct bnxt_vnic_info *);
 
 #endif

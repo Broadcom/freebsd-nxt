@@ -35,7 +35,7 @@ __FBSDID("$FreeBSD$");
 #include "bnxt.h"
 #include "bnxt_hwrm.h"
 #include "hsi_struct_def.h"
-//#include "decode_hsi.h"
+#include "decode_hsi.h"
 
 static int bnxt_hwrm_err_map(uint16_t err);
 static inline int _is_valid_ether_addr(uint8_t *);
@@ -149,7 +149,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 		    "(timeout: %d) msg {0x%x 0x%x} len:%d\n", softc->hwrm_cmd_timeo,
 		    le16toh(req->req_type), le16toh(req->seq_id),
 		    msg_len);
-		//decode_hwrm_req(req);
+		decode_hwrm_req(req);
 		return ETIMEDOUT;
 	}
 	/* Last byte of resp contains the valid key */
@@ -165,7 +165,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 		    softc->hwrm_cmd_timeo, le16toh(req->req_type),
 		    le16toh(req->seq_id), msg_len,
 		    *valid);
-		//decode_hwrm_req(req);
+		decode_hwrm_req(req);
 		return ETIMEDOUT;
 	}
 
@@ -173,8 +173,8 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 	if (err) {
 		device_printf(softc->dev, "HWRM command returned error.  cmd:0x%02x err:0x%02x\n",
 		    le16toh(req->req_type), err);
-		//decode_hwrm_req(req);
-		//decode_hwrm_resp(resp);
+		decode_hwrm_req(req);
+		decode_hwrm_resp(resp);
 		return bnxt_hwrm_err_map(err);
 	}
 
@@ -893,43 +893,38 @@ bnxt_hwrm_cfa_l2_set_rx_mask(struct bnxt_softc *softc,
 
 
 int
-bnxt_hwrm_set_filter(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic,
-		     struct bnxt_filter_info *filter)
+bnxt_hwrm_set_filter(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
 {
 	struct hwrm_cfa_l2_filter_alloc_input	req = {0};
 	struct hwrm_cfa_l2_filter_alloc_output	*resp;
 	uint32_t enables = 0;
 	int rc = 0;
 
+	if (vnic->filter_id != -1) {
+		device_printf(softc->dev,
+		    "Attempt to re-allocate l2 ctx filter\n");
+		return EDOOFUS;
+	}
+
 	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
         bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_CFA_L2_FILTER_ALLOC, -1, -1);
 
-        req.flags = htole32(filter->flags);
-
-	enables = filter->enables | HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_DST_ID;
-
-	req.dst_id = htole16(vnic->id);
-
-        if (enables & HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_ADDR)
-		memcpy(req.l2_addr, filter->l2_addr, ETHER_ADDR_LEN);
-
-        if (enables & HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_ADDR_MASK)
-		memcpy(req.l2_addr_mask, filter->l2_addr_mask, ETHER_ADDR_LEN);
-
-        if (enables & HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_OVLAN)
-		req.l2_ovlan = filter->l2_ovlan;
-
-        if (enables & HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_OVLAN_MASK)
-		req.l2_ovlan_mask = filter->l2_ovlan_mask;
-
+        req.flags = htole32(HWRM_CFA_L2_FILTER_ALLOC_INPUT_FLAGS_PATH_RX);
+	enables = HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_ADDR
+	    | HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_ADDR_MASK
+	    | HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_DST_ID;
 	req.enables = htole32(enables);
+	req.dst_id = htole16(vnic->id);
+	memcpy(req.l2_addr, softc->pf.mac_addr, ETHER_ADDR_LEN);
+	memset(&req.l2_addr_mask, 0xff, sizeof(req.l2_addr_mask));
 
 	BNXT_HWRM_LOCK(softc);
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	if (rc)
 		goto fail;
 
-	filter->fw_l2_filter_id = le64toh(resp->l2_filter_id);
+	vnic->filter_id = le64toh(resp->l2_filter_id);
+	vnic->flow_id = le64toh(resp->flow_id);
 
 fail:
 	BNXT_HWRM_UNLOCK(softc);
@@ -938,19 +933,25 @@ fail:
 
 
 int
-bnxt_hwrm_clear_filter(struct bnxt_softc *softc, struct bnxt_filter_info *filter)
+bnxt_hwrm_clear_filter(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
 {
 	struct hwrm_cfa_l2_filter_free_input	req = {0};
 	struct hwrm_cfa_l2_filter_free_output	*resp;
 	int rc = 0;
 
+	if (vnic->filter_id == -1) {
+		device_printf(softc->dev,
+		    "Attempt to free unallocated l2 ctx filter\n");
+		return EDOOFUS;
+	}
+
 	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_CFA_L2_FILTER_FREE, -1, -1);
 
-	req.l2_filter_id = htole64(filter->fw_l2_filter_id);
+	req.l2_filter_id = htole64(vnic->filter_id);
 
 	rc = hwrm_send_message(softc, &req, sizeof(req));
-	filter->fw_l2_filter_id = -1;
+	vnic->filter_id = -1;	// HWRM_NA_SIGNATURE is not big enough
 
 	return (rc);
 }
