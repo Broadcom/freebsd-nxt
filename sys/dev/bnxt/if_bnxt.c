@@ -463,6 +463,8 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 
 		/* And finally, the VNIC */
 		softc->vnic_info[i].id = (uint16_t)HWRM_NA_SIGNATURE;
+		softc->vnic_info[i].flow_id = (uint16_t)HWRM_NA_SIGNATURE;
+		softc->vnic_info[i].filter_id = -1;
 		softc->vnic_info[i].ring_grp = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->vnic_info[i].rss_rule = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->vnic_info[i].cos_rule = (uint16_t)HWRM_NA_SIGNATURE;
@@ -752,6 +754,9 @@ bnxt_init(if_ctx_t ctx)
 		if (rc)
 			goto fail;
 	}
+	rc = bnxt_hwrm_set_filter(softc, &softc->vnic_info[0]);
+	if (rc)
+		goto fail;
 
 	for (i = 0; i < softc->ntxqsets; i++) {
 		/* Allocate the statistics context */
