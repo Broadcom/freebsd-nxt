@@ -214,7 +214,7 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 	}
 
 	if (clear)
-		BNXT_CP_DB(cpr, cpr->raw_cons);
+		BNXT_CP_DB(&cpr->ring, cpr->raw_cons);
 
 	return avail;
 }
@@ -229,6 +229,7 @@ bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
 	struct rx_prod_pkt_bd *rxbd;
 	uint16_t i;
 
+device_printf(softc->dev, "Refilling q=%hu fl=%hhu p=%u c=%hu\n", rxqid, flid, pidx, count);
 	if (flid == 0) {
 		rx_ring = &softc->rx_rings[rxqid];
 		rxbd = (void *)rx_ring->ring.vaddr;
@@ -238,9 +239,10 @@ bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
 		rxbd = (void *)rx_ring->ring.vaddr;
 	}
 	for (i=0; i<count; i++) {
-		rxbd[rx_ring->prod].addr = htole64(paddrs[pidx + i]);
+		rxbd[rx_ring->prod].addr = htole64(paddrs[i]);
 		rx_ring->prod = RING_NEXT(&rx_ring->ring, rx_ring->prod);
 	}
+	BNXT_RX_DB(rx_ring->ring.doorbell, rx_ring->prod);
 	return;
 }
 
@@ -249,7 +251,6 @@ bnxt_isc_rxd_flush(void *sc, uint16_t rxqid, uint8_t flid,
     uint32_t pidx)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
-
 	struct bnxt_rx_ring *rx_ring;
 
 	if (flid == 0)
@@ -257,6 +258,7 @@ bnxt_isc_rxd_flush(void *sc, uint16_t rxqid, uint8_t flid,
 	else
 		rx_ring = &softc->ag_rings[rxqid];
 
+device_printf(softc->dev, "Flushing q=%hu fl=%hhu p=%u\n", rxqid, flid, pidx);
 	BNXT_RX_DB(rx_ring->ring.doorbell, rx_ring->prod);
 	return;
 }
@@ -272,6 +274,7 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx)
 	uint32_t raw = cpr->raw_cons;
 	uint32_t cons;
 
+device_printf(softc->dev, "Checking avail: %hu %u\n", rxqid, idx);
 	for (raw = cpr->raw_cons; RING_CMP(&cpr->ring, raw) != idx; raw++)
 		;
 

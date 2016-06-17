@@ -105,17 +105,17 @@ __FBSDID("$FreeBSD$");
 #define DB_CP_FLAGS		(DB_KEY_CP | DB_IDX_VALID | DB_IRQ_DIS)
 #define DB_CP_DIS_FLAGS		(DB_KEY_CP | DB_IRQ_DIS)
 
-#define DB_REARM(cpr, cons) (DB_CP_REARM_FLAGS | RING_CMP(&((cpr)->ring), cons))
-#define DB_DISABLE(cpr, cons) (DB_CP_DIS_FLAGS | RING_CMP(&((cpr)->ring), cons))
-#define DB_RING(cpr, cons) (DB_CP_FLAGS | RING_CMP(&((cpr)->ring), cons))
+#define DB_REARM(ring, cons) (DB_CP_REARM_FLAGS | RING_CMP(ring, cons))
+#define DB_DISABLE(ring, cons) (DB_CP_DIS_FLAGS | RING_CMP(ring, cons))
+#define DB_RING(ring, cons) (DB_CP_FLAGS | RING_CMP(ring, cons))
 
 #define BNXT_TX_DB(db, value) *(uint32_t *)(db) = (DB_KEY_TX | value)
 #define BNXT_RX_DB(db, value) *(uint32_t *)(db) = (DB_KEY_RX | value)
 
-#define BNXT_CP_DISABLE_DB(cpr, cons)					    \
-	    *(uint32_t *)((cpr)->ring.doorbell) = DB_DISABLE(cpr, cons)
-#define BNXT_CP_ARM_DB(cpr, cons) *(uint32_t *)((cpr)->ring.doorbell) = DB_REARM(cpr, cons)
-#define BNXT_CP_DB(cpr, cons) *(uint32_t *)((cpr)->ring.doorbell) = DB_RING(cpr, cons)
+#define BNXT_CP_DISABLE_DB(ring, cons)					    \
+	    *(uint32_t *)((ring)->doorbell) = DB_DISABLE(ring, cons)
+#define BNXT_CP_ARM_DB(ring, cons) *(uint32_t *)((ring)->doorbell) = DB_REARM(ring, cons)
+#define BNXT_CP_DB(ring, cons) *(uint32_t *)((ring)->doorbell) = DB_RING(ring, cons)
 
 /* Lock macros */
 #define BNXT_HWRM_LOCK_INIT(_softc, _name) \

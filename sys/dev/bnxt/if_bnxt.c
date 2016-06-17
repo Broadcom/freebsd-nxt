@@ -289,7 +289,7 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		    (uint16_t)HWRM_NA_SIGNATURE;
 		softc->tx_cp_rings[i].ring.softc = softc;
 		softc->tx_cp_rings[i].ring.id =
-		    (softc->scctx->isc_nrxqsets * 3) + 1 + (i * 2);
+		    (softc->scctx->isc_nrxqsets * 3) + 1 + (i * 2) + 1;
 		softc->tx_cp_rings[i].ring.doorbell = softc->bar[1].kva + (softc->tx_cp_rings[i].ring.id * 0x80);
 		softc->tx_cp_rings[i].ring.ring_size = softc->sctx->isc_ntxd;
 		softc->tx_cp_rings[i].ring.ring_mask =
@@ -301,12 +301,12 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->tx_rings[i].ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->tx_rings[i].ring.softc = softc;
 		softc->tx_rings[i].ring.id =
-		    (softc->scctx->isc_nrxqsets * 3) + 1 + (i * 2) + 1;
+		    (softc->scctx->isc_nrxqsets * 3) + 1 + (i * 2) + 1 + 1;
 		softc->tx_rings[i].ring.doorbell = softc->bar[1].kva + (softc->tx_rings[i].ring.id * 0x80);
 		softc->tx_rings[i].ring.ring_size = softc->sctx->isc_ntxd;
 		softc->tx_rings[i].ring.ring_mask =
 		    softc->tx_rings[i].ring.ring_size - 1;
-		softc->tx_rings[i].prod = softc->tx_rings[i].ring.ring_mask;
+		softc->tx_rings[i].prod = 0;
 		softc->tx_rings[i].ring.vaddr = vaddrs[i * ntxqs + 1];
 		softc->tx_rings[i].ring.paddr = paddrs[i * ntxqs + 1];
 	}
@@ -361,6 +361,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 	int rc;
 
 	softc = iflib_get_softc(ctx);
+device_printf(softc->dev, "Allocating RX queues... nrxqs=%d\n", nrxqs);
 
 	softc->rx_cp_rings = malloc(sizeof(struct bnxt_cp_ring) * nrxqsets,
 	    M_DEVBUF, M_NOWAIT | M_ZERO);
@@ -414,7 +415,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->rx_cp_rings[i].ring.phys_id =
 		    (uint16_t)HWRM_NA_SIGNATURE;
 		softc->rx_cp_rings[i].ring.softc = softc;
-		softc->rx_cp_rings[i].ring.id = i + 1;
+		softc->rx_cp_rings[i].ring.id = i + 1 + 1;
 		softc->rx_cp_rings[i].ring.doorbell = softc->bar[1].kva + (softc->rx_cp_rings[i].ring.id * 0x80);
 		softc->rx_cp_rings[i].ring.ring_size = softc->sctx->isc_nrxd;
 		softc->rx_cp_rings[i].ring.ring_mask =
@@ -425,24 +426,24 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		/* Allocate the RX ring */
 		softc->rx_rings[i].ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->rx_rings[i].ring.softc = softc;
-		softc->rx_rings[i].ring.id = nrxqsets + 1 + (i * 2);
+		softc->rx_rings[i].ring.id = nrxqsets + 1 + (i * 2) + 1;
 		softc->rx_rings[i].ring.doorbell = softc->bar[1].kva + (softc->rx_rings[i].ring.id * 0x80);
 		softc->rx_rings[i].ring.ring_size = softc->sctx->isc_nrxd;
 		softc->rx_rings[i].ring.ring_mask =
 		    softc->rx_rings[i].ring.ring_size - 1;
-		softc->rx_rings[i].prod = softc->rx_rings[i].ring.ring_mask;
+		softc->rx_rings[i].prod = 0;
 		softc->rx_rings[i].ring.vaddr = vaddrs[i * nrxqs + 1];
 		softc->rx_rings[i].ring.paddr = paddrs[i * nrxqs + 1];
 
 		/* Allocate the AG ring */
 		softc->ag_rings[i].ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->ag_rings[i].ring.softc = softc;
-		softc->ag_rings[i].ring.id = nrxqsets + 1 + (i * 2) + 1;
+		softc->ag_rings[i].ring.id = nrxqsets + 1 + (i * 2) + 1 + 1;
 		softc->ag_rings[i].ring.doorbell = softc->bar[1].kva + (softc->ag_rings[i].ring.id * 0x80);
 		softc->ag_rings[i].ring.ring_size = softc->sctx->isc_nrxd;
 		softc->ag_rings[i].ring.ring_mask =
 		    softc->ag_rings[i].ring.ring_size - 1;
-		softc->ag_rings[i].prod = softc->ag_rings[i].ring.ring_mask;
+		softc->ag_rings[i].prod = 0;
 		softc->ag_rings[i].ring.vaddr = vaddrs[i * nrxqs + 2];
 		softc->ag_rings[i].ring.paddr = paddrs[i * nrxqs + 2];
 
@@ -578,7 +579,7 @@ bnxt_attach_pre(if_ctx_t ctx)
 	softc->def_cp_ring.stats_ctx_id = HWRM_NA_SIGNATURE;
 	softc->def_cp_ring.ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 	softc->def_cp_ring.ring.softc = softc;
-	softc->def_cp_ring.ring.id = 0;
+	softc->def_cp_ring.ring.id = 0 + 1;
 	softc->def_cp_ring.ring.doorbell = softc->bar[1].kva + (softc->def_cp_ring.ring.id * 0x80);
 	softc->def_cp_ring.ring.ring_size = PAGE_SIZE / sizeof(struct cmpl_base);
 	softc->def_cp_ring.ring.ring_mask = softc->def_cp_ring.ring.ring_size - 1;
@@ -686,7 +687,7 @@ bnxt_init(if_ctx_t ctx)
 	    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
 	    &softc->def_cp_ring.ring,
 	    (uint16_t)HWRM_NA_SIGNATURE,
-	    softc->def_cp_ring.stats_ctx_id, true);
+	    (uint16_t)HWRM_NA_SIGNATURE, true);
 	if (rc)
 		goto fail;
 
@@ -703,7 +704,7 @@ bnxt_init(if_ctx_t ctx)
 		    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
 		    &softc->rx_cp_rings[i].ring,
 		    (uint16_t)HWRM_NA_SIGNATURE,
-		    softc->rx_cp_rings[i].stats_ctx_id, true);
+		    (uint16_t)HWRM_NA_SIGNATURE, true);
 		if (rc)
 			goto fail;
 
@@ -712,7 +713,7 @@ bnxt_init(if_ctx_t ctx)
 		    HWRM_RING_ALLOC_INPUT_RING_TYPE_RX,
 		    &softc->rx_rings[i].ring,
 		    (uint16_t)HWRM_NA_SIGNATURE,
-		    softc->rx_cp_rings[i].stats_ctx_id, false);
+		    (uint16_t)HWRM_NA_SIGNATURE, false);
 		if (rc)
 			goto fail;
 
@@ -721,7 +722,7 @@ bnxt_init(if_ctx_t ctx)
 		    HWRM_RING_ALLOC_INPUT_RING_TYPE_RX,
 		    &softc->ag_rings[i].ring,
 		    (uint16_t)HWRM_NA_SIGNATURE,
-		    softc->rx_cp_rings[i].stats_ctx_id, false);
+		    (uint16_t)HWRM_NA_SIGNATURE, false);
 		if (rc)
 			goto fail;
 
@@ -753,10 +754,12 @@ bnxt_init(if_ctx_t ctx)
 		rc = bnxt_hwrm_vnic_cfg(softc, &softc->vnic_info[i]);
 		if (rc)
 			goto fail;
+		if (i == 0) {
+			rc = bnxt_hwrm_set_filter(softc, &softc->vnic_info[i]);
+			if (rc)
+				goto fail;
+		}
 	}
-	rc = bnxt_hwrm_set_filter(softc, &softc->vnic_info[0]);
-	if (rc)
-		goto fail;
 
 	for (i = 0; i < softc->ntxqsets; i++) {
 		/* Allocate the statistics context */
@@ -773,12 +776,9 @@ bnxt_init(if_ctx_t ctx)
 		    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
 		    &softc->tx_cp_rings[i].ring,
 		    (uint16_t)HWRM_NA_SIGNATURE,
-		    softc->tx_cp_rings[i].stats_ctx_id, false);
-		if (rc) {
-			bnxt_hwrm_stat_ctx_free(softc, &softc->tx_cp_rings[i]);;
-			i--;
+		    (uint16_t)HWRM_NA_SIGNATURE, false);
+		if (rc)
 			goto fail;
-		}
 
 		/* Allocate the TX ring */
 		rc = bnxt_hwrm_ring_alloc(softc,
@@ -786,14 +786,8 @@ bnxt_init(if_ctx_t ctx)
 		    &softc->tx_rings[i].ring,
 		    softc->tx_cp_rings[i].ring.phys_id,
 		    softc->tx_cp_rings[i].stats_ctx_id, false);
-		if (rc) {
-			bnxt_hwrm_ring_free(softc,
-			    HWRM_RING_FREE_INPUT_RING_TYPE_CMPL,
-			    &softc->tx_cp_rings[i].ring);
-			bnxt_hwrm_stat_ctx_free(softc, &softc->tx_cp_rings[i]);;
-			i--;
+		if (rc)
 			goto fail;
-		}
 	}
 
 	ifp->if_drv_flags |= IFF_DRV_RUNNING;
@@ -823,6 +817,7 @@ bnxt_multi_set(if_ctx_t ctx)
 	uint8_t *mta;
 	int cnt, mcnt;
 
+device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
 	mcnt = if_multiaddr_count(ifp, -1);
 
 	if (mcnt > BNXT_MAX_MC_ADDRS) {
@@ -950,9 +945,9 @@ bnxt_enable_intr(if_ctx_t ctx)
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	int i;
 
-	BNXT_CP_ARM_DB(&softc->def_cp_ring, softc->def_cp_ring.raw_cons);
+	BNXT_CP_ARM_DB(&softc->def_cp_ring.ring, softc->def_cp_ring.raw_cons);
 	for (i = 0; i < softc->nrxqsets; i++)
-		BNXT_CP_ARM_DB(&softc->rx_cp_rings[i], softc->rx_cp_rings[i].raw_cons);
+		BNXT_CP_ARM_DB(&softc->rx_cp_rings[i].ring, softc->rx_cp_rings[i].raw_cons);
 	return;
 }
 
@@ -961,7 +956,7 @@ bnxt_queue_intr_enable(if_ctx_t ctx, uint16_t qid)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 
-	BNXT_CP_ARM_DB(&softc->rx_cp_rings[qid],
+	BNXT_CP_ARM_DB(&softc->rx_cp_rings[qid].ring,
 	    softc->rx_cp_rings[qid].raw_cons);
 	return;
 }
@@ -972,12 +967,12 @@ bnxt_disable_intr(if_ctx_t ctx)
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	int i;
 
-	BNXT_CP_DISABLE_DB(&softc->def_cp_ring, softc->def_cp_ring.raw_cons);
+	BNXT_CP_DISABLE_DB(&softc->def_cp_ring.ring, softc->def_cp_ring.raw_cons);
 	for (i = 0; i < softc->ntxqsets; i++)
-		BNXT_CP_DISABLE_DB(&softc->tx_cp_rings[i],
+		BNXT_CP_DISABLE_DB(&softc->tx_cp_rings[i].ring,
 		    softc->tx_cp_rings[i].raw_cons);
 	for (i = 0; i < softc->nrxqsets; i++)
-		BNXT_CP_DISABLE_DB(&softc->rx_cp_rings[i],
+		BNXT_CP_DISABLE_DB(&softc->rx_cp_rings[i].ring,
 		    softc->rx_cp_rings[i].raw_cons);
 
 	return;
@@ -987,11 +982,10 @@ static int
 bnxt_msix_intr_assign(if_ctx_t ctx, int msix)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
-	int vector = 1;
 	int rc;
 	int i;
 
-	rc = iflib_irq_alloc_generic(ctx, &softc->def_cp_ring.irq, vector++,
+	rc = iflib_irq_alloc_generic(ctx, &softc->def_cp_ring.irq, softc->def_cp_ring.ring.id,
 	    IFLIB_INTR_ADMIN, bnxt_handle_def_cp, softc, 0, "def_cp");
 	if (rc) {
 		device_printf(iflib_get_dev(ctx), "Failed to register default completion ring handler\n");
@@ -1000,7 +994,7 @@ bnxt_msix_intr_assign(if_ctx_t ctx, int msix)
 
 	for (i=0; i<softc->scctx->isc_nrxqsets; i++) {
 		rc = iflib_irq_alloc_generic(ctx, &softc->rx_cp_rings[i].irq,
-		    vector++, IFLIB_INTR_RX, bnxt_handle_rx_cp,
+		    softc->rx_cp_rings[i].ring.id, IFLIB_INTR_RX, bnxt_handle_rx_cp,
 		    &softc->rx_cp_rings[i], i, "rx_cp");
 		if (rc) {
 			device_printf(iflib_get_dev(ctx),
@@ -1011,7 +1005,7 @@ bnxt_msix_intr_assign(if_ctx_t ctx, int msix)
 	}
 
 	for (i=0; i<softc->scctx->isc_ntxqsets; i++)
-		iflib_softirq_alloc_generic(ctx, vector, IFLIB_INTR_TX, NULL, i, "tx_cp");
+		iflib_softirq_alloc_generic(ctx, softc->tx_cp_rings[i].ring.id, IFLIB_INTR_TX, NULL, i, "tx_cp");
 
 	return rc;
 
@@ -1230,8 +1224,8 @@ bnxt_init_rxbds(struct bnxt_ring *ring, uint16_t type, uint16_t len)
 	uint32_t i;
 
 	for (i=0; i<ring->ring_size; i++) {
-		rx_bd_ring[i].flags_type = type;
-		rx_bd_ring[i].len = len;
+		rx_bd_ring[i].flags_type = htole16(type);
+		rx_bd_ring[i].len = htole16(len);
 		rx_bd_ring[i].opaque = i;
 	}
 }
