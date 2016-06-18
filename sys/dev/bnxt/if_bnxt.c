@@ -1129,7 +1129,7 @@ bnxt_pci_mapping(struct bnxt_softc *softc)
 	if (rc)
 		return rc;
 
-	rc = bnxt_map_bar(softc, &softc->doorbell_bar, 0, false);
+	rc = bnxt_map_bar(softc, &softc->doorbell_bar, 2, false);
 
 	return rc;
 }
