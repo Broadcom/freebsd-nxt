@@ -181,6 +181,7 @@ bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t pidx)
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_tx_ring *tx_ring = &softc->tx_rings[txqid];
 
+	/* TODO: If we could actually get the pidx here, we could use that */
 	tx_ring->prod += pidx;
 	tx_ring->prod &= tx_ring->ring.ring_mask;
 	BNXT_TX_DB(tx_ring->ring.doorbell, tx_ring->prod);
@@ -192,29 +193,35 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_cp_ring *cpr = &softc->tx_cp_rings[txqid];
+	struct bnxt_tx_ring *txr = &softc->tx_rings[txqid];
 	struct tx_cmpl *tcp;
-	int avail;
+	struct tx_bd_long *tbd;
+	int avail = 0;
 	uint32_t raw = cpr->raw_cons;
 	uint32_t cons;
 
-	/* This should never do anything, so is a candidate for removal */
-	for (raw = cpr->raw_cons; RING_CMP(&cpr->ring, raw) != idx; raw++)
-		device_printf(softc->dev, "TXD chasing IDX raw=%u idx=%u\n", raw, idx);
-
-	for (avail = 0 ; ; avail++) {
+	for (;;) {
 		cons = RING_CMP(&cpr->ring, raw);
 		tcp = &((struct tx_cmpl *)cpr->ring.vaddr)[cons];
 
 		if (!CMP_VALID(tcp, raw, &cpr->ring))
 			break;
 
+		/* Get the BD that this completes */
+		tbd = &((struct tx_bd_long *)txr->ring.vaddr)[tcp->opaque];
+
+		/* And extract how many BDs were used */
+		avail += (tbd->flags_type & TX_BD_SHORT_FLAGS_BD_CNT_MASK) >> TX_BD_SHORT_FLAGS_BD_CNT_SFT;
+
 		if (clear)
 			cpr->raw_cons = raw;
 		raw++;
 	}
 
-	if (clear)
+	if (clear && avail) {
 		BNXT_CP_DB(&cpr->ring, cpr->raw_cons);
+		cpr->raw_cons++;
+	}
 
 	return avail;
 }
@@ -242,7 +249,6 @@ device_printf(softc->dev, "Refilling q=%hu fl=%hhu p=%u c=%hu\n", rxqid, flid, p
 		rxbd[rx_ring->prod].addr = htole64(paddrs[i]);
 		rx_ring->prod = RING_NEXT(&rx_ring->ring, rx_ring->prod);
 	}
-	BNXT_RX_DB(rx_ring->ring.doorbell, rx_ring->prod);
 	return;
 }
 
@@ -258,7 +264,7 @@ bnxt_isc_rxd_flush(void *sc, uint16_t rxqid, uint8_t flid,
 	else
 		rx_ring = &softc->ag_rings[rxqid];
 
-device_printf(softc->dev, "Flushing q=%hu fl=%hhu p=%u\n", rxqid, flid, pidx);
+device_printf(softc->dev, "Flushing q=%hu fl=%hhu p=%u (%u)\n", rxqid, flid, pidx, rx_ring->prod);
 	BNXT_RX_DB(rx_ring->ring.doorbell, rx_ring->prod);
 	return;
 }

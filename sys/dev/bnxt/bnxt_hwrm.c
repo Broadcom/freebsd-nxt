@@ -783,6 +783,7 @@ bnxt_hwrm_ring_alloc(struct bnxt_softc *softc, uint8_t type,
 		BNXT_TX_DB(ring, 0);
 		break;
 	case HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL:
+		//BNXT_CP_DB(ring, ring->ring_mask);
 		break;
 	default:
 		device_printf(softc->dev, "Unknown ring type in ring_alloc %d\n", type);

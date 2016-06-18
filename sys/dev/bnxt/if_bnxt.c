@@ -562,6 +562,7 @@ bnxt_attach_pre(if_ctx_t ctx)
 
 	/* Now perform a function reset */
 	rc = bnxt_hwrm_func_reset(softc);
+	bnxt_clear_ids(softc);
 	if (rc)
 		goto failed;
 
@@ -803,7 +804,10 @@ fail:
 static void
 bnxt_stop(if_ctx_t ctx)
 {
-	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
+	struct bnxt_softc *softc = iflib_get_softc(ctx);
+
+	bnxt_hwrm_func_reset(softc);
+	bnxt_clear_ids(softc);
 	if_setdrvflagbits(iflib_get_ifp(ctx), 0, IFF_DRV_RUNNING);
 	return;
 }
@@ -817,7 +821,6 @@ bnxt_multi_set(if_ctx_t ctx)
 	uint8_t *mta;
 	int cnt, mcnt;
 
-device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
 	mcnt = if_multiaddr_count(ifp, -1);
 
 	if (mcnt > BNXT_MAX_MC_ADDRS) {
@@ -985,7 +988,7 @@ bnxt_msix_intr_assign(if_ctx_t ctx, int msix)
 	int rc;
 	int i;
 
-	rc = iflib_irq_alloc_generic(ctx, &softc->def_cp_ring.irq, softc->scctx->isc_vectors - softc->def_cp_ring.ring.id,
+	rc = iflib_irq_alloc_generic(ctx, &softc->def_cp_ring.irq, softc->def_cp_ring.ring.id + 1,
 	    IFLIB_INTR_ADMIN, bnxt_handle_def_cp, softc, 0, "def_cp");
 	if (rc) {
 		device_printf(iflib_get_dev(ctx), "Failed to register default completion ring handler\n");
@@ -994,7 +997,7 @@ bnxt_msix_intr_assign(if_ctx_t ctx, int msix)
 
 	for (i=0; i<softc->scctx->isc_nrxqsets; i++) {
 		rc = iflib_irq_alloc_generic(ctx, &softc->rx_cp_rings[i].irq,
-		    softc->scctx->isc_vectors - softc->rx_cp_rings[i].ring.id, IFLIB_INTR_RX, bnxt_handle_rx_cp,
+		    softc->rx_cp_rings[i].ring.id + 1, IFLIB_INTR_RX, bnxt_handle_rx_cp,
 		    &softc->rx_cp_rings[i], i, "rx_cp");
 		if (rc) {
 			device_printf(iflib_get_dev(ctx),
@@ -1255,7 +1258,6 @@ bnxt_handle_rx_cp(void *arg)
 	struct bnxt_cp_ring *cpr = arg;
 	struct bnxt_softc *softc = cpr->ring.softc;
 
-	softc->dbg++;
 	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
 	return FILTER_HANDLED;
 }
@@ -1265,7 +1267,6 @@ bnxt_handle_def_cp(void *arg)
 {
 	struct bnxt_softc *softc = arg;
 
-	softc->dbg++;
 	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
 	return FILTER_HANDLED;
 }
