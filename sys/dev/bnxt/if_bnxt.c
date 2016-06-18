@@ -290,7 +290,7 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->tx_cp_rings[i].ring.softc = softc;
 		softc->tx_cp_rings[i].ring.id =
 		    (softc->scctx->isc_nrxqsets * 3) + 1 + (i * 2);
-		softc->tx_cp_rings[i].ring.doorbell = softc->bar[1].kva + (softc->tx_cp_rings[i].ring.id * 0x80);
+		softc->tx_cp_rings[i].ring.doorbell = softc->doorbell_bar.kva + (softc->tx_cp_rings[i].ring.id * 0x80);
 		softc->tx_cp_rings[i].ring.ring_size = softc->sctx->isc_ntxd;
 		softc->tx_cp_rings[i].ring.ring_mask =
 		    softc->tx_cp_rings[i].ring.ring_size - 1;
@@ -302,7 +302,7 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->tx_rings[i].ring.softc = softc;
 		softc->tx_rings[i].ring.id =
 		    (softc->scctx->isc_nrxqsets * 3) + 1 + (i * 2) + 1;
-		softc->tx_rings[i].ring.doorbell = softc->bar[1].kva + (softc->tx_rings[i].ring.id * 0x80);
+		softc->tx_rings[i].ring.doorbell = softc->doorbell_bar.kva + (softc->tx_rings[i].ring.id * 0x80);
 		softc->tx_rings[i].ring.ring_size = softc->sctx->isc_ntxd;
 		softc->tx_rings[i].ring.ring_mask =
 		    softc->tx_rings[i].ring.ring_size - 1;
@@ -416,7 +416,7 @@ device_printf(softc->dev, "Allocating RX queues... nrxqs=%d\n", nrxqs);
 		    (uint16_t)HWRM_NA_SIGNATURE;
 		softc->rx_cp_rings[i].ring.softc = softc;
 		softc->rx_cp_rings[i].ring.id = i + 1;
-		softc->rx_cp_rings[i].ring.doorbell = softc->bar[1].kva + (softc->rx_cp_rings[i].ring.id * 0x80);
+		softc->rx_cp_rings[i].ring.doorbell = softc->doorbell_bar.kva + (softc->rx_cp_rings[i].ring.id * 0x80);
 		softc->rx_cp_rings[i].ring.ring_size = softc->sctx->isc_nrxd;
 		softc->rx_cp_rings[i].ring.ring_mask =
 		    softc->rx_cp_rings[i].ring.ring_size - 1;
@@ -427,7 +427,7 @@ device_printf(softc->dev, "Allocating RX queues... nrxqs=%d\n", nrxqs);
 		softc->rx_rings[i].ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->rx_rings[i].ring.softc = softc;
 		softc->rx_rings[i].ring.id = nrxqsets + 1 + (i * 2);
-		softc->rx_rings[i].ring.doorbell = softc->bar[1].kva + (softc->rx_rings[i].ring.id * 0x80);
+		softc->rx_rings[i].ring.doorbell = softc->doorbell_bar.kva + (softc->rx_rings[i].ring.id * 0x80);
 		softc->rx_rings[i].ring.ring_size = softc->sctx->isc_nrxd;
 		softc->rx_rings[i].ring.ring_mask =
 		    softc->rx_rings[i].ring.ring_size - 1;
@@ -439,7 +439,7 @@ device_printf(softc->dev, "Allocating RX queues... nrxqs=%d\n", nrxqs);
 		softc->ag_rings[i].ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->ag_rings[i].ring.softc = softc;
 		softc->ag_rings[i].ring.id = nrxqsets + 1 + (i * 2) + 1;
-		softc->ag_rings[i].ring.doorbell = softc->bar[1].kva + (softc->ag_rings[i].ring.id * 0x80);
+		softc->ag_rings[i].ring.doorbell = softc->doorbell_bar.kva + (softc->ag_rings[i].ring.id * 0x80);
 		softc->ag_rings[i].ring.ring_size = softc->sctx->isc_nrxd;
 		softc->ag_rings[i].ring.ring_mask =
 		    softc->ag_rings[i].ring.ring_size - 1;
@@ -572,7 +572,7 @@ bnxt_attach_pre(if_ctx_t ctx)
 	scctx->isc_tx_tso_segsize_max = BNXT_TSO_SIZE;
 	scctx->isc_vectors = softc->pf.max_cp_rings;
 
-	/* -1 means "Trust me, I know what I'm doing" */
+	/* iflib will map and release this bar */
 	scctx->isc_msix_bar = pci_msix_table_bar(softc->dev);
 
 	/* Allocate the default completion ring */
@@ -580,7 +580,7 @@ bnxt_attach_pre(if_ctx_t ctx)
 	softc->def_cp_ring.ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 	softc->def_cp_ring.ring.softc = softc;
 	softc->def_cp_ring.ring.id = 0;
-	softc->def_cp_ring.ring.doorbell = softc->bar[1].kva + (softc->def_cp_ring.ring.id * 0x80);
+	softc->def_cp_ring.ring.doorbell = softc->doorbell_bar.kva + (softc->def_cp_ring.ring.id * 0x80);
 	softc->def_cp_ring.ring.ring_size = PAGE_SIZE / sizeof(struct cmpl_base);
 	softc->def_cp_ring.ring.ring_mask = softc->def_cp_ring.ring.ring_size - 1;
 	rc = iflib_dma_alloc(ctx, sizeof(struct cmpl_base) * softc->def_cp_ring.ring.ring_size,
@@ -640,7 +640,6 @@ bnxt_attach_post(if_ctx_t ctx)
 	if_setbaudrate(ifp, IF_Gbps(25));
 
 	softc->scctx->isc_max_frame_size = ifp->if_mtu + ETHER_HDR_LEN + ETHER_CRC_LEN;
-device_printf(softc->dev, "msix bar: %u\n", pci_msix_table_bar(softc->dev));
 
 failed:
 	return rc;
@@ -1090,44 +1089,63 @@ bnxt_add_media_types(struct bnxt_softc *softc)
 }
 
 static int
-bnxt_pci_mapping(struct bnxt_softc *softc)
+bnxt_map_bar(struct bnxt_softc *softc, struct bnxt_bar_info *bar, int bar_num, bool shareable)
 {
 	uint32_t	flag;
 
-	/* Map BAR0, BAR2, (BAR4 is allocated by iflib for msix) */
-	for (int i = 0; i < BNXT_BARS; i++) {
-		softc->bar[i].rid = PCIR_BAR(2 * i);
-		flag = (i == 0) ? RF_ACTIVE | RF_SHAREABLE : RF_ACTIVE;
-		if ((softc->bar[i].res =
-			bus_alloc_resource_any(softc->dev,
-				   SYS_RES_MEMORY,
-				   &softc->bar[i].rid,
-				   flag)) == NULL) {
-			device_printf(softc->dev,
-			    "PCI BAR%d mapping failure\n",2 * i);
-			return (ENXIO);
-		}
-		softc->bar[i].tag = rman_get_bustag(softc->bar[i].res);
-		softc->bar[i].handle = rman_get_bushandle(softc->bar[i].res);
-		softc->bar[i].size = rman_get_size(softc->bar[i].res);
-		softc->bar[i].kva = (vm_offset_t)rman_get_virtual(softc->bar[i].res);
+	if (bar->res != NULL) {
+		device_printf(softc->dev, "Bar %d already mapped\n", bar_num);
+		return EDOOFUS;
 	}
 
-	return (0);
+	bar->rid = PCIR_BAR(bar_num);
+	flag = RF_ACTIVE;
+	if (shareable)
+		flag |= RF_SHAREABLE;
+
+	if ((bar->res =
+		bus_alloc_resource_any(softc->dev,
+			   SYS_RES_MEMORY,
+			   &bar->rid,
+			   flag)) == NULL) {
+		device_printf(softc->dev,
+		    "PCI BAR%d mapping failure\n", bar_num);
+		return (ENXIO);
+	}
+	bar->tag = rman_get_bustag(bar->res);
+	bar->handle = rman_get_bushandle(bar->res);
+	bar->size = rman_get_size(bar->res);
+	bar->kva = (vm_offset_t)rman_get_virtual(bar->res);
+
+	return 0;
+}
+
+static int
+bnxt_pci_mapping(struct bnxt_softc *softc)
+{
+	int rc;
+
+	rc = bnxt_map_bar(softc, &softc->hwrm_bar, 0, true);
+	if (rc)
+		return rc;
+
+	rc = bnxt_map_bar(softc, &softc->doorbell_bar, 0, false);
+
+	return rc;
 }
 
 static void
 bnxt_pci_mapping_free(struct bnxt_softc *softc)
 {
-	int i;
+	if (softc->hwrm_bar.res != NULL)
+		bus_release_resource(softc->dev, SYS_RES_MEMORY,
+		    softc->hwrm_bar.rid, softc->hwrm_bar.res);
+	softc->hwrm_bar.res = NULL;
 
-	for (i = 0; i < BNXT_BARS; i++) {
-		if (softc->bar[i].res!= NULL)
-			bus_release_resource(softc->dev,
-			     SYS_RES_MEMORY,
-			     softc->bar[i].rid,
-			     softc->bar[i].res);
-	}
+	if (softc->doorbell_bar.res != NULL)
+		bus_release_resource(softc->dev, SYS_RES_MEMORY,
+		    softc->doorbell_bar.rid, softc->doorbell_bar.res);
+	softc->doorbell_bar.res = NULL;
 }
 
 static int

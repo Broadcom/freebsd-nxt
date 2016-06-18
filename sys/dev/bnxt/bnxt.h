@@ -366,7 +366,8 @@ struct bnxt_softc {
 	if_shared_ctx_t	sctx;
 	struct ifmedia	*media;
 
-	struct bnxt_bar_info	bar[3]; 
+	struct bnxt_bar_info	hwrm_bar;
+	struct bnxt_bar_info	doorbell_bar;
 	struct bnxt_link_info	link_info;
 #define FW_VER_STR_LEN		32
 #define BC_HWRM_STR_LEN		21

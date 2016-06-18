@@ -122,20 +122,20 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 
 	/* Write request msg to hwrm channel */
 	for (i = 0; i < msg_len; i += 4) {
-		bus_space_write_4(softc->bar[0].tag,
-				  softc->bar[0].handle,
+		bus_space_write_4(softc->hwrm_bar.tag,
+				  softc->hwrm_bar.handle,
 				  i, *data);
 		data++;
 	}
 
 	/* Clear to the end of the request buffer */
 	for (i = msg_len; i < HWRM_MAX_REQ_LEN; i += 4)
-		bus_space_write_4(softc->bar[0].tag, softc->bar[0].handle, i,
+		bus_space_write_4(softc->hwrm_bar.tag, softc->hwrm_bar.handle, i,
 		    0);
 
 	/* Ring channel doorbell */
-	bus_space_write_4(softc->bar[0].tag,
-			  softc->bar[0].handle,
+	bus_space_write_4(softc->hwrm_bar.tag,
+			  softc->hwrm_bar.handle,
 			  0x100, 1);
 
 	/* Check if response len is updated */
@@ -783,7 +783,6 @@ bnxt_hwrm_ring_alloc(struct bnxt_softc *softc, uint8_t type,
 		BNXT_TX_DB(ring, 0);
 		break;
 	case HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL:
-		BNXT_CP_DB(ring, 0);
 		break;
 	default:
 		device_printf(softc->dev, "Unknown ring type in ring_alloc %d\n", type);
