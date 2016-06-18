@@ -361,7 +361,6 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 	int rc;
 
 	softc = iflib_get_softc(ctx);
-device_printf(softc->dev, "Allocating RX queues... nrxqs=%d\n", nrxqs);
 
 	softc->rx_cp_rings = malloc(sizeof(struct bnxt_cp_ring) * nrxqsets,
 	    M_DEVBUF, M_NOWAIT | M_ZERO);
@@ -471,7 +470,6 @@ device_printf(softc->dev, "Allocating RX queues... nrxqs=%d\n", nrxqs);
 		softc->vnic_info[i].cos_rule = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->vnic_info[i].lb_rule = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->vnic_info[i].ctx_id = (uint16_t)HWRM_NA_SIGNATURE;
-		softc->vnic_info[i].mru = softc->scctx->isc_max_frame_size;
 		softc->vnic_info[i].rx_mask =
 		    HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_BCAST;
 		softc->vnic_info[i].mc_list_count = 0;
@@ -688,7 +686,7 @@ bnxt_init(if_ctx_t ctx)
 	    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
 	    &softc->def_cp_ring.ring,
 	    (uint16_t)HWRM_NA_SIGNATURE,
-	    (uint16_t)HWRM_NA_SIGNATURE, true);
+	    HWRM_NA_SIGNATURE, true);
 	if (rc)
 		goto fail;
 
@@ -705,7 +703,7 @@ bnxt_init(if_ctx_t ctx)
 		    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
 		    &softc->rx_cp_rings[i].ring,
 		    (uint16_t)HWRM_NA_SIGNATURE,
-		    (uint16_t)HWRM_NA_SIGNATURE, true);
+		    HWRM_NA_SIGNATURE, true);
 		if (rc)
 			goto fail;
 
@@ -714,7 +712,7 @@ bnxt_init(if_ctx_t ctx)
 		    HWRM_RING_ALLOC_INPUT_RING_TYPE_RX,
 		    &softc->rx_rings[i].ring,
 		    (uint16_t)HWRM_NA_SIGNATURE,
-		    (uint16_t)HWRM_NA_SIGNATURE, false);
+		    HWRM_NA_SIGNATURE, false);
 		if (rc)
 			goto fail;
 
@@ -723,7 +721,7 @@ bnxt_init(if_ctx_t ctx)
 		    HWRM_RING_ALLOC_INPUT_RING_TYPE_RX,
 		    &softc->ag_rings[i].ring,
 		    (uint16_t)HWRM_NA_SIGNATURE,
-		    (uint16_t)HWRM_NA_SIGNATURE, false);
+		    HWRM_NA_SIGNATURE, false);
 		if (rc)
 			goto fail;
 
@@ -746,6 +744,7 @@ bnxt_init(if_ctx_t ctx)
 
 		/* Allocate the vnic */
 		softc->vnic_info[i].ring_grp = softc->grp_info[i].grp_id;
+		softc->vnic_info[i].mru = softc->scctx->isc_max_frame_size;
 		rc = bnxt_hwrm_vnic_alloc(softc, &softc->vnic_info[i]);
 		if (rc)
 			goto fail;
@@ -777,7 +776,7 @@ bnxt_init(if_ctx_t ctx)
 		    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
 		    &softc->tx_cp_rings[i].ring,
 		    (uint16_t)HWRM_NA_SIGNATURE,
-		    (uint16_t)HWRM_NA_SIGNATURE, false);
+		    HWRM_NA_SIGNATURE, false);
 		if (rc)
 			goto fail;
 
