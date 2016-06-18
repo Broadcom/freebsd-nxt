@@ -985,7 +985,7 @@ bnxt_msix_intr_assign(if_ctx_t ctx, int msix)
 	int rc;
 	int i;
 
-	rc = iflib_irq_alloc_generic(ctx, &softc->def_cp_ring.irq, softc->def_cp_ring.ring.id + 1,
+	rc = iflib_irq_alloc_generic(ctx, &softc->def_cp_ring.irq, softc->scctx->isc_vectors - softc->def_cp_ring.ring.id,
 	    IFLIB_INTR_ADMIN, bnxt_handle_def_cp, softc, 0, "def_cp");
 	if (rc) {
 		device_printf(iflib_get_dev(ctx), "Failed to register default completion ring handler\n");
@@ -994,7 +994,7 @@ bnxt_msix_intr_assign(if_ctx_t ctx, int msix)
 
 	for (i=0; i<softc->scctx->isc_nrxqsets; i++) {
 		rc = iflib_irq_alloc_generic(ctx, &softc->rx_cp_rings[i].irq,
-		    softc->rx_cp_rings[i].ring.id + 1, IFLIB_INTR_RX, bnxt_handle_rx_cp,
+		    softc->scctx->isc_vectors - softc->rx_cp_rings[i].ring.id, IFLIB_INTR_RX, bnxt_handle_rx_cp,
 		    &softc->rx_cp_rings[i], i, "rx_cp");
 		if (rc) {
 			device_printf(iflib_get_dev(ctx),
@@ -1005,7 +1005,7 @@ bnxt_msix_intr_assign(if_ctx_t ctx, int msix)
 	}
 
 	for (i=0; i<softc->scctx->isc_ntxqsets; i++)
-		iflib_softirq_alloc_generic(ctx, softc->tx_cp_rings[i].ring.id + 1, IFLIB_INTR_TX, NULL, i, "tx_cp");
+		iflib_softirq_alloc_generic(ctx, i + 1, IFLIB_INTR_TX, NULL, i, "tx_cp");
 
 	return rc;
 
@@ -1255,6 +1255,7 @@ bnxt_handle_rx_cp(void *arg)
 	struct bnxt_cp_ring *cpr = arg;
 	struct bnxt_softc *softc = cpr->ring.softc;
 
+	softc->dbg++;
 	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
 	return FILTER_HANDLED;
 }
@@ -1264,6 +1265,7 @@ bnxt_handle_def_cp(void *arg)
 {
 	struct bnxt_softc *softc = arg;
 
+	softc->dbg++;
 	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
 	return FILTER_HANDLED;
 }
