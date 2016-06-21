@@ -124,8 +124,6 @@ static void bnxt_add_media_types(struct bnxt_softc *softc);
 static int bnxt_pci_mapping(struct bnxt_softc *softc);
 static void bnxt_pci_mapping_free(struct bnxt_softc *softc);
 static int bnxt_update_link(struct bnxt_softc *softc, bool chng_link_state);
-static void bnxt_init_rxbds(struct bnxt_ring *ring, uint16_t type,
-    uint16_t len);
 static int bnxt_handle_def_cp(void *arg);
 static int bnxt_handle_rx_cp(void *arg);
 static void bnxt_clear_ids(struct bnxt_softc *softc);
@@ -455,13 +453,6 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->grp_info[i].ag_ring_id = softc->ag_rings[i].ring.phys_id;
 		softc->grp_info[i].cp_ring_id = softc->rx_cp_rings[i].ring.phys_id;
 
-		bnxt_init_rxbds(&softc->rx_rings[i].ring,
-		    RX_PROD_PKT_BD_TYPE_RX_PROD_PKT,
-		    softc->scctx->isc_max_frame_size);
-		bnxt_init_rxbds(&softc->ag_rings[i].ring,
-		    RX_PROD_AGG_BD_TYPE_RX_PROD_AGG,
-		    softc->scctx->isc_max_frame_size);
-
 		/* And finally, the VNIC */
 		softc->vnic_info[i].id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->vnic_info[i].flow_id = (uint16_t)HWRM_NA_SIGNATURE;
@@ -737,13 +728,6 @@ bnxt_init(if_ctx_t ctx)
 		rc = bnxt_hwrm_ring_grp_alloc(softc, &softc->grp_info[i]);
 		if (rc)
 			goto fail;
-
-		bnxt_init_rxbds(&softc->rx_rings[i].ring,
-		    RX_PROD_PKT_BD_TYPE_RX_PROD_PKT,
-		    softc->scctx->isc_max_frame_size);
-		bnxt_init_rxbds(&softc->ag_rings[i].ring,
-		    RX_PROD_AGG_BD_TYPE_RX_PROD_AGG,
-		    softc->scctx->isc_max_frame_size);
 
 		/* Allocate the vnic */
 		softc->vnic_info[i].ring_grp = softc->grp_info[i].grp_id;
@@ -1240,19 +1224,6 @@ bnxt_report_link(struct bnxt_softc *softc)
                 device_printf(softc->dev, "Link is Down %s, %s\n", duplex,
 		    flow_ctrl);
         }
-}
-
-static void
-bnxt_init_rxbds(struct bnxt_ring *ring, uint16_t type, uint16_t len)
-{
-	struct rx_prod_pkt_bd *rx_bd_ring = (void *)ring->vaddr;
-	uint32_t i;
-
-	for (i=0; i<ring->ring_size; i++) {
-		rx_bd_ring[i].flags_type = htole16(type);
-		rx_bd_ring[i].len = htole16(len);
-		rx_bd_ring[i].opaque = i;
-	}
 }
 
 static int

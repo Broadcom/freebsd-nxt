@@ -233,19 +233,23 @@ bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_rx_ring *rx_ring;
 	struct rx_prod_pkt_bd *rxbd;
+	uint16_t type;
 	uint16_t i;
 
-device_printf(softc->dev, "Refilling q=%hu fl=%hhu p=%u c=%hu\n", rxqid, flid, pidx, count);
 	if (flid == 0) {
 		rx_ring = &softc->rx_rings[rxqid];
 		rxbd = (void *)rx_ring->ring.vaddr;
+		type = RX_PROD_PKT_BD_TYPE_RX_PROD_PKT;
 	}
 	else {
 		rx_ring = &softc->ag_rings[rxqid];
 		rxbd = (void *)rx_ring->ring.vaddr;
+		type = RX_PROD_AGG_BD_TYPE_RX_PROD_AGG;
 	}
 	for (i=0; i<count; i++) {
-		rxbd[rx_ring->prod].opaque = htole32(pidx + i);
+		rxbd[rx_ring->prod].flags_type = htole16(type);
+		rxbd[rx_ring->prod].len = htole16(softc->scctx->isc_max_frame_size);
+		rxbd[rx_ring->prod].opaque = rx_ring->prod;
 		rxbd[rx_ring->prod].addr = htole64(paddrs[i]);
 		rx_ring->prod = RING_NEXT(&rx_ring->ring, rx_ring->prod);
 	}
@@ -264,7 +268,6 @@ bnxt_isc_rxd_flush(void *sc, uint16_t rxqid, uint8_t flid,
 	else
 		rx_ring = &softc->ag_rings[rxqid];
 
-device_printf(softc->dev, "Flushing q=%hu fl=%hhu p=%u (%u)\n", rxqid, flid, pidx, rx_ring->prod);
 	BNXT_RX_DB(rx_ring->ring.doorbell, rx_ring->prod);
 	return;
 }
@@ -289,42 +292,32 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx)
 		cons = RING_CMP(&cpr->ring, raw);
 		rcp = &((struct rx_pkt_cmpl *)cpr->ring.vaddr)[cons];
 
-device_printf(softc->dev, "Checking RAW: %u (%u:%u)\n", raw, cons, rcp->agg_bufs_v1 & RX_PKT_CMPL_V1);
 		if (!CMP_VALID(rcp, raw, &cpr->ring))
 			break;
-device_printf(softc->dev, "RAW %u valid (%02x)\n", raw, rcp->flags_type & RX_PKT_CMPL_TYPE_MASK);
 
 		if ((rcp->flags_type & RX_PKT_CMPL_TYPE_MASK) == RX_PKT_CMPL_TYPE_RX_L2) {
 			ags = (rcp->agg_bufs_v1 & RX_PKT_CMPL_AGG_BUFS_MASK) >> RX_PKT_CMPL_AGG_BUFS_SFT;
 			raw++;
 			cons = RING_CMP(&cpr->ring, raw);
 			cmp = &((struct cmpl_base *)cpr->ring.vaddr)[cons];
-device_printf(softc->dev, "Checking RAW2: %u (%u:%u)\n", raw, cons, cmp->info3_v & CMPL_BASE_V);
 			if (!CMP_VALID(cmp, raw, &cpr->ring))
 				break;
-device_printf(softc->dev, "RAW2 %u valid\n", raw);
 
 			/* Now account for all the AG completions */
 			for (i=0; i<ags; i++) {
 				raw++;
 				cons = RING_CMP(&cpr->ring, raw);
 				cmp = &((struct cmpl_base *)cpr->ring.vaddr)[cons];
-device_printf(softc->dev, "Checking RAWAGG%d: %u\n", i, raw);
 				if (!CMP_VALID(cmp, raw, &cpr->ring))
 					break;
-device_printf(softc->dev, "Checking RAWAGG%d valid (%02x)\n", i, cmp->type & CMPL_BASE_TYPE_MASK);
 			}
 			avail++;
 		}
 	}
 	cpr->enable_at = last_valid;
 
-	/* Surrious interrupt? */
-	if (!avail) {
-		device_printf(softc->dev, "rxd_available() called with nothing available\n");
+	if (!avail)
 		BNXT_CP_ARM_DB(&cpr->ring, cpr->raw_cons);
-	}
-device_printf(softc->dev, "RXd Avail: %d\n", avail);
 	return avail;
 }
 
@@ -409,7 +402,6 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 	}
 
 	/* And finally the ag ring stuff. */
-device_printf(softc->dev, "Handing %d AG bufs\n", ags);
 	for (i=1; i < ri->iri_nfrags; i++) {
 		raw++;
 		cons = RING_CMP(&cpr->ring, raw);
@@ -422,7 +414,6 @@ device_printf(softc->dev, "Handing %d AG bufs\n", ags);
 
 	/* Notify the hardware we've handled the completion */
 	if (cpr->enable_at == raw) {
-device_printf(softc->dev, "Ringing doorbell at %u\n", raw-1);
 		BNXT_CP_ARM_DB(&cpr->ring, raw);
 	}
 	else {
@@ -430,7 +421,6 @@ device_printf(softc->dev, "Ringing doorbell at %u\n", raw-1);
 	}
 	cpr->raw_cons = raw;
 
-device_printf(softc->dev, "RXed a packet.\n");
 	return 0;
 }
 
