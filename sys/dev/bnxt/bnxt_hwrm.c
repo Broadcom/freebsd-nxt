@@ -774,22 +774,6 @@ bnxt_hwrm_ring_alloc(struct bnxt_softc *softc, uint8_t type,
 
 	ring->phys_id = le16toh(resp->ring_id);
 
-	/* Ring the doorbell to initialize it */
-	switch (type) {
-	case HWRM_RING_ALLOC_INPUT_RING_TYPE_RX:
-		BNXT_RX_DB(ring, 0);
-		break;
-	case HWRM_RING_ALLOC_INPUT_RING_TYPE_TX:
-		BNXT_TX_DB(ring, 0);
-		break;
-	case HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL:
-		//BNXT_CP_DB(ring, ring->ring_mask);
-		break;
-	default:
-		device_printf(softc->dev, "Unknown ring type in ring_alloc %d\n", type);
-		break;
-	}
-
 fail:
 	BNXT_HWRM_UNLOCK(softc);
 	return rc;
