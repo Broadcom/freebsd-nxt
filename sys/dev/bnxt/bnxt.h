@@ -340,6 +340,7 @@ struct bnxt_cp_ring {
 	struct bnxt_ring	ring;
 	struct if_irq		irq;
 	uint32_t		raw_cons;
+	uint32_t		enable_at;
 	struct ctx_hw_stats	*stats;
 	uint32_t		stats_ctx_id;
 };

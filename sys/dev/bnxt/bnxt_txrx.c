@@ -120,7 +120,7 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 	pi->ipi_new_pidx = pi->ipi_pidx;
 	tbd = &((struct tx_bd_long *)txr->ring.vaddr)[pi->ipi_new_pidx];
 	pi->ipi_ndescs = 1;
-	tbd->opaque = pi->ipi_new_pidx;
+	tbd->opaque = htole32(pi->ipi_new_pidx);
 	tbd->len = htole16(pi->ipi_segs[seg].ds_len);
 	tbd->addr = htole64(pi->ipi_segs[seg++].ds_addr);
 	flags_type = (pi->ipi_nsegs + need_hi) << TX_BD_SHORT_FLAGS_BD_CNT_SFT;
@@ -148,10 +148,10 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 			lflags |= TX_BD_LONG_LFLAGS_LSO | TX_BD_LONG_LFLAGS_T_IPID;
 		}
 		else if(pi->ipi_csum_flags & CSUM_OFFLOAD) {
-			lflags |= TX_BD_LONG_LFLAGS_TCP_UDP_CHKSUM;
+			lflags |= TX_BD_LONG_LFLAGS_TCP_UDP_CHKSUM | TX_BD_LONG_LFLAGS_IP_CHKSUM;
 		}
 		else if(pi->ipi_csum_flags & CSUM_IP) {
-			lflags |= TX_BD_LONG_LFLAGS_T_IP_CHKSUM;
+			lflags |= TX_BD_LONG_LFLAGS_IP_CHKSUM;
 		}
 		tbdh->lflags = htole16(lflags);
 	}
@@ -201,26 +201,25 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 	uint32_t cons;
 
 	for (;;) {
+		raw++;
 		cons = RING_CMP(&cpr->ring, raw);
 		tcp = &((struct tx_cmpl *)cpr->ring.vaddr)[cons];
 
-		if (!CMP_VALID(tcp, raw, &cpr->ring))
+		if (!CMP_VALID(tcp, raw, &cpr->ring)) {
+			raw--;
 			break;
+		}
 
 		/* Get the BD that this completes */
-		tbd = &((struct tx_bd_long *)txr->ring.vaddr)[tcp->opaque];
+		tbd = &((struct tx_bd_long *)txr->ring.vaddr)[le32toh(tcp->opaque)];
 
 		/* And extract how many BDs were used */
 		avail += (tbd->flags_type & TX_BD_SHORT_FLAGS_BD_CNT_MASK) >> TX_BD_SHORT_FLAGS_BD_CNT_SFT;
-
-		if (clear)
-			cpr->raw_cons = raw;
-		raw++;
 	}
 
-	if (clear && avail) {
+	if (clear) {
+		cpr->raw_cons = raw;
 		BNXT_CP_DB(&cpr->ring, cpr->raw_cons);
-		cpr->raw_cons++;
 	}
 
 	return avail;
@@ -246,6 +245,7 @@ device_printf(softc->dev, "Refilling q=%hu fl=%hhu p=%u c=%hu\n", rxqid, flid, p
 		rxbd = (void *)rx_ring->ring.vaddr;
 	}
 	for (i=0; i<count; i++) {
+		rxbd[rx_ring->prod].opaque = htole32(pidx + i);
 		rxbd[rx_ring->prod].addr = htole64(paddrs[i]);
 		rx_ring->prod = RING_NEXT(&rx_ring->ring, rx_ring->prod);
 	}
@@ -275,38 +275,168 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx)
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_cp_ring *cpr = &softc->rx_cp_rings[rxqid];
 	struct rx_pkt_cmpl *rcp;
-	struct rx_pkt_cmpl_hi *rcph;
-	int avail;
+	struct cmpl_base *cmp;
+	int avail = 0;
 	uint32_t raw = cpr->raw_cons;
+	uint32_t last_valid;
 	uint32_t cons;
+	uint8_t ags;
+	int i;
 
-device_printf(softc->dev, "Checking avail: %hu %u\n", rxqid, idx);
-	for (raw = cpr->raw_cons; RING_CMP(&cpr->ring, raw) != idx; raw++)
-		;
-
-	for (avail = 0 ; ; avail++) {
+	for (;;) {
+		last_valid = raw;
+		raw++;
 		cons = RING_CMP(&cpr->ring, raw);
 		rcp = &((struct rx_pkt_cmpl *)cpr->ring.vaddr)[cons];
 
+device_printf(softc->dev, "Checking RAW: %u (%u:%u)\n", raw, cons, rcp->agg_bufs_v1 & RX_PKT_CMPL_V1);
 		if (!CMP_VALID(rcp, raw, &cpr->ring))
 			break;
+device_printf(softc->dev, "RAW %u valid (%02x)\n", raw, rcp->flags_type & RX_PKT_CMPL_TYPE_MASK);
 
-		raw++;
-		cons = RING_CMP(&cpr->ring, raw);
-		rcph = &((struct rx_pkt_cmpl_hi *)cpr->ring.vaddr)[cons];
-		if (!CMP_VALID(rcp, raw, &cpr->ring))
-			break;
+		if ((rcp->flags_type & RX_PKT_CMPL_TYPE_MASK) == RX_PKT_CMPL_TYPE_RX_L2) {
+			ags = (rcp->agg_bufs_v1 & RX_PKT_CMPL_AGG_BUFS_MASK) >> RX_PKT_CMPL_AGG_BUFS_SFT;
+			raw++;
+			cons = RING_CMP(&cpr->ring, raw);
+			cmp = &((struct cmpl_base *)cpr->ring.vaddr)[cons];
+device_printf(softc->dev, "Checking RAW2: %u (%u:%u)\n", raw, cons, cmp->info3_v & CMPL_BASE_V);
+			if (!CMP_VALID(cmp, raw, &cpr->ring))
+				break;
+device_printf(softc->dev, "RAW2 %u valid\n", raw);
+
+			/* Now account for all the AG completions */
+			for (i=0; i<ags; i++) {
+				raw++;
+				cons = RING_CMP(&cpr->ring, raw);
+				cmp = &((struct cmpl_base *)cpr->ring.vaddr)[cons];
+device_printf(softc->dev, "Checking RAWAGG%d: %u\n", i, raw);
+				if (!CMP_VALID(cmp, raw, &cpr->ring))
+					break;
+device_printf(softc->dev, "Checking RAWAGG%d valid (%02x)\n", i, cmp->type & CMPL_BASE_TYPE_MASK);
+			}
+			avail++;
+		}
 	}
+	cpr->enable_at = last_valid;
+
+	/* Surrious interrupt? */
+	if (!avail) {
+		device_printf(softc->dev, "rxd_available() called with nothing available\n");
+		BNXT_CP_ARM_DB(&cpr->ring, cpr->raw_cons);
+	}
+device_printf(softc->dev, "RXd Avail: %d\n", avail);
 	return avail;
 }
 
+/* If we return anything but zero, iflib will assert... */
 static int
 bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
+	struct bnxt_cp_ring *cpr = &softc->rx_cp_rings[ri->iri_qsidx];
+	struct bnxt_rx_ring *rxr = &softc->rx_rings[ri->iri_qsidx];
+	struct bnxt_rx_ring *agr = &softc->ag_rings[ri->iri_qsidx];
+	struct rx_pkt_cmpl *rcp;
+	struct rx_pkt_cmpl_hi *rcph;
+	struct rx_abuf_cmpl *acp;
+	uint16_t flags_type;
+	uint32_t flags2;
+	uint32_t errors;
+	uint32_t raw = cpr->raw_cons;
+	uint32_t cons;
+	uint8_t	ags;
+	int i;
 
-	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
-	return ENOSYS;
+	raw++;
+	cons = RING_CMP(&cpr->ring, raw);
+	rcp = &((struct rx_pkt_cmpl *)cpr->ring.vaddr)[cons];
+	if (!CMP_VALID(rcp, raw, &cpr->ring)) {
+		device_printf(softc->dev, "No RX completion\n");
+		return EINVAL;
+	}
+	if (!CMP_VALID(rcp, raw+1, &cpr->ring)) {
+		device_printf(softc->dev, "No second RX completion\n");
+		return EINVAL;
+	}
+	flags_type = le16toh(rcp->flags_type);
+	if ((flags_type & RX_PKT_CMPL_TYPE_MASK) != RX_PKT_CMPL_TYPE_RX_L2) {
+		device_printf(softc->dev, "Invalid RX completion type %u\n", flags_type & RX_PKT_CMPL_TYPE_MASK);
+		return EINVAL;
+	}
+	if (flags_type & RX_PKT_CMPL_FLAGS_ERROR) {
+		raw++;
+		cons = RING_CMP(&cpr->ring, raw);
+		rcph = &((struct rx_pkt_cmpl_hi *)cpr->ring.vaddr)[cons];
+		device_printf(softc->dev, "RX completion error %04x\n", le16toh(rcph->errors_v2) & RX_PKT_CMPL_ERRORS_BUFFER_ERROR_MASK);
+		return EINVAL;
+	}
+
+	/* Extract from the first 16-byte BD */
+	if (flags_type & RX_PKT_CMPL_FLAGS_RSS_VALID) {
+		ri->iri_flowid = le32toh(rcp->rss_hash);
+		/* TODO: Extract something useful from rcp->rss_hash_type (undocumented) */
+		// May be documented in the "LSI ES" -- also check the firmware code.
+		device_printf(softc->dev, "TODO: Mystery RSS hash type: %02hhx\n", rcp->rss_hash_type);
+		ri->iri_rsstype = M_HASHTYPE_OPAQUE;
+	}
+	else {
+		ri->iri_rsstype = M_HASHTYPE_NONE;
+	}
+	ags = (rcp->agg_bufs_v1 & RX_PKT_CMPL_AGG_BUFS_MASK) >> RX_PKT_CMPL_AGG_BUFS_SFT;
+	ri->iri_nfrags = ags + 1;
+	ri->iri_frags[0].irf_flid = 0;
+	ri->iri_frags[0].irf_idx = le32toh(rcp->opaque);
+	ri->iri_len = le16toh(rcp->len);
+
+	/* Now the second 16-byte BD */
+	raw++;
+	cons = RING_CMP(&cpr->ring, raw);
+	rcph = &((struct rx_pkt_cmpl_hi *)cpr->ring.vaddr)[cons];
+	flags2 = le32toh(rcph->flags2);
+	errors = le16toh(rcph->errors_v2);
+	if ((flags2 & RX_PKT_CMPL_FLAGS2_META_FORMAT_MASK) == RX_PKT_CMPL_FLAGS2_META_FORMAT_VLAN) {
+		ri->iri_flags |= M_VLANTAG;
+		/* TODO: Should this be the entire 16-bits? */
+		ri->iri_vtag = le32toh(rcph->metadata) & (RX_PKT_CMPL_METADATA_VID_MASK | RX_PKT_CMPL_METADATA_DE | RX_PKT_CMPL_METADATA_PRI_MASK);
+	}
+	if (flags2 & RX_PKT_CMPL_FLAGS2_IP_CS_CALC) {
+		ri->iri_csum_flags |= CSUM_IP_CHECKED;
+		if (!(errors & RX_PKT_CMPL_ERRORS_IP_CS_ERROR))
+			ri->iri_csum_flags |= CSUM_IP_VALID;
+	}
+	if (flags2 & RX_PKT_CMPL_FLAGS2_L4_CS_CALC) {
+		ri->iri_csum_flags |= CSUM_L4_CALC;
+		if (!(errors & RX_PKT_CMPL_ERRORS_L4_CS_ERROR))
+			ri->iri_csum_flags |= CSUM_L4_VALID;
+	}
+
+	/* And finally the ag ring stuff. */
+device_printf(softc->dev, "Handing %d AG bufs\n", ags);
+	for (i=1; i < ri->iri_nfrags; i++) {
+		raw++;
+		cons = RING_CMP(&cpr->ring, raw);
+		acp = &((struct rx_abuf_cmpl *)cpr->ring.vaddr)[cons];
+
+		ri->iri_frags[i].irf_flid = 1;
+		ri->iri_frags[i].irf_idx = le32toh(acp->opaque);
+		ri->iri_len += le16toh(acp->len);
+	}
+
+	/* Notify the hardware we've handled the completion */
+	if (cpr->enable_at == raw) {
+device_printf(softc->dev, "Ringing doorbell at %u\n", raw-1);
+		BNXT_CP_ARM_DB(&cpr->ring, raw);
+	}
+	else {
+		BNXT_CP_DB(&cpr->ring, raw);
+	}
+	cpr->raw_cons = raw;
+	BNXT_RX_DB(rxr->ring.doorbell, rxr->prod);
+	if (ags)
+		BNXT_RX_DB(agr->ring.doorbell, agr->prod);
+
+device_printf(softc->dev, "RXed a packet.\n");
+	return 0;
 }
 
 static int

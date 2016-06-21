@@ -198,6 +198,7 @@ static struct if_shared_ctx bnxt_sctx_init = {
 	.isc_txrx = &bnxt_txrx,
 	.isc_driver = &bnxt_iflib_driver,
 	.isc_nfl = 2,				// Number of Free Lists
+	.isc_flags = 0 /*IFLIB_HAS_CQ*/,
 	.isc_q_align = PAGE_SIZE,
 
 	/* We really don't have a maximum here */
@@ -230,8 +231,8 @@ static struct if_shared_ctx bnxt_sctx_init = {
 	 * what we produce.  Unfortunately, using the pidx method makes
 	 * this a bit tricky, so they're the same size for now.
 	 */
-	.isc_txqsizes = {PAGE_SIZE, PAGE_SIZE},
-	.isc_rxqsizes = {PAGE_SIZE, PAGE_SIZE, PAGE_SIZE},
+	.isc_txqsizes = {PAGE_SIZE * 2, PAGE_SIZE},
+	.isc_rxqsizes = {PAGE_SIZE * 2, PAGE_SIZE, PAGE_SIZE},
 };
 
 if_shared_ctx_t bnxt_sctx = &bnxt_sctx_init;
@@ -291,7 +292,7 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->tx_cp_rings[i].ring.id =
 		    (softc->scctx->isc_nrxqsets * 3) + 1 + (i * 2);
 		softc->tx_cp_rings[i].ring.doorbell = softc->doorbell_bar.kva + (softc->tx_cp_rings[i].ring.id * 0x80);
-		softc->tx_cp_rings[i].ring.ring_size = softc->sctx->isc_ntxd;
+		softc->tx_cp_rings[i].ring.ring_size = softc->sctx->isc_ntxd * 2;
 		softc->tx_cp_rings[i].ring.ring_mask =
 		    softc->tx_cp_rings[i].ring.ring_size - 1;
 		softc->tx_cp_rings[i].ring.vaddr = vaddrs[i * ntxqs];
@@ -416,7 +417,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->rx_cp_rings[i].ring.softc = softc;
 		softc->rx_cp_rings[i].ring.id = i + 1;
 		softc->rx_cp_rings[i].ring.doorbell = softc->doorbell_bar.kva + (softc->rx_cp_rings[i].ring.id * 0x80);
-		softc->rx_cp_rings[i].ring.ring_size = softc->sctx->isc_nrxd;
+		softc->rx_cp_rings[i].ring.ring_size = softc->sctx->isc_nrxd * 2;
 		softc->rx_cp_rings[i].ring.ring_mask =
 		    softc->rx_cp_rings[i].ring.ring_size - 1;
 		softc->rx_cp_rings[i].ring.vaddr = vaddrs[i * nrxqs];
@@ -682,6 +683,7 @@ bnxt_init(if_ctx_t ctx)
 	bnxt_clear_ids(softc);
 
 	/* Allocate the default completion ring */
+	softc->def_cp_ring.raw_cons = -1;
 	rc = bnxt_hwrm_ring_alloc(softc,
 	    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
 	    &softc->def_cp_ring.ring,
@@ -699,6 +701,7 @@ bnxt_init(if_ctx_t ctx)
 			goto fail;
 
 		/* Allocation the completion ring */
+		softc->rx_cp_rings[i].raw_cons = -1;
 		rc = bnxt_hwrm_ring_alloc(softc,
 		    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
 		    &softc->rx_cp_rings[i].ring,
@@ -772,6 +775,7 @@ bnxt_init(if_ctx_t ctx)
 		}
 
 		/* Allocate the completion ring */
+		softc->tx_cp_rings[i].raw_cons = -1;
 		rc = bnxt_hwrm_ring_alloc(softc,
 		    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
 		    &softc->tx_cp_rings[i].ring,
@@ -1255,10 +1259,11 @@ static int
 bnxt_handle_rx_cp(void *arg)
 {
 	struct bnxt_cp_ring *cpr = arg;
-	struct bnxt_softc *softc = cpr->ring.softc;
 
-	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
-	return FILTER_HANDLED;
+	/* Disable further interrupts */
+	BNXT_CP_DISABLE_DB(&cpr->ring,
+		    cpr->raw_cons);
+	return FILTER_SCHEDULE_THREAD;
 }
 
 static int
@@ -1268,6 +1273,7 @@ bnxt_handle_def_cp(void *arg)
 
 	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
 	return FILTER_HANDLED;
+	return FILTER_SCHEDULE_THREAD;
 }
 
 static void
