@@ -334,8 +334,6 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_cp_ring *cpr = &softc->rx_cp_rings[ri->iri_qsidx];
-	struct bnxt_rx_ring *rxr = &softc->rx_rings[ri->iri_qsidx];
-	struct bnxt_rx_ring *agr = &softc->ag_rings[ri->iri_qsidx];
 	struct rx_pkt_cmpl *rcp;
 	struct rx_pkt_cmpl_hi *rcph;
 	struct rx_abuf_cmpl *acp;
@@ -431,9 +429,6 @@ device_printf(softc->dev, "Ringing doorbell at %u\n", raw-1);
 		BNXT_CP_DB(&cpr->ring, raw);
 	}
 	cpr->raw_cons = raw;
-	BNXT_RX_DB(rxr->ring.doorbell, rxr->prod);
-	if (ags)
-		BNXT_RX_DB(agr->ring.doorbell, agr->prod);
 
 device_printf(softc->dev, "RXed a packet.\n");
 	return 0;
