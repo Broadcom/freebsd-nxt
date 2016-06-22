@@ -49,7 +49,7 @@ __FBSDID("$FreeBSD$");
  */
 
 static int bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi);
-static void bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t pidx);
+static void bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t credits);
 static int bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t cidx,
     bool clear);
 
@@ -176,13 +176,12 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 }
 
 static void
-bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t pidx)
+bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t credits)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_tx_ring *tx_ring = &softc->tx_rings[txqid];
 
-	/* TODO: If we could actually get the pidx here, we could use that */
-	tx_ring->prod += pidx;
+	tx_ring->prod += credits;
 	tx_ring->prod &= tx_ring->ring.ring_mask;
 	BNXT_TX_DB(tx_ring);
 	return;
