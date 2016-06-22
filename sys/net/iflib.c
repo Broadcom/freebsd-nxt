@@ -3108,8 +3108,6 @@ iflib_if_transmit(if_t ifp, struct mbuf *m)
 #endif
 		ifmp_ring_check_drainage(txq->ift_br[0], TX_BATCH_SIZE);
 	}
-	if (count > nitems(marr))
-		free(mp, M_IFLIB);
 
 	return (err);
 }
