@@ -3881,6 +3881,7 @@ iflib_queues_alloc(if_ctx_t ctx)
 	KASSERT(nrxqs > 0, ("number of queues per qset must be at least 1"));
 
 	brscp = NULL;
+	txq = NULL;
 	rxq = NULL;
 
 /* Allocate the TX ring struct memory */
@@ -3908,8 +3909,6 @@ iflib_queues_alloc(if_ctx_t ctx)
 
 	ctx->ifc_txqs = txq;
 	ctx->ifc_rxqs = rxq;
-	txq = NULL;
-	rxq = NULL;
 
 	/*
 	 * XXX handle allocation failure
