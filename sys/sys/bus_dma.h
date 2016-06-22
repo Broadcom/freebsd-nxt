@@ -209,6 +209,10 @@ int bus_dmamap_load_mbuf_sg(bus_dma_tag_t dmat, bus_dmamap_t map,
 			    struct mbuf *mbuf, bus_dma_segment_t *segs,
 			    int *nsegs, int flags);
 
+int bus_dmamap_load_mvec_sg(bus_dma_tag_t dmat, bus_dmamap_t map,
+			    struct mbuf *mbuf, bus_dma_segment_t *segs,
+			    int *nsegs, int flags);
+
 /*
  * Like bus_dmamap_load but for uios.  Note the use of the
  * bus_dmamap_callback2_t interface.

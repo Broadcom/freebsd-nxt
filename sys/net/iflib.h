@@ -35,6 +35,7 @@
 #include <machine/bus.h>
 #include <sys/bus_dma.h>
 #include <sys/nv.h>
+#include <sys/gtaskqueue.h>
 
 
 /*
@@ -170,6 +171,13 @@ typedef struct if_softc_ctx {
 	int isc_ntxqsets;
 	int isc_msix_bar;		/* can be model specific - initialize in attach_pre */
 	int isc_tx_nsegments;		/* can be model specific - initialize in attach_pre */
+	int isc_ntxd;
+	int isc_nrxd;
+
+	uint32_t isc_txqsizes[8];
+	uint32_t isc_rxqsizes[8];
+	int isc_max_txqsets;
+	int isc_max_rxqsets;
 	int isc_tx_tso_segments_max;
 	int isc_tx_tso_size_max;
 	int isc_tx_tso_segsize_max;
@@ -188,8 +196,6 @@ struct if_shared_ctx {
 	int isc_magic;
 	if_txrx_t isc_txrx;
 	driver_t *isc_driver;
-	int isc_ntxd;
-	int isc_nrxd;
 	int isc_nfl;
 	int isc_flags;
 	bus_size_t isc_q_align;
@@ -199,13 +205,10 @@ struct if_shared_ctx {
 	bus_size_t isc_rx_maxsegsize;
 	int isc_rx_nsegments;
 	int isc_rx_process_limit;
-
-
-	uint32_t isc_txqsizes[8];
 	int isc_ntxqs;			/* # of tx queues per tx qset - usually 1 */
-	uint32_t isc_rxqsizes[8];
 	int isc_nrxqs;			/* # of rx queues per rx qset - intel 1, chelsio 2, broadcom 3 */
 	int isc_admin_intrcnt;		/* # of admin/link interrupts */
+
 
 	int isc_tx_reclaim_thresh;
 
@@ -308,7 +311,10 @@ void iflib_irq_free(if_ctx_t ctx, if_irq_t irq);
 void iflib_io_tqg_attach(struct grouptask *gt, void *uniq, int cpu, char *name);
 
 void iflib_config_gtask_init(if_ctx_t ctx, struct grouptask *gtask,
-			     task_fn_t *fn, char *name);
+			     gtask_fn_t *fn, char *name);
+
+void iflib_config_gtask_deinit(struct grouptask *gtask);
+
 
 
 void iflib_tx_intr_deferred(if_ctx_t ctx, int txqid);
@@ -317,7 +323,7 @@ void iflib_admin_intr_deferred(if_ctx_t ctx);
 void iflib_iov_intr_deferred(if_ctx_t ctx);
 
 
-void iflib_link_state_change(if_ctx_t ctx, int linkstate);
+void iflib_link_state_change(if_ctx_t ctx, int linkstate, uint64_t baudrate);
 
 int iflib_dma_alloc(if_ctx_t ctx, int size, iflib_dma_info_t dma, int mapflags);
 void iflib_dma_free(iflib_dma_info_t dma);

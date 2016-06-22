@@ -39,6 +39,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/bus.h>
 #include <sys/callout.h>
 #include <sys/mbuf.h>
+#include <sys/mvec.h>
 #include <sys/memdesc.h>
 #include <sys/proc.h>
 #include <sys/uio.h>
@@ -127,6 +128,45 @@ _bus_dmamap_load_mbuf_sg(bus_dma_tag_t dmat, bus_dmamap_t map,
 	}
 	CTR5(KTR_BUSDMA, "%s: tag %p tag flags 0x%x error %d nsegs %d",
 	    __func__, dmat, flags, error, *nsegs);
+	return (error);
+}
+
+/*
+ * Load an mvec chain.
+ */
+static int
+_bus_dmamap_load_mvec_sg(bus_dma_tag_t dmat, bus_dmamap_t map,
+    struct mbuf *m0, bus_dma_segment_t *segs, int *nsegs, int flags)
+{
+	struct mbuf *m;
+	void *buf;
+	struct mvec_toc toc;
+	int i, error, len;
+
+	error = 0;
+	for (m = m0; m != NULL && error == 0; m = m->m_next) {
+		if (m->m_len <= 0)
+			continue;
+		if (m->m_flags & M_MVEC) {
+			mvec_unpack(m, &toc);
+			for (i = 0; i < toc.mt_mh->mh_nsegs; i++) {
+				buf = mvec_datap_idx(&toc, i, 0, &len);
+				error = _bus_dmamap_load_buffer(dmat, map, buf,
+			            len, kernel_pmap, flags | BUS_DMA_LOAD_MBUF,
+			            segs, nsegs);
+				if (error)
+					goto err;
+			}
+		} else {
+			error = _bus_dmamap_load_buffer(dmat, map, m->m_data,
+			    m->m_len, kernel_pmap, flags | BUS_DMA_LOAD_MBUF,
+			    segs, nsegs);
+
+		}
+	}
+	CTR5(KTR_BUSDMA, "%s: tag %p tag flags 0x%x error %d nsegs %d",
+	    __func__, dmat, flags, error, *nsegs);
+err:
 	return (error);
 }
 
@@ -374,6 +414,20 @@ bus_dmamap_load_mbuf_sg(bus_dma_tag_t dmat, bus_dmamap_t map, struct mbuf *m0,
 	flags |= BUS_DMA_NOWAIT;
 	*nsegs = -1;
 	error = _bus_dmamap_load_mbuf_sg(dmat, map, m0, segs, nsegs, flags);
+	++*nsegs;
+	_bus_dmamap_complete(dmat, map, segs, *nsegs, error);
+	return (error);
+}
+
+int
+bus_dmamap_load_mvec_sg(bus_dma_tag_t dmat, bus_dmamap_t map, struct mbuf *m0,
+    bus_dma_segment_t *segs, int *nsegs, int flags)
+{
+	int error;
+
+	flags |= BUS_DMA_NOWAIT;
+	*nsegs = -1;
+	error = _bus_dmamap_load_mvec_sg(dmat, map, m0, segs, nsegs, flags);
 	++*nsegs;
 	_bus_dmamap_complete(dmat, map, segs, *nsegs, error);
 	return (error);

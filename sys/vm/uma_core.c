@@ -2112,16 +2112,10 @@ uma_zalloc_arg(uma_zone_t zone, void *udata, int flags)
 	if (memguard_cmp_zone(zone)) {
 		item = memguard_alloc(zone->uz_size, flags);
 		if (item != NULL) {
-			/*
-			 * Avoid conflict with the use-after-free
-			 * protecting infrastructure from INVARIANTS.
-			 */
 			if (zone->uz_init != NULL &&
-			    zone->uz_init != mtrash_init &&
 			    zone->uz_init(item, zone->uz_size, flags) != 0)
 				return (NULL);
 			if (zone->uz_ctor != NULL &&
-			    zone->uz_ctor != mtrash_ctor &&
 			    zone->uz_ctor(item, zone->uz_size, udata,
 			    flags) != 0) {
 			    	zone->uz_fini(item, zone->uz_size);
@@ -2655,9 +2649,9 @@ uma_zfree_arg(uma_zone_t zone, void *item, void *udata)
                 return;
 #ifdef DEBUG_MEMGUARD
 	if (is_memguard_addr(item)) {
-		if (zone->uz_dtor != NULL && zone->uz_dtor != mtrash_dtor)
+		if (zone->uz_dtor != NULL)
 			zone->uz_dtor(item, zone->uz_size, udata);
-		if (zone->uz_fini != NULL && zone->uz_fini != mtrash_fini)
+		if (zone->uz_fini != NULL)
 			zone->uz_fini(item, zone->uz_size);
 		memguard_free(item);
 		return;
@@ -3545,6 +3539,7 @@ uma_dbg_getslab(uma_zone_t zone, void *item)
 	mem = (uint8_t *)((uintptr_t)item & (~UMA_SLAB_MASK));
 	if (zone->uz_flags & UMA_ZONE_VTOSLAB) {
 		slab = vtoslab((vm_offset_t)mem);
+		MPASS(slab->us_keg != NULL);
 	} else {
 		/*
 		 * It is safe to return the slab here even though the
@@ -3560,6 +3555,8 @@ uma_dbg_getslab(uma_zone_t zone, void *item)
 		ZONE_UNLOCK(zone);
 	}
 
+	MPASS(slab->us_data != NULL);
+	MPASS(slab->us_keg != NULL);
 	return (slab);
 }
 

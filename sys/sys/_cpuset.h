@@ -32,6 +32,7 @@
 #ifndef _SYS__CPUSET_H_
 #define	_SYS__CPUSET_H_
 
+#include <sys/param.h>
 #include <sys/_bitset.h>
 
 #ifdef _KERNEL
