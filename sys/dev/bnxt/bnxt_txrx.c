@@ -49,7 +49,7 @@ __FBSDID("$FreeBSD$");
  */
 
 static int bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi);
-static void bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t credits);
+static void bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t pidx);
 static int bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t cidx,
     bool clear);
 
@@ -119,7 +119,7 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 
 	pi->ipi_new_pidx = pi->ipi_pidx;
 	tbd = &((struct tx_bd_long *)txr->ring.vaddr)[pi->ipi_new_pidx];
-	pi->ipi_ndescs = 1;
+	pi->ipi_ndescs = 0;
 	tbd->opaque = htole32(pi->ipi_new_pidx);
 	tbd->len = htole16(pi->ipi_segs[seg].ds_len);
 	tbd->addr = htole64(pi->ipi_segs[seg++].ds_addr);
@@ -131,7 +131,6 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 		tbd->flags_type = htole16(flags_type);
 
 		pi->ipi_new_pidx = RING_NEXT(&txr->ring, pi->ipi_new_pidx);
-		pi->ipi_ndescs++;
 		tbdh = &((struct tx_bd_long_hi *)txr->ring.vaddr)[pi->ipi_new_pidx];
 		tbdh->mss = htole16(pi->ipi_tso_segsz);
 		tbdh->hdr_size = htole16(pi->ipi_ehdrlen + pi->ipi_ip_hlen + pi->ipi_tcp_hlen);
@@ -162,7 +161,6 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 	for (; seg < pi->ipi_nsegs; seg++) {
 		tbd->flags_type = htole16(flags_type);
 		pi->ipi_new_pidx = RING_NEXT(&txr->ring, pi->ipi_new_pidx);
-		pi->ipi_ndescs++;
 		tbd = &((struct tx_bd_long *)txr->ring.vaddr)[pi->ipi_new_pidx];
 		tbd->len = htole16(pi->ipi_segs[seg].ds_len);
 		tbd->addr = htole64(pi->ipi_segs[seg].ds_addr);
@@ -176,13 +174,12 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 }
 
 static void
-bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t credits)
+bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t pidx)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_tx_ring *tx_ring = &softc->tx_rings[txqid];
 
-	tx_ring->prod += credits;
-	tx_ring->prod &= tx_ring->ring.ring_mask;
+	tx_ring->prod = pidx;
 	BNXT_TX_DB(tx_ring);
 	return;
 }
