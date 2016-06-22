@@ -218,19 +218,8 @@ static struct if_shared_ctx bnxt_sctx_init = {
 	.isc_rx_nsegments = 1,
 	.isc_ntxqs = 2,
 	.isc_nrxqs = 3,
-	.isc_nrxd = PAGE_SIZE / sizeof(struct rx_pkt_cmpl),
-	.isc_ntxd = PAGE_SIZE / sizeof(struct tx_bd_short),
 	.isc_admin_intrcnt = 1,
 	.isc_vendor_info = bnxt_vendor_info_array,
-	/*
-	 * TODO: Previously completion rings were twice the size of
-	 * the other rings.  This is because overrunning the completion
-	 * ring hands the hardware, and we can get more completions than
-	 * what we produce.  Unfortunately, using the pidx method makes
-	 * this a bit tricky, so they're the same size for now.
-	 */
-	.isc_txqsizes = {PAGE_SIZE * 2, PAGE_SIZE},
-	.isc_rxqsizes = {PAGE_SIZE * 2, PAGE_SIZE, PAGE_SIZE},
 };
 
 if_shared_ctx_t bnxt_sctx = &bnxt_sctx_init;
@@ -290,7 +279,7 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->tx_cp_rings[i].ring.id =
 		    (softc->scctx->isc_nrxqsets * 2) + 1 + i;
 		softc->tx_cp_rings[i].ring.doorbell = softc->tx_cp_rings[i].ring.id * 0x80;
-		softc->tx_cp_rings[i].ring.ring_size = softc->sctx->isc_ntxd * 2;
+		softc->tx_cp_rings[i].ring.ring_size = softc->scctx->isc_ntxd * 2;
 		softc->tx_cp_rings[i].ring.ring_mask =
 		    softc->tx_cp_rings[i].ring.ring_size - 1;
 		softc->tx_cp_rings[i].ring.vaddr = vaddrs[i * ntxqs];
@@ -302,7 +291,7 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->tx_rings[i].ring.id =
 		    (softc->scctx->isc_nrxqsets * 2) + 1 + i;
 		softc->tx_rings[i].ring.doorbell = softc->tx_rings[i].ring.id * 0x80;
-		softc->tx_rings[i].ring.ring_size = softc->sctx->isc_ntxd;
+		softc->tx_rings[i].ring.ring_size = softc->scctx->isc_ntxd;
 		softc->tx_rings[i].ring.ring_mask =
 		    softc->tx_rings[i].ring.ring_size - 1;
 		softc->tx_rings[i].prod = 0;
@@ -415,7 +404,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->rx_cp_rings[i].ring.softc = softc;
 		softc->rx_cp_rings[i].ring.id = i + 1;
 		softc->rx_cp_rings[i].ring.doorbell = softc->rx_cp_rings[i].ring.id * 0x80;
-		softc->rx_cp_rings[i].ring.ring_size = softc->sctx->isc_nrxd * 2;
+		softc->rx_cp_rings[i].ring.ring_size = softc->scctx->isc_nrxd * 2;
 		softc->rx_cp_rings[i].ring.ring_mask =
 		    softc->rx_cp_rings[i].ring.ring_size - 1;
 		softc->rx_cp_rings[i].ring.vaddr = vaddrs[i * nrxqs];
@@ -426,7 +415,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->rx_rings[i].ring.softc = softc;
 		softc->rx_rings[i].ring.id = i + 1;
 		softc->rx_rings[i].ring.doorbell = softc->rx_rings[i].ring.id * 0x80;
-		softc->rx_rings[i].ring.ring_size = softc->sctx->isc_nrxd;
+		softc->rx_rings[i].ring.ring_size = softc->scctx->isc_nrxd;
 		softc->rx_rings[i].ring.ring_mask =
 		    softc->rx_rings[i].ring.ring_size - 1;
 		softc->rx_rings[i].prod = 0;
@@ -438,7 +427,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->ag_rings[i].ring.softc = softc;
 		softc->ag_rings[i].ring.id = nrxqsets + i + 1;
 		softc->ag_rings[i].ring.doorbell = softc->ag_rings[i].ring.id * 0x80;
-		softc->ag_rings[i].ring.ring_size = softc->sctx->isc_nrxd;
+		softc->ag_rings[i].ring.ring_size = softc->scctx->isc_nrxd;
 		softc->ag_rings[i].ring.ring_mask =
 		    softc->ag_rings[i].ring.ring_size - 1;
 		softc->ag_rings[i].prod = 0;
@@ -562,6 +551,13 @@ bnxt_attach_pre(if_ctx_t ctx)
 	scctx->isc_tx_tso_size_max = BNXT_TSO_SIZE;
 	scctx->isc_tx_tso_segsize_max = BNXT_TSO_SIZE;
 	scctx->isc_vectors = softc->pf.max_cp_rings;
+	scctx->isc_nrxd = PAGE_SIZE / sizeof(struct rx_pkt_cmpl),
+	scctx->isc_ntxd = PAGE_SIZE / sizeof(struct tx_bd_short),
+	scctx->isc_txqsizes[0] = PAGE_SIZE * 2;
+	scctx->isc_txqsizes[1] = PAGE_SIZE;
+	scctx->isc_rxqsizes[0] = PAGE_SIZE * 2;
+	scctx->isc_rxqsizes[1] = PAGE_SIZE;
+	scctx->isc_rxqsizes[2] = PAGE_SIZE;
 
 	/* iflib will map and release this bar */
 	scctx->isc_msix_bar = pci_msix_table_bar(softc->dev);
@@ -626,9 +622,6 @@ bnxt_attach_post(if_ctx_t ctx)
 	    IFCAP_HWCSUM_IPV6 | IFCAP_JUMBO_MTU | IFCAP_LRO;
 
 	if_setcapenable(ifp, enabling);
-
-	// JFV - This needs to be set according to the adapter
-	if_setbaudrate(ifp, IF_Gbps(25));
 
 	softc->scctx->isc_max_frame_size = ifp->if_mtu + ETHER_HDR_LEN + ETHER_CRC_LEN;
 
@@ -1215,11 +1208,11 @@ bnxt_report_link(struct bnxt_softc *softc)
                         flow_ctrl = "FC - receive";
                 else
                         flow_ctrl = "none";
-		iflib_link_state_change(softc->ctx, LINK_STATE_UP);
+		iflib_link_state_change(softc->ctx, LINK_STATE_UP, IF_Gbps(100));
                 device_printf(softc->dev, "Link is UP %s, %s\n", duplex,
 		    flow_ctrl);
         } else {
-		iflib_link_state_change(softc->ctx, LINK_STATE_DOWN);
+		iflib_link_state_change(softc->ctx, LINK_STATE_DOWN, IF_Gbps(100));
                 device_printf(softc->dev, "Link is Down %s, %s\n", duplex,
 		    flow_ctrl);
         }
