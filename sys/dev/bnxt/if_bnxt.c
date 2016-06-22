@@ -701,6 +701,7 @@ bnxt_init(if_ctx_t ctx)
 			goto fail;
 
 		/* Allocate the RX ring */
+		softc->rx_rings[i].prod = 0;
 		rc = bnxt_hwrm_ring_alloc(softc,
 		    HWRM_RING_ALLOC_INPUT_RING_TYPE_RX,
 		    &softc->rx_rings[i].ring,
@@ -710,6 +711,7 @@ bnxt_init(if_ctx_t ctx)
 			goto fail;
 
 		/* Allocate the AG ring */
+		softc->ag_rings[i].prod = 0;
 		rc = bnxt_hwrm_ring_alloc(softc,
 		    HWRM_RING_ALLOC_INPUT_RING_TYPE_RX,
 		    &softc->ag_rings[i].ring,
@@ -768,6 +770,7 @@ bnxt_init(if_ctx_t ctx)
 			goto fail;
 
 		/* Allocate the TX ring */
+		softc->tx_rings[i].prod = 0;
 		rc = bnxt_hwrm_ring_alloc(softc,
 		    HWRM_RING_ALLOC_INPUT_RING_TYPE_TX,
 		    &softc->tx_rings[i].ring,
