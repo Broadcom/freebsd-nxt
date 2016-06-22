@@ -794,7 +794,6 @@ bnxt_stop(if_ctx_t ctx)
 
 	bnxt_hwrm_func_reset(softc);
 	bnxt_clear_ids(softc);
-	if_setdrvflagbits(iflib_get_ifp(ctx), 0, IFF_DRV_RUNNING);
 	return;
 }
 
