@@ -1265,6 +1265,7 @@ bnxt_clear_ids(struct bnxt_softc *softc)
 		softc->rx_rings[i].ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->ag_rings[i].ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->grp_info[i].grp_id = (uint16_t)HWRM_NA_SIGNATURE;
+		softc->vnic_info[i].filter_id = -1;
 		softc->vnic_info[i].id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->vnic_info[i].ctx_id = (uint16_t)HWRM_NA_SIGNATURE;
 	}
