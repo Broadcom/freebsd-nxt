@@ -558,6 +558,12 @@ bnxt_attach_pre(if_ctx_t ctx)
 	scctx->isc_rxqsizes[0] = PAGE_SIZE * 2;
 	scctx->isc_rxqsizes[1] = PAGE_SIZE;
 	scctx->isc_rxqsizes[2] = PAGE_SIZE;
+	scctx->isc_max_rxqsets = min(pci_msix_count(softc->dev)-1,
+	    softc->pf.max_cp_rings - 1);
+	scctx->isc_max_rxqsets = min(scctx->isc_max_rxqsets,
+	    softc->pf.max_rx_rings);
+	scctx->isc_max_txqsets = min(softc->pf.max_rx_rings,
+	    softc->pf.max_cp_rings - scctx->isc_max_rxqsets - 1);
 
 	/* iflib will map and release this bar */
 	scctx->isc_msix_bar = pci_msix_table_bar(softc->dev);
