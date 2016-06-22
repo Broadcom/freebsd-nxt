@@ -184,7 +184,7 @@ bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t pidx)
 	/* TODO: If we could actually get the pidx here, we could use that */
 	tx_ring->prod += pidx;
 	tx_ring->prod &= tx_ring->ring.ring_mask;
-	BNXT_TX_DB(tx_ring->ring.doorbell, tx_ring->prod);
+	BNXT_TX_DB(tx_ring);
 	return;
 }
 
@@ -268,7 +268,7 @@ bnxt_isc_rxd_flush(void *sc, uint16_t rxqid, uint8_t flid,
 	else
 		rx_ring = &softc->ag_rings[rxqid];
 
-	BNXT_RX_DB(rx_ring->ring.doorbell, rx_ring->prod);
+	BNXT_RX_DB(rx_ring);
 	return;
 }
 

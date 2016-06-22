@@ -288,8 +288,8 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		    (uint16_t)HWRM_NA_SIGNATURE;
 		softc->tx_cp_rings[i].ring.softc = softc;
 		softc->tx_cp_rings[i].ring.id =
-		    (softc->scctx->isc_nrxqsets * 3) + 1 + (i * 2);
-		softc->tx_cp_rings[i].ring.doorbell = softc->doorbell_bar.kva + (softc->tx_cp_rings[i].ring.id * 0x80);
+		    (softc->scctx->isc_nrxqsets * 2) + 1 + i;
+		softc->tx_cp_rings[i].ring.doorbell = softc->tx_cp_rings[i].ring.id * 0x80;
 		softc->tx_cp_rings[i].ring.ring_size = softc->sctx->isc_ntxd * 2;
 		softc->tx_cp_rings[i].ring.ring_mask =
 		    softc->tx_cp_rings[i].ring.ring_size - 1;
@@ -300,8 +300,8 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->tx_rings[i].ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->tx_rings[i].ring.softc = softc;
 		softc->tx_rings[i].ring.id =
-		    (softc->scctx->isc_nrxqsets * 3) + 1 + (i * 2) + 1;
-		softc->tx_rings[i].ring.doorbell = softc->doorbell_bar.kva + (softc->tx_rings[i].ring.id * 0x80);
+		    (softc->scctx->isc_nrxqsets * 2) + 1 + i;
+		softc->tx_rings[i].ring.doorbell = softc->tx_rings[i].ring.id * 0x80;
 		softc->tx_rings[i].ring.ring_size = softc->sctx->isc_ntxd;
 		softc->tx_rings[i].ring.ring_mask =
 		    softc->tx_rings[i].ring.ring_size - 1;
@@ -414,7 +414,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		    (uint16_t)HWRM_NA_SIGNATURE;
 		softc->rx_cp_rings[i].ring.softc = softc;
 		softc->rx_cp_rings[i].ring.id = i + 1;
-		softc->rx_cp_rings[i].ring.doorbell = softc->doorbell_bar.kva + (softc->rx_cp_rings[i].ring.id * 0x80);
+		softc->rx_cp_rings[i].ring.doorbell = softc->rx_cp_rings[i].ring.id * 0x80;
 		softc->rx_cp_rings[i].ring.ring_size = softc->sctx->isc_nrxd * 2;
 		softc->rx_cp_rings[i].ring.ring_mask =
 		    softc->rx_cp_rings[i].ring.ring_size - 1;
@@ -424,8 +424,8 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		/* Allocate the RX ring */
 		softc->rx_rings[i].ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->rx_rings[i].ring.softc = softc;
-		softc->rx_rings[i].ring.id = nrxqsets + 1 + (i * 2);
-		softc->rx_rings[i].ring.doorbell = softc->doorbell_bar.kva + (softc->rx_rings[i].ring.id * 0x80);
+		softc->rx_rings[i].ring.id = i + 1;
+		softc->rx_rings[i].ring.doorbell = softc->rx_rings[i].ring.id * 0x80;
 		softc->rx_rings[i].ring.ring_size = softc->sctx->isc_nrxd;
 		softc->rx_rings[i].ring.ring_mask =
 		    softc->rx_rings[i].ring.ring_size - 1;
@@ -436,8 +436,8 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		/* Allocate the AG ring */
 		softc->ag_rings[i].ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->ag_rings[i].ring.softc = softc;
-		softc->ag_rings[i].ring.id = nrxqsets + 1 + (i * 2) + 1;
-		softc->ag_rings[i].ring.doorbell = softc->doorbell_bar.kva + (softc->ag_rings[i].ring.id * 0x80);
+		softc->ag_rings[i].ring.id = nrxqsets + i + 1;
+		softc->ag_rings[i].ring.doorbell = softc->ag_rings[i].ring.id * 0x80;
 		softc->ag_rings[i].ring.ring_size = softc->sctx->isc_nrxd;
 		softc->ag_rings[i].ring.ring_mask =
 		    softc->ag_rings[i].ring.ring_size - 1;
@@ -571,7 +571,7 @@ bnxt_attach_pre(if_ctx_t ctx)
 	softc->def_cp_ring.ring.phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 	softc->def_cp_ring.ring.softc = softc;
 	softc->def_cp_ring.ring.id = 0;
-	softc->def_cp_ring.ring.doorbell = softc->doorbell_bar.kva + (softc->def_cp_ring.ring.id * 0x80);
+	softc->def_cp_ring.ring.doorbell = softc->def_cp_ring.ring.id * 0x80;
 	softc->def_cp_ring.ring.ring_size = PAGE_SIZE / sizeof(struct cmpl_base);
 	softc->def_cp_ring.ring.ring_mask = softc->def_cp_ring.ring.ring_size - 1;
 	rc = iflib_dma_alloc(ctx, sizeof(struct cmpl_base) * softc->def_cp_ring.ring.ring_size,
@@ -1105,7 +1105,6 @@ bnxt_map_bar(struct bnxt_softc *softc, struct bnxt_bar_info *bar, int bar_num, b
 	bar->tag = rman_get_bustag(bar->res);
 	bar->handle = rman_get_bushandle(bar->res);
 	bar->size = rman_get_size(bar->res);
-	bar->kva = (vm_offset_t)rman_get_virtual(bar->res);
 
 	return 0;
 }

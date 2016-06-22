@@ -75,8 +75,8 @@ __FBSDID("$FreeBSD$");
 	 !((raw_cons) & ((ring)->ring_size)))
 
 /* Test validity of an aggregation buffer */
-#define RX_AGG_CMP_VALID(agg, raw_cons, ring)                         \
-	(!!((agg)->rx_agg_cmp_v & htole32(RX_AGG_CMP_V)) == \
+#define RX_AGG_CMP_VALID(agg, raw_cons, ring)				    \
+	(!!((agg)->rx_agg_cmp_v & htole32(RX_AGG_CMP_V)) ==		    \
 	!((raw_cons) & ring->ring_size))
 
 #define TX_CMP_TYPE(txcmp) (le32toh((txcmp)->flags_type) & TX_CMPL_TYPE_MASK)
@@ -109,13 +109,33 @@ __FBSDID("$FreeBSD$");
 #define DB_DISABLE(ring, cons) (DB_CP_DIS_FLAGS | RING_CMP(ring, cons))
 #define DB_RING(ring, cons) (DB_CP_FLAGS | RING_CMP(ring, cons))
 
-#define BNXT_TX_DB(db, value) *(volatile uint32_t *)(db) = (DB_KEY_TX | value)
-#define BNXT_RX_DB(db, value) *(volatile uint32_t *)(db) = (DB_KEY_RX | value)
+#define BNXT_TX_DB(tx_ring)	bus_space_write_4(			    \
+	tx_ring->ring.softc->doorbell_bar.tag,				    \
+	tx_ring->ring.softc->doorbell_bar.handle,			    \
+	tx_ring->ring.doorbell, DB_KEY_TX | tx_ring->prod)
+#define BNXT_RX_DB(rx_ring)	bus_space_write_4(			    \
+	rx_ring->ring.softc->doorbell_bar.tag,				    \
+	rx_ring->ring.softc->doorbell_bar.handle,			    \
+	rx_ring->ring.doorbell, DB_KEY_RX | rx_ring->prod)
 
-#define BNXT_CP_DISABLE_DB(ring, cons)					    \
-	    *(volatile uint32_t *)((ring)->doorbell) = DB_DISABLE(ring, cons)
-#define BNXT_CP_ARM_DB(ring, cons) *(volatile uint32_t *)((ring)->doorbell) = DB_REARM(ring, cons)
-#define BNXT_CP_DB(ring, cons) *(volatile uint32_t *)((ring)->doorbell) = DB_RING(ring, cons)
+#define BNXT_CP_DISABLE_DB(ring, cons)					   \
+	bus_space_write_4((ring)->softc->doorbell_bar.tag,		   \
+	(ring)->softc->doorbell_bar.handle, (ring)->doorbell,		   \
+	DB_DISABLE(ring, cons))
+#define BNXT_CP_ARM_DB(ring, cons)					   \
+	bus_space_barrier((ring)->softc->doorbell_bar.tag,		   \
+	(ring)->softc->doorbell_bar.handle, 0,				   \
+	(ring)->softc->doorbell_bar.size, BUS_SPACE_BARRIER_WRITE);	   \
+	bus_space_write_4((ring)->softc->doorbell_bar.tag,		   \
+	(ring)->softc->doorbell_bar.handle, (ring)->doorbell,		   \
+	DB_REARM(ring, cons))
+#define BNXT_CP_DB(ring, cons)						   \
+	bus_space_barrier((ring)->softc->doorbell_bar.tag,		   \
+	(ring)->softc->doorbell_bar.handle, 0,				   \
+	(ring)->softc->doorbell_bar.size, BUS_SPACE_BARRIER_WRITE);	   \
+	bus_space_write_4((ring)->softc->doorbell_bar.tag,		   \
+	(ring)->softc->doorbell_bar.handle, (ring)->doorbell,		   \
+	DB_RING(ring, cons))
 
 /* Lock macros */
 #define BNXT_HWRM_LOCK_INIT(_softc, _name) \
@@ -123,7 +143,8 @@ __FBSDID("$FreeBSD$");
 #define BNXT_HWRM_LOCK(_softc)		mtx_lock(&(_softc)->hwrm_lock)
 #define BNXT_HWRM_UNLOCK(_softc)	mtx_unlock(&(_softc)->hwrm_lock)
 #define BNXT_HWRM_LOCK_DESTROY(_softc)	mtx_destroy(&(_softc)->hwrm_lock)
-#define BNXT_HWRM_LOCK_ASSERT(_softc)	mtx_assert(&(_softc)->hwrm_lock, MA_OWNED)
+#define BNXT_HWRM_LOCK_ASSERT(_softc)	mtx_assert(&(_softc)->hwrm_lock,   \
+					           MA_OWNED)
 
 /* Chip info */
 #define BNXT_TSO_SIZE	UINT16_MAX
@@ -135,7 +156,6 @@ struct bnxt_bar_info {
 	bus_space_handle_t	handle;
 	bus_size_t		size;
 	int			rid;
-	vm_offset_t		kva;
 };
 
 struct bnxt_link_info {
@@ -166,7 +186,8 @@ struct bnxt_link_info {
 #define BNXT_LINK_AUTO_NONE	HWRM_PORT_PHY_QCFG_OUTPUT_AUTO_MODE_NONE
 #define BNXT_LINK_AUTO_ALLSPDS	HWRM_PORT_PHY_QCFG_OUTPUT_AUTO_MODE_ALL_SPEEDS
 #define BNXT_LINK_AUTO_ONESPD	HWRM_PORT_PHY_QCFG_OUTPUT_AUTO_MODE_ONE_SPEED
-#define BNXT_LINK_AUTO_ONEORBELOW HWRM_PORT_PHY_QCFG_OUTPUT_AUTO_MODE_ONE_OR_BELOW
+#define BNXT_LINK_AUTO_ONEORBELOW					    \
+    HWRM_PORT_PHY_QCFG_OUTPUT_AUTO_MODE_ONE_OR_BELOW
 #define BNXT_LINK_AUTO_MSK	HWRM_PORT_PHY_QCFG_OUTPUT_AUTO_MODE_SPEED_MASK
 #define PHY_VER_LEN		3
 	uint8_t		phy_ver[PHY_VER_LEN];
