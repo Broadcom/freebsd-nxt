@@ -123,19 +123,19 @@ __FBSDID("$FreeBSD$");
 	(ring)->softc->doorbell_bar.handle, (ring)->doorbell,		   \
 	DB_DISABLE(ring, cons))
 #define BNXT_CP_ARM_DB(ring, cons)					   \
-	bus_space_barrier((ring)->softc->doorbell_bar.tag,		   \
-	(ring)->softc->doorbell_bar.handle, 0,				   \
-	(ring)->softc->doorbell_bar.size, BUS_SPACE_BARRIER_WRITE);	   \
 	bus_space_write_4((ring)->softc->doorbell_bar.tag,		   \
 	(ring)->softc->doorbell_bar.handle, (ring)->doorbell,		   \
-	DB_REARM(ring, cons))
+	DB_REARM(ring, cons));						   \
+	bus_space_barrier((ring)->softc->doorbell_bar.tag,		   \
+	(ring)->softc->doorbell_bar.handle, 0,				   \
+	(ring)->softc->doorbell_bar.size, BUS_SPACE_BARRIER_WRITE)
 #define BNXT_CP_DB(ring, cons)						   \
-	bus_space_barrier((ring)->softc->doorbell_bar.tag,		   \
-	(ring)->softc->doorbell_bar.handle, 0,				   \
-	(ring)->softc->doorbell_bar.size, BUS_SPACE_BARRIER_WRITE);	   \
 	bus_space_write_4((ring)->softc->doorbell_bar.tag,		   \
 	(ring)->softc->doorbell_bar.handle, (ring)->doorbell,		   \
-	DB_RING(ring, cons))
+	DB_RING(ring, cons));						   \
+	bus_space_barrier((ring)->softc->doorbell_bar.tag,		   \
+	(ring)->softc->doorbell_bar.handle, 0,				   \
+	(ring)->softc->doorbell_bar.size, BUS_SPACE_BARRIER_WRITE)
 
 /* Lock macros */
 #define BNXT_HWRM_LOCK_INIT(_softc, _name) \
