@@ -217,7 +217,7 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 		avail += (tbd->flags_type & TX_BD_SHORT_FLAGS_BD_CNT_MASK) >> TX_BD_SHORT_FLAGS_BD_CNT_SFT;
 	}
 
-	if (clear) {
+	if (clear && avail) {
 		cpr->raw_cons = raw;
 		BNXT_CP_DB(&cpr->ring, cpr->raw_cons);
 	}
@@ -316,8 +316,6 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx)
 	}
 	cpr->enable_at = last_valid;
 
-	if (!avail)
-		BNXT_CP_ARM_DB(&cpr->ring, cpr->raw_cons);
 	return avail;
 }
 
@@ -397,8 +395,10 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 	}
 	if (flags2 & RX_PKT_CMPL_FLAGS2_L4_CS_CALC) {
 		ri->iri_csum_flags |= CSUM_L4_CALC;
-		if (!(errors & RX_PKT_CMPL_ERRORS_L4_CS_ERROR))
+		if (!(errors & RX_PKT_CMPL_ERRORS_L4_CS_ERROR)) {
 			ri->iri_csum_flags |= CSUM_L4_VALID;
+			ri->iri_csum_data = 0xffff;
+		}
 	}
 
 	/* And finally the ag ring stuff. */
