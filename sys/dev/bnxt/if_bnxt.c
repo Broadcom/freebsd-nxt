@@ -915,8 +915,26 @@ bnxt_media_change(if_ctx_t ctx)
 static int
 bnxt_promisc_set(if_ctx_t ctx, int flags)
 {
-	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
-	return ENOSYS;
+	struct bnxt_softc *softc = iflib_get_softc(ctx);
+	struct bnxt_vnic_info *vnic = &softc->vnic_info[0];
+	if_t ifp = iflib_get_ifp(ctx);
+	int rc;
+
+	if (ifp->if_flags & IFF_ALLMULTI ||
+	    if_multiaddr_count(ifp, -1) > BNXT_MAX_MC_ADDRS)
+		vnic->rx_mask |= HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_ALL_MCAST;
+	else
+		vnic->rx_mask &= ~HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_ALL_MCAST;
+
+	if (ifp->if_flags & IFF_PROMISC)
+		vnic->rx_mask |= HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_PROMISCUOUS;
+	else
+		vnic->rx_mask &=
+		    ~HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_PROMISCUOUS;
+
+	rc = bnxt_hwrm_cfa_l2_set_rx_mask(softc, vnic);
+
+	return rc;
 }
 
 static uint64_t
