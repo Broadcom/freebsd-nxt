@@ -103,7 +103,7 @@ static int
 bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
-	struct bnxt_tx_ring *txr = &softc->tx_rings[pi->ipi_qsidx];
+	struct bnxt_ring *txr = &softc->tx_rings[pi->ipi_qsidx];
 	struct tx_bd_long *tbd;
 	struct tx_bd_long_hi *tbdh;
 	bool need_hi = false;
@@ -118,7 +118,7 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 		need_hi = true;
 
 	pi->ipi_new_pidx = pi->ipi_pidx;
-	tbd = &((struct tx_bd_long *)txr->ring.vaddr)[pi->ipi_new_pidx];
+	tbd = &((struct tx_bd_long *)txr->vaddr)[pi->ipi_new_pidx];
 	pi->ipi_ndescs = 0;
 	tbd->opaque = htole32(pi->ipi_new_pidx);
 	tbd->len = htole16(pi->ipi_segs[seg].ds_len);
@@ -130,8 +130,8 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 		flags_type |= TX_BD_LONG_TYPE_TX_BD_LONG;
 		tbd->flags_type = htole16(flags_type);
 
-		pi->ipi_new_pidx = RING_NEXT(&txr->ring, pi->ipi_new_pidx);
-		tbdh = &((struct tx_bd_long_hi *)txr->ring.vaddr)[pi->ipi_new_pidx];
+		pi->ipi_new_pidx = RING_NEXT(txr, pi->ipi_new_pidx);
+		tbdh = &((struct tx_bd_long_hi *)txr->vaddr)[pi->ipi_new_pidx];
 		tbdh->mss = htole16(pi->ipi_tso_segsz);
 		tbdh->hdr_size = htole16(pi->ipi_ehdrlen + pi->ipi_ip_hlen + pi->ipi_tcp_hlen);
 		tbdh->cfa_action = 0;
@@ -160,15 +160,15 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 
 	for (; seg < pi->ipi_nsegs; seg++) {
 		tbd->flags_type = htole16(flags_type);
-		pi->ipi_new_pidx = RING_NEXT(&txr->ring, pi->ipi_new_pidx);
-		tbd = &((struct tx_bd_long *)txr->ring.vaddr)[pi->ipi_new_pidx];
+		pi->ipi_new_pidx = RING_NEXT(txr, pi->ipi_new_pidx);
+		tbd = &((struct tx_bd_long *)txr->vaddr)[pi->ipi_new_pidx];
 		tbd->len = htole16(pi->ipi_segs[seg].ds_len);
 		tbd->addr = htole64(pi->ipi_segs[seg].ds_addr);
 		flags_type = TX_BD_SHORT_TYPE_TX_BD_SHORT;
 	}
 	flags_type |= TX_BD_SHORT_FLAGS_PACKET_END;
 	tbd->flags_type = htole16(flags_type);
-	pi->ipi_new_pidx = RING_NEXT(&txr->ring, pi->ipi_new_pidx);
+	pi->ipi_new_pidx = RING_NEXT(txr, pi->ipi_new_pidx);
 
 	return 0;
 }
@@ -177,10 +177,9 @@ static void
 bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t pidx)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
-	struct bnxt_tx_ring *tx_ring = &softc->tx_rings[txqid];
+	struct bnxt_ring *tx_ring = &softc->tx_rings[txqid];
 
-	tx_ring->prod = pidx;
-	BNXT_TX_DB(tx_ring);
+	BNXT_TX_DB(tx_ring, pidx);
 	return;
 }
 
@@ -189,7 +188,7 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_cp_ring *cpr = &softc->tx_cp_rings[txqid];
-	struct bnxt_tx_ring *txr = &softc->tx_rings[txqid];
+	struct bnxt_ring *txr = &softc->tx_rings[txqid];
 	struct tx_cmpl *tcp;
 	struct tx_bd_long *tbd;
 	int avail = 0;
@@ -207,7 +206,7 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 		}
 
 		/* Get the BD that this completes */
-		tbd = &((struct tx_bd_long *)txr->ring.vaddr)[le32toh(tcp->opaque)];
+		tbd = &((struct tx_bd_long *)txr->vaddr)[le32toh(tcp->opaque)];
 
 		/* And extract how many BDs were used */
 		avail += (tbd->flags_type & TX_BD_SHORT_FLAGS_BD_CNT_MASK) >> TX_BD_SHORT_FLAGS_BD_CNT_SFT;
@@ -227,27 +226,28 @@ bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
 				caddr_t *vaddrs, uint16_t count)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
-	struct bnxt_rx_ring *rx_ring;
+	struct bnxt_ring *rx_ring;
 	struct rx_prod_pkt_bd *rxbd;
 	uint16_t type;
 	uint16_t i;
 
 	if (flid == 0) {
 		rx_ring = &softc->rx_rings[rxqid];
-		rxbd = (void *)rx_ring->ring.vaddr;
+		rxbd = (void *)rx_ring->vaddr;
 		type = RX_PROD_PKT_BD_TYPE_RX_PROD_PKT;
 	}
 	else {
 		rx_ring = &softc->ag_rings[rxqid];
-		rxbd = (void *)rx_ring->ring.vaddr;
+		rxbd = (void *)rx_ring->vaddr;
 		type = RX_PROD_AGG_BD_TYPE_RX_PROD_AGG;
 	}
 	for (i=0; i<count; i++) {
-		rxbd[rx_ring->prod].flags_type = htole16(type);
-		rxbd[rx_ring->prod].len = htole16(softc->scctx->isc_max_frame_size);
-		rxbd[rx_ring->prod].opaque = rx_ring->prod;
-		rxbd[rx_ring->prod].addr = htole64(paddrs[i]);
-		rx_ring->prod = RING_NEXT(&rx_ring->ring, rx_ring->prod);
+		rxbd[pidx].flags_type = htole16(type);
+		rxbd[pidx].len = htole16(softc->scctx->isc_max_frame_size);
+		rxbd[pidx].opaque = pidx;
+		rxbd[pidx].addr = htole64(paddrs[i]);
+		if (++pidx == rx_ring->ring_size)
+			pidx = 0;
 	}
 	return;
 }
@@ -257,14 +257,14 @@ bnxt_isc_rxd_flush(void *sc, uint16_t rxqid, uint8_t flid,
     uint32_t pidx)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
-	struct bnxt_rx_ring *rx_ring;
+	struct bnxt_ring *rx_ring;
 
 	if (flid == 0)
 		rx_ring = &softc->rx_rings[rxqid];
 	else
 		rx_ring = &softc->ag_rings[rxqid];
 
-	BNXT_RX_DB(rx_ring);
+	BNXT_RX_DB(rx_ring, pidx);
 	return;
 }
 
@@ -277,13 +277,11 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx)
 	struct cmpl_base *cmp;
 	int avail = 0;
 	uint32_t raw = cpr->raw_cons;
-	uint32_t last_valid;
 	uint32_t cons;
 	uint8_t ags;
 	int i;
 
 	for (;;) {
-		last_valid = raw;
 		raw++;
 		cons = RING_CMP(&cpr->ring, raw);
 		rcp = &((struct rx_pkt_cmpl *)cpr->ring.vaddr)[cons];
@@ -310,7 +308,6 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx)
 			avail++;
 		}
 	}
-	cpr->enable_at = last_valid;
 
 	return avail;
 }
@@ -406,14 +403,6 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 		ri->iri_frags[i].irf_flid = 1;
 		ri->iri_frags[i].irf_idx = le32toh(acp->opaque);
 		ri->iri_len += le16toh(acp->len);
-	}
-
-	/* Notify the hardware we've handled the completion */
-	if (cpr->enable_at == raw) {
-		BNXT_CP_ARM_DB(&cpr->ring, raw);
-	}
-	else {
-		BNXT_CP_DB(&cpr->ring, raw);
 	}
 	cpr->raw_cons = raw;
 

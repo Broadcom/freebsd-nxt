@@ -77,7 +77,7 @@ __FBSDID("$FreeBSD$");
 /* Test validity of an aggregation buffer */
 #define RX_AGG_CMP_VALID(agg, raw_cons, ring)				    \
 	(!!((agg)->rx_agg_cmp_v & htole32(RX_AGG_CMP_V)) ==		    \
-	!((raw_cons) & ring->ring_size))
+	!((raw_cons) & (ring)->ring_size))
 
 #define TX_CMP_TYPE(txcmp) (le32toh((txcmp)->flags_type) & TX_CMPL_TYPE_MASK)
 
@@ -88,7 +88,7 @@ __FBSDID("$FreeBSD$");
 #define NEXT_RAW_CMP(idx)	ADV_RAW_CMP(idx, 1)
 #define RING_CMP(ring, idx)	((idx) & (ring)->ring_mask)
 #define RING_NEXT(ring, idx)	(((idx) + 1) & (ring)->ring_mask)
-#define TX_CMP_THRESH(ring)	ring->ring_size / 8
+#define TX_CMP_THRESH(ring)	(ring)->ring_size / 8
 
 /* Doorbell related defines */
 #define DB_IDX_MASK	0xffffff
@@ -109,14 +109,12 @@ __FBSDID("$FreeBSD$");
 #define DB_DISABLE(ring, cons) (DB_CP_DIS_FLAGS | RING_CMP(ring, cons))
 #define DB_RING(ring, cons) (DB_CP_FLAGS | RING_CMP(ring, cons))
 
-#define BNXT_TX_DB(tx_ring)	bus_space_write_4(			    \
-	tx_ring->ring.softc->doorbell_bar.tag,				    \
-	tx_ring->ring.softc->doorbell_bar.handle,			    \
-	tx_ring->ring.doorbell, DB_KEY_TX | tx_ring->prod)
-#define BNXT_RX_DB(rx_ring)	bus_space_write_4(			    \
-	rx_ring->ring.softc->doorbell_bar.tag,				    \
-	rx_ring->ring.softc->doorbell_bar.handle,			    \
-	rx_ring->ring.doorbell, DB_KEY_RX | rx_ring->prod)
+#define BNXT_TX_DB(ring, idx) bus_space_write_4(			     \
+	(ring)->softc->doorbell_bar.tag, (ring)->softc->doorbell_bar.handle, \
+	(ring)->doorbell, DB_KEY_TX | (idx))
+#define BNXT_RX_DB(ring, idx) bus_space_write_4(			     \
+	(ring)->softc->doorbell_bar.tag, (ring)->softc->doorbell_bar.handle, \
+	(ring)->doorbell, DB_KEY_RX | (idx))
 
 #define BNXT_CP_DISABLE_DB(ring, cons)					   \
 	bus_space_write_4((ring)->softc->doorbell_bar.tag,		   \
@@ -361,24 +359,8 @@ struct bnxt_cp_ring {
 	struct bnxt_ring	ring;
 	struct if_irq		irq;
 	uint32_t		raw_cons;
-	uint32_t		enable_at;
 	struct ctx_hw_stats	*stats;
 	uint32_t		stats_ctx_id;
-};
-
-struct bnxt_tx_ring {
-	struct bnxt_ring	ring;
-	uint8_t			cos_queue_id;
-	uint16_t		prod; /* Producer index */
-	uint16_t		cons; /* Consumer index */
-	struct bnxt_cp_ring	*cp_ring;
-};
-
-struct bnxt_rx_ring {
-	struct bnxt_ring	ring;
-	uint16_t		mbuf_sz;
-	uint16_t		prod;
-	uint16_t		cons;
 };
 
 struct bnxt_softc {
@@ -421,13 +403,13 @@ struct bnxt_softc {
 
 	int			num_cp_rings;
 
-	struct bnxt_tx_ring	*tx_rings;
+	struct bnxt_ring	*tx_rings;
 	struct bnxt_cp_ring	*tx_cp_rings;
 	struct iflib_dma_info	tx_stats;
 	int			ntxqsets;
 
-	struct bnxt_rx_ring	*ag_rings;
-	struct bnxt_rx_ring	*rx_rings;
+	struct bnxt_ring	*ag_rings;
+	struct bnxt_ring	*rx_rings;
 	struct bnxt_cp_ring	*rx_cp_rings;
 	struct bnxt_vnic_info	*vnic_info;
 	struct bnxt_grp_info	*grp_info;
