@@ -133,21 +133,25 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 		pi->ipi_new_pidx = RING_NEXT(txr, pi->ipi_new_pidx);
 		tbdh = &((struct tx_bd_long_hi *)txr->vaddr)[pi->ipi_new_pidx];
 		tbdh->mss = htole16(pi->ipi_tso_segsz);
-		tbdh->hdr_size = htole16(pi->ipi_ehdrlen + pi->ipi_ip_hlen + pi->ipi_tcp_hlen);
+		tbdh->hdr_size = htole16(pi->ipi_ehdrlen + pi->ipi_ip_hlen +
+		    pi->ipi_tcp_hlen);
 		tbdh->cfa_action = 0;
 		lflags = 0;
 		cfa_meta = 0;
 		if (pi->ipi_mflags & M_VLANTAG) {
 			/* TODO: Do we need to byte-swap the vtag here? */
-			cfa_meta = TX_BD_LONG_CFA_META_KEY_VLAN_TAG | pi->ipi_vtag;
+			cfa_meta = TX_BD_LONG_CFA_META_KEY_VLAN_TAG |
+			    pi->ipi_vtag;
 			cfa_meta |= TX_BD_LONG_CFA_META_VLAN_TPID_TPID8100;
 		}
 		tbdh->cfa_meta = htole32(cfa_meta);
 		if (pi->ipi_csum_flags & CSUM_TSO) {
-			lflags |= TX_BD_LONG_LFLAGS_LSO | TX_BD_LONG_LFLAGS_T_IPID;
+			lflags |= TX_BD_LONG_LFLAGS_LSO |
+			    TX_BD_LONG_LFLAGS_T_IPID;
 		}
 		else if(pi->ipi_csum_flags & CSUM_OFFLOAD) {
-			lflags |= TX_BD_LONG_LFLAGS_TCP_UDP_CHKSUM | TX_BD_LONG_LFLAGS_IP_CHKSUM;
+			lflags |= TX_BD_LONG_LFLAGS_TCP_UDP_CHKSUM |
+			    TX_BD_LONG_LFLAGS_IP_CHKSUM;
 		}
 		else if(pi->ipi_csum_flags & CSUM_IP) {
 			lflags |= TX_BD_LONG_LFLAGS_IP_CHKSUM;
@@ -179,6 +183,7 @@ bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t pidx)
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_ring *tx_ring = &softc->tx_rings[txqid];
 
+	/* pidx is what we last set ipi_new_pidx to */
 	BNXT_TX_DB(tx_ring, pidx);
 	return;
 }
@@ -192,29 +197,32 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 	struct tx_cmpl *tcp;
 	struct tx_bd_long *tbd;
 	int avail = 0;
-	uint32_t raw = cpr->raw_cons;
-	uint32_t cons;
+	uint32_t cons = cpr->cons;
+	bool v_bit = cpr->v_bit;
+	bool last_v_bit;
+	uint32_t last_cons;
 
 	for (;;) {
-		raw++;
-		cons = RING_CMP(&cpr->ring, raw);
+		last_cons = cons;
+		last_v_bit = v_bit;
+		NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
 		tcp = &((struct tx_cmpl *)cpr->ring.vaddr)[cons];
 
-		if (!CMP_VALID(tcp, raw, &cpr->ring)) {
-			raw--;
+		if (!CMP_VALID(tcp, v_bit))
 			break;
-		}
 
 		/* Get the BD that this completes */
 		tbd = &((struct tx_bd_long *)txr->vaddr)[le32toh(tcp->opaque)];
 
 		/* And extract how many BDs were used */
-		avail += (tbd->flags_type & TX_BD_SHORT_FLAGS_BD_CNT_MASK) >> TX_BD_SHORT_FLAGS_BD_CNT_SFT;
+		avail += (tbd->flags_type & TX_BD_SHORT_FLAGS_BD_CNT_MASK) >>
+		    TX_BD_SHORT_FLAGS_BD_CNT_SFT;
 	}
 
 	if (clear && avail) {
-		cpr->raw_cons = raw;
-		BNXT_CP_DB(&cpr->ring, cpr->raw_cons);
+		cpr->cons = last_cons;
+		cpr->v_bit = last_v_bit;
+		BNXT_CP_IDX_DISABLE_DB(&cpr->ring, cpr->cons);
 	}
 
 	return avail;
@@ -244,7 +252,7 @@ bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
 	for (i=0; i<count; i++) {
 		rxbd[pidx].flags_type = htole16(type);
 		rxbd[pidx].len = htole16(softc->scctx->isc_max_frame_size);
-		rxbd[pidx].opaque = pidx;
+		rxbd[pidx].opaque = htole32(pidx);
 		rxbd[pidx].addr = htole64(paddrs[i]);
 		if (++pidx == rx_ring->ring_size)
 			pidx = 0;
@@ -264,7 +272,16 @@ bnxt_isc_rxd_flush(void *sc, uint16_t rxqid, uint8_t flid,
 	else
 		rx_ring = &softc->ag_rings[rxqid];
 
-	BNXT_RX_DB(rx_ring, pidx);
+	/*
+	 * We *must* update the completion ring before updating the RX ring
+	 * or we will overrun the completion ring and the device will wedge for
+	 * RX.
+	 */
+	if (softc->rx_cp_rings[rxqid].cons != UINT32_MAX)
+		BNXT_CP_IDX_DISABLE_DB(&softc->rx_cp_rings[rxqid].ring,
+		    softc->rx_cp_rings[rxqid].cons);
+	/* We're given the last filled RX buffer here, not the next empty one */
+	BNXT_RX_DB(rx_ring, RING_NEXT(rx_ring, pidx));
 	return;
 }
 
@@ -276,36 +293,54 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx)
 	struct rx_pkt_cmpl *rcp;
 	struct cmpl_base *cmp;
 	int avail = 0;
-	uint32_t raw = cpr->raw_cons;
-	uint32_t cons;
+	uint32_t cons = cpr->cons;
+	uint32_t next_idx = RING_NEXT(&softc->rx_rings[rxqid], cpr->last_idx);
+	bool v_bit = cpr->v_bit;
 	uint8_t ags;
 	int i;
+uint32_t orig_idx = idx;
+
+	/*
+	 * If idx is behind where we'll be looking, increment avail
+	 * appropriately.
+	 */
+	while (idx != next_idx) {
+		idx = RING_NEXT(&softc->rx_rings[rxqid], idx);
+		avail++;
+	}
+if (avail) device_printf(softc->dev, "Extra avail: %d\n", avail);
 
 	for (;;) {
-		raw++;
-		cons = RING_CMP(&cpr->ring, raw);
+		NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
 		rcp = &((struct rx_pkt_cmpl *)cpr->ring.vaddr)[cons];
-
-		if (!CMP_VALID(rcp, raw, &cpr->ring))
+		if (!CMP_VALID(rcp, v_bit))
 			break;
 
-		if ((rcp->flags_type & RX_PKT_CMPL_TYPE_MASK) == RX_PKT_CMPL_TYPE_RX_L2) {
-			ags = (rcp->agg_bufs_v1 & RX_PKT_CMPL_AGG_BUFS_MASK) >> RX_PKT_CMPL_AGG_BUFS_SFT;
-			raw++;
-			cons = RING_CMP(&cpr->ring, raw);
+		if ((le16toh(rcp->flags_type) & RX_PKT_CMPL_TYPE_MASK) ==
+		    RX_PKT_CMPL_TYPE_RX_L2) {
+			ags = (rcp->agg_bufs_v1 & RX_PKT_CMPL_AGG_BUFS_MASK) >>
+			    RX_PKT_CMPL_AGG_BUFS_SFT;
+			NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
 			cmp = &((struct cmpl_base *)cpr->ring.vaddr)[cons];
-			if (!CMP_VALID(cmp, raw, &cpr->ring))
+			if (!CMP_VALID(cmp, v_bit))
 				break;
 
 			/* Now account for all the AG completions */
 			for (i=0; i<ags; i++) {
-				raw++;
-				cons = RING_CMP(&cpr->ring, raw);
-				cmp = &((struct cmpl_base *)cpr->ring.vaddr)[cons];
-				if (!CMP_VALID(cmp, raw, &cpr->ring))
+				NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
+				cmp = &((struct cmpl_base *)cpr->ring.vaddr)
+				    [cons];
+				if (!CMP_VALID(cmp, v_bit))
 					break;
 			}
+/* TODO: Remove this once it never happens... :-) */
+if (le32toh(rcp->opaque) == orig_idx) {
+if (avail) device_printf(softc->dev, "Resetting avail from %d!\n", avail);
+avail = 0;
+}
 			avail++;
+		}
+		else {
 		}
 	}
 
@@ -324,62 +359,81 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 	uint16_t flags_type;
 	uint32_t flags2;
 	uint32_t errors;
-	uint32_t raw = cpr->raw_cons;
-	uint32_t cons;
 	uint8_t	ags;
 	int i;
 
-	raw++;
-	cons = RING_CMP(&cpr->ring, raw);
-	rcp = &((struct rx_pkt_cmpl *)cpr->ring.vaddr)[cons];
-	if (!CMP_VALID(rcp, raw, &cpr->ring)) {
+	NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
+	rcp = &((struct rx_pkt_cmpl *)cpr->ring.vaddr)[cpr->cons];
+
+	/* This has already been checked, we shouldn't need to do this again */
+	if (!CMP_VALID(rcp, cpr->v_bit)) {
 		device_printf(softc->dev, "No RX completion\n");
 		return EINVAL;
 	}
-	if (!CMP_VALID(rcp, raw+1, &cpr->ring)) {
-		device_printf(softc->dev, "No second RX completion\n");
-		return EINVAL;
-	}
+
+	/*
+	 * iflib asserts when we return non-zero... maybe move this check into
+	 * bnxt_isc_rxd_available()
+	 */
 	flags_type = le16toh(rcp->flags_type);
 	if ((flags_type & RX_PKT_CMPL_TYPE_MASK) != RX_PKT_CMPL_TYPE_RX_L2) {
-		device_printf(softc->dev, "Invalid RX completion type %u\n", flags_type & RX_PKT_CMPL_TYPE_MASK);
+		device_printf(softc->dev, "Invalid RX completion type %u\n",
+		    flags_type & RX_PKT_CMPL_TYPE_MASK);
 		return EINVAL;
 	}
 	if (flags_type & RX_PKT_CMPL_FLAGS_ERROR) {
-		raw++;
-		cons = RING_CMP(&cpr->ring, raw);
-		rcph = &((struct rx_pkt_cmpl_hi *)cpr->ring.vaddr)[cons];
-		device_printf(softc->dev, "RX completion error %04x\n", le16toh(rcph->errors_v2) & RX_PKT_CMPL_ERRORS_BUFFER_ERROR_MASK);
+		NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
+		rcph = &((struct rx_pkt_cmpl_hi *)cpr->ring.vaddr)[cpr->cons];
+		device_printf(softc->dev, "RX completion error %04x\n",
+		    le16toh(rcph->errors_v2) &
+		    RX_PKT_CMPL_ERRORS_BUFFER_ERROR_MASK);
 		return EINVAL;
 	}
 
 	/* Extract from the first 16-byte BD */
 	if (flags_type & RX_PKT_CMPL_FLAGS_RSS_VALID) {
 		ri->iri_flowid = le32toh(rcp->rss_hash);
-		/* TODO: Extract something useful from rcp->rss_hash_type (undocumented) */
-		// May be documented in the "LSI ES" -- also check the firmware code.
-		device_printf(softc->dev, "TODO: Mystery RSS hash type: %02hhx\n", rcp->rss_hash_type);
+		/*
+		 * TODO: Extract something useful from rcp->rss_hash_type
+		 * (undocumented)
+		 */
+		// May be documented in the "LSI ES"
+		// also check the firmware code.
+		device_printf(softc->dev,
+		    "TODO: Mystery RSS hash type: %02hhx\n",
+		    rcp->rss_hash_type);
 		ri->iri_rsstype = M_HASHTYPE_OPAQUE;
 	}
 	else {
 		ri->iri_rsstype = M_HASHTYPE_NONE;
 	}
-	ags = (rcp->agg_bufs_v1 & RX_PKT_CMPL_AGG_BUFS_MASK) >> RX_PKT_CMPL_AGG_BUFS_SFT;
+	ags = (rcp->agg_bufs_v1 & RX_PKT_CMPL_AGG_BUFS_MASK) >>
+	    RX_PKT_CMPL_AGG_BUFS_SFT;
 	ri->iri_nfrags = ags + 1;
 	ri->iri_frags[0].irf_flid = 0;
 	ri->iri_frags[0].irf_idx = le32toh(rcp->opaque);
+	cpr->last_idx = ri->iri_frags[0].irf_idx;
 	ri->iri_len = le16toh(rcp->len);
 
 	/* Now the second 16-byte BD */
-	raw++;
-	cons = RING_CMP(&cpr->ring, raw);
-	rcph = &((struct rx_pkt_cmpl_hi *)cpr->ring.vaddr)[cons];
+	NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
+	rcph = &((struct rx_pkt_cmpl_hi *)cpr->ring.vaddr)[cpr->cons];
+
+	/* Again, this has already been checked and so is not needed */
+	if (!CMP_VALID(rcph, cpr->v_bit)) {
+		device_printf(softc->dev, "No second RX completion\n");
+		return EINVAL;
+	}
+
 	flags2 = le32toh(rcph->flags2);
 	errors = le16toh(rcph->errors_v2);
-	if ((flags2 & RX_PKT_CMPL_FLAGS2_META_FORMAT_MASK) == RX_PKT_CMPL_FLAGS2_META_FORMAT_VLAN) {
+	if ((flags2 & RX_PKT_CMPL_FLAGS2_META_FORMAT_MASK) ==
+	    RX_PKT_CMPL_FLAGS2_META_FORMAT_VLAN) {
 		ri->iri_flags |= M_VLANTAG;
 		/* TODO: Should this be the entire 16-bits? */
-		ri->iri_vtag = le32toh(rcph->metadata) & (RX_PKT_CMPL_METADATA_VID_MASK | RX_PKT_CMPL_METADATA_DE | RX_PKT_CMPL_METADATA_PRI_MASK);
+		ri->iri_vtag = le32toh(rcph->metadata) &
+		    (RX_PKT_CMPL_METADATA_VID_MASK | RX_PKT_CMPL_METADATA_DE |
+		    RX_PKT_CMPL_METADATA_PRI_MASK);
 	}
 	if (flags2 & RX_PKT_CMPL_FLAGS2_IP_CS_CALC) {
 		ri->iri_csum_flags |= CSUM_IP_CHECKED;
@@ -396,15 +450,13 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 
 	/* And finally the ag ring stuff. */
 	for (i=1; i < ri->iri_nfrags; i++) {
-		raw++;
-		cons = RING_CMP(&cpr->ring, raw);
-		acp = &((struct rx_abuf_cmpl *)cpr->ring.vaddr)[cons];
+		NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
+		acp = &((struct rx_abuf_cmpl *)cpr->ring.vaddr)[cpr->cons];
 
 		ri->iri_frags[i].irf_flid = 1;
 		ri->iri_frags[i].irf_idx = le32toh(acp->opaque);
 		ri->iri_len += le16toh(acp->len);
 	}
-	cpr->raw_cons = raw;
 
 	return 0;
 }

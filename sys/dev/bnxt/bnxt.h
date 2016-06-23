@@ -61,79 +61,94 @@ __FBSDID("$FreeBSD$");
 				 CSUM_IP6_UDP|CSUM_IP6_TCP|CSUM_IP6_SCTP)
 
 /* Completion related defines */
-#define CMP_VALID(cmp, raw_cons, ring)					    \
-	(!!(((struct cmpl_base *)(cmp))->info3_v & htole32(CMPL_BASE_V)) == \
-	 !((raw_cons) & ((ring)->ring_size)))
+#define CMP_VALID(cmp, v_bit) \
+	((!!(((struct cmpl_base *)(cmp))->info3_v & htole32(CMPL_BASE_V))) == !!(v_bit) )
+#define NEXT_CP_CONS_V(ring, cons, v_bit) \
+	if (__predict_false(++cons == (ring)->ring_size)) \
+		cons = 0, v_bit = !v_bit
 
-#define TX_CMP_VALID(cmp, raw_cons, ring)				    \
-	(!!(((txcmp))->errors_v & htole32(TX_CMPL_V)) ==		    \
-	 !((raw_cons) & ((ring)->ring_size)))
+#define RING_NEXT(ring, idx) (__predict_false(idx + 1 == (ring)->ring_size) ? \
+								0 : idx + 1)
 
-/* Test validity in the extended completion record */
-#define RXT_CMP_VALID(rxcmp1, raw_cons, ring )				    \
-        (!!((rxcmp1)->errors_v2 & htole32(RX_CMP_V)) ==			    \
-	 !((raw_cons) & ((ring)->ring_size)))
+/*
+ * If we update the index, a write barrier is needed after the write to ensure
+ * the completion ring has space before the RX/TX ring does.  Since we can't
+ * make the RX and AG doorbells covered by the same barrier without remapping
+ * MSI-X vectors, we create the barrier over the enture doorbell bar.
+ * TODO: Remap the MSI-X vectors to allow a barrier to only cover the doorbells
+ *       for a single ring group.
+ *
+ * A barrier of just the size of the write is used to ensure the ordering
+ * remains correct and no writes are lost.
+ */
+#define BNXT_CP_DISABLE_DB(ring) do {					    \
+	bus_space_barrier((ring)->softc->doorbell_bar.tag,		    \
+	    (ring)->softc->doorbell_bar.handle, (ring)->doorbell, 4,	    \
+	    BUS_SPACE_BARRIER_WRITE);					    \
+	bus_space_barrier((ring)->softc->doorbell_bar.tag,		    \
+	    (ring)->softc->doorbell_bar.handle, 0,			    \
+	    (ring)->softc->doorbell_bar.size, BUS_SPACE_BARRIER_WRITE);	    \
+	bus_space_write_4((ring)->softc->doorbell_bar.tag,		    \
+	    (ring)->softc->doorbell_bar.handle, (ring)->doorbell,	    \
+	    CMPL_DOORBELL_KEY_CMPL | CMPL_DOORBELL_MASK);		    \
+} while (0)
 
-/* Test validity of an aggregation buffer */
-#define RX_AGG_CMP_VALID(agg, raw_cons, ring)				    \
-	(!!((agg)->rx_agg_cmp_v & htole32(RX_AGG_CMP_V)) ==		    \
-	!((raw_cons) & (ring)->ring_size))
+#define BNXT_CP_ENABLE_DB(ring) do {					    \
+	bus_space_barrier((ring)->softc->doorbell_bar.tag,		    \
+	    (ring)->softc->doorbell_bar.handle, (ring)->doorbell, 4,	    \
+	    BUS_SPACE_BARRIER_WRITE);					    \
+	bus_space_barrier((ring)->softc->doorbell_bar.tag,		    \
+	    (ring)->softc->doorbell_bar.handle, 0,			    \
+	    (ring)->softc->doorbell_bar.size, BUS_SPACE_BARRIER_WRITE);	    \
+	bus_space_write_4((ring)->softc->doorbell_bar.tag,		    \
+	    (ring)->softc->doorbell_bar.handle, (ring)->doorbell,	    \
+	    CMPL_DOORBELL_KEY_CMPL);					    \
+} while (0)
 
-#define TX_CMP_TYPE(txcmp) (le32toh((txcmp)->flags_type) & TX_CMPL_TYPE_MASK)
+#define BNXT_CP_IDX_ENABLE_DB(ring, cons) do {				    \
+	bus_space_barrier((ring)->softc->doorbell_bar.tag,		    \
+	    (ring)->softc->doorbell_bar.handle, (ring)->doorbell, 4,	    \
+	    BUS_SPACE_BARRIER_WRITE);					    \
+	bus_space_write_4((ring)->softc->doorbell_bar.tag,		    \
+	    (ring)->softc->doorbell_bar.handle, (ring)->doorbell,	    \
+	    CMPL_DOORBELL_KEY_CMPL | CMPL_DOORBELL_IDX_VALID | (cons));	    \
+	bus_space_barrier((ring)->softc->doorbell_bar.tag,		    \
+	    (ring)->softc->doorbell_bar.handle, 0,			    \
+	    (ring)->softc->doorbell_bar.size, BUS_SPACE_BARRIER_WRITE);	    \
+} while (0)
 
-#define RX_CMP_TYPE(rxcmp) (le32toh((rxcmp)->flags_type) & 		    \
-	    RX_PKT_CMPL_TYPE_MASK)
+#define BNXT_CP_IDX_DISABLE_DB(ring, cons) do {				    \
+	bus_space_barrier((ring)->softc->doorbell_bar.tag,		    \
+	    (ring)->softc->doorbell_bar.handle, (ring)->doorbell, 4,	    \
+	    BUS_SPACE_BARRIER_WRITE);					    \
+	bus_space_write_4((ring)->softc->doorbell_bar.tag,		    \
+	    (ring)->softc->doorbell_bar.handle, (ring)->doorbell,	    \
+	    CMPL_DOORBELL_KEY_CMPL | CMPL_DOORBELL_IDX_VALID |		    \
+	    CMPL_DOORBELL_MASK | (cons));				    \
+	bus_space_barrier((ring)->softc->doorbell_bar.tag,		    \
+	    (ring)->softc->doorbell_bar.handle, 0,			    \
+	    (ring)->softc->doorbell_bar.size, BUS_SPACE_BARRIER_WRITE);	    \
+} while (0)
 
-#define ADV_RAW_CMP(idx, n)	((idx) + (n))
-#define NEXT_RAW_CMP(idx)	ADV_RAW_CMP(idx, 1)
-#define RING_CMP(ring, idx)	((idx) & (ring)->ring_mask)
-#define RING_NEXT(ring, idx)	(((idx) + 1) & (ring)->ring_mask)
-#define TX_CMP_THRESH(ring)	(ring)->ring_size / 8
+#define BNXT_TX_DB(ring, idx) do {					    \
+	bus_space_barrier((ring)->softc->doorbell_bar.tag,		    \
+	    (ring)->softc->doorbell_bar.handle, (ring)->doorbell, 4,	    \
+	    BUS_SPACE_BARRIER_WRITE);					    \
+	bus_space_write_4(						    \
+	    (ring)->softc->doorbell_bar.tag,				    \
+	    (ring)->softc->doorbell_bar.handle,				    \
+	    (ring)->doorbell, TX_DOORBELL_KEY_TX | (idx));		    \
+} while (0)
 
-/* Doorbell related defines */
-#define DB_IDX_MASK	0xffffff
-#define DB_IDX_VALID	(0x1<<26)
-#define DB_IRQ_DIS	(0x1<<27)
-#define DB_KEY_TX	(0x0<<28)
-#define DB_KEY_RX	(0x1<<28)
-#define DB_KEY_CP	(0x2<<28)
-#define DB_KEY_ST	(0x3<<28)
-#define DB_KEY_TX_PUSH	(0x4<<28)
-#define DB_LONG_TX_PUSH	(0x2<<24)
-
-#define DB_CP_REARM_FLAGS	(DB_KEY_CP | DB_IDX_VALID)
-#define DB_CP_FLAGS		(DB_KEY_CP | DB_IDX_VALID | DB_IRQ_DIS)
-#define DB_CP_DIS_FLAGS		(DB_KEY_CP | DB_IRQ_DIS)
-
-#define DB_REARM(ring, cons) (DB_CP_REARM_FLAGS | RING_CMP(ring, cons))
-#define DB_DISABLE(ring, cons) (DB_CP_DIS_FLAGS | RING_CMP(ring, cons))
-#define DB_RING(ring, cons) (DB_CP_FLAGS | RING_CMP(ring, cons))
-
-#define BNXT_TX_DB(ring, idx) bus_space_write_4(			     \
-	(ring)->softc->doorbell_bar.tag, (ring)->softc->doorbell_bar.handle, \
-	(ring)->doorbell, DB_KEY_TX | (idx))
-#define BNXT_RX_DB(ring, idx) bus_space_write_4(			     \
-	(ring)->softc->doorbell_bar.tag, (ring)->softc->doorbell_bar.handle, \
-	(ring)->doorbell, DB_KEY_RX | (idx))
-
-#define BNXT_CP_DISABLE_DB(ring, cons)					   \
-	bus_space_write_4((ring)->softc->doorbell_bar.tag,		   \
-	(ring)->softc->doorbell_bar.handle, (ring)->doorbell,		   \
-	DB_DISABLE(ring, cons))
-#define BNXT_CP_ARM_DB(ring, cons)					   \
-	bus_space_write_4((ring)->softc->doorbell_bar.tag,		   \
-	(ring)->softc->doorbell_bar.handle, (ring)->doorbell,		   \
-	DB_REARM(ring, cons));						   \
-	bus_space_barrier((ring)->softc->doorbell_bar.tag,		   \
-	(ring)->softc->doorbell_bar.handle, 0,				   \
-	(ring)->softc->doorbell_bar.size, BUS_SPACE_BARRIER_WRITE)
-#define BNXT_CP_DB(ring, cons)						   \
-	bus_space_write_4((ring)->softc->doorbell_bar.tag,		   \
-	(ring)->softc->doorbell_bar.handle, (ring)->doorbell,		   \
-	DB_RING(ring, cons));						   \
-	bus_space_barrier((ring)->softc->doorbell_bar.tag,		   \
-	(ring)->softc->doorbell_bar.handle, 0,				   \
-	(ring)->softc->doorbell_bar.size, BUS_SPACE_BARRIER_WRITE)
+#define BNXT_RX_DB(ring, idx) do {					    \
+	bus_space_barrier((ring)->softc->doorbell_bar.tag,		    \
+	    (ring)->softc->doorbell_bar.handle, (ring)->doorbell, 4,	    \
+	    BUS_SPACE_BARRIER_WRITE);					    \
+	bus_space_write_4(						    \
+	    (ring)->softc->doorbell_bar.tag,				    \
+	    (ring)->softc->doorbell_bar.handle,				    \
+	    (ring)->doorbell, RX_DOORBELL_KEY_RX | (idx));		    \
+} while (0)
 
 /* Lock macros */
 #define BNXT_HWRM_LOCK_INIT(_softc, _name) \
@@ -141,12 +156,11 @@ __FBSDID("$FreeBSD$");
 #define BNXT_HWRM_LOCK(_softc)		mtx_lock(&(_softc)->hwrm_lock)
 #define BNXT_HWRM_UNLOCK(_softc)	mtx_unlock(&(_softc)->hwrm_lock)
 #define BNXT_HWRM_LOCK_DESTROY(_softc)	mtx_destroy(&(_softc)->hwrm_lock)
-#define BNXT_HWRM_LOCK_ASSERT(_softc)	mtx_assert(&(_softc)->hwrm_lock,   \
+#define BNXT_HWRM_LOCK_ASSERT(_softc)	mtx_assert(&(_softc)->hwrm_lock,    \
 					           MA_OWNED)
 
 /* Chip info */
 #define BNXT_TSO_SIZE	UINT16_MAX
-#define BNXT_BARS	2
 
 struct bnxt_bar_info {
 	struct resource		*res;
@@ -350,7 +364,6 @@ struct bnxt_ring {
 	caddr_t			vaddr;
 	struct bnxt_softc	*softc;
 	uint32_t		ring_size;	// Must be a power of two
-	uint32_t		ring_mask;	// Mask for ring_size (ring_size-1)
 	uint16_t		id;		// Logical ID
 	uint16_t		phys_id;
 };
@@ -358,9 +371,13 @@ struct bnxt_ring {
 struct bnxt_cp_ring {
 	struct bnxt_ring	ring;
 	struct if_irq		irq;
-	uint32_t		raw_cons;
+	uint32_t		cons;
+	bool			v_bit;		// Value of valid bit
 	struct ctx_hw_stats	*stats;
 	uint32_t		stats_ctx_id;
+	uint32_t		last_idx;	/* Used by RX rings only
+						 * set to the last read pidx
+						 */
 };
 
 struct bnxt_softc {

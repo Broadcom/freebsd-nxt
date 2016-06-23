@@ -37,9 +37,12 @@ __FBSDID("$FreeBSD$");
 int bnxt_alloc_hwrm_dma_mem(struct bnxt_softc *);
 void bnxt_free_hwrm_dma_mem(struct bnxt_softc *);
 int bnxt_hwrm_ring_alloc(struct bnxt_softc *softc, uint8_t type,
-    struct bnxt_ring *ring, uint16_t cmpl_ring_id, uint32_t stat_ctx_id, bool irq);
-int bnxt_hwrm_ring_free(struct bnxt_softc *softc, uint8_t type, struct bnxt_ring *ring);
-void bnxt_hwrm_cmd_hdr_init(struct bnxt_softc *, void *, uint16_t, uint16_t, uint16_t);
+    struct bnxt_ring *ring, uint16_t cmpl_ring_id, uint32_t stat_ctx_id,
+    bool irq);
+int bnxt_hwrm_ring_free(struct bnxt_softc *softc, uint8_t type,
+    struct bnxt_ring *ring);
+void bnxt_hwrm_cmd_hdr_init(struct bnxt_softc *, void *, uint16_t, uint16_t,
+    uint16_t);
 int _hwrm_send_message(struct bnxt_softc *, void *, uint32_t);
 int hwrm_send_message(struct bnxt_softc *, void *, uint32_t);
 int bnxt_hwrm_ver_get(struct bnxt_softc *);
@@ -57,16 +60,17 @@ int bnxt_hwrm_stat_ctx_alloc(struct bnxt_softc *softc, struct bnxt_cp_ring *cpr,
     uint64_t paddr);
 int bnxt_hwrm_stat_ctx_free(struct bnxt_softc *softc, struct bnxt_cp_ring *cpr);
 int bnxt_hwrm_ring_grp_alloc(struct bnxt_softc *, struct bnxt_grp_info *grp);
-int bnxt_hwrm_ring_grp_free(struct bnxt_softc *softc, struct bnxt_grp_info *grp);
+int bnxt_hwrm_ring_grp_free(struct bnxt_softc *softc,
+    struct bnxt_grp_info *grp);
 int bnxt_hwrm_vnic_alloc(struct bnxt_softc *, struct bnxt_vnic_info *);
 int bnxt_hwrm_vnic_free(struct bnxt_softc *, struct bnxt_vnic_info *);
-int bnxt_hwrm_set_vnic_filter(struct bnxt_softc *, uint16_t, uint16_t, uint8_t *);
+int bnxt_hwrm_set_vnic_filter(struct bnxt_softc *, uint16_t, uint16_t,
+    uint8_t *);
 int bnxt_hwrm_set_coal(struct bnxt_softc *);
 int bnxt_hwrm_port_qstats(struct bnxt_softc *);
 int bnxt_hwrm_cfa_l2_set_rx_mask(struct bnxt_softc *softc,
     struct bnxt_vnic_info *vnic);
-int bnxt_hwrm_set_filter(struct bnxt_softc *,
-			 struct bnxt_vnic_info *);
+int bnxt_hwrm_set_filter(struct bnxt_softc *, struct bnxt_vnic_info *);
 int bnxt_hwrm_clear_filter(struct bnxt_softc *, struct bnxt_vnic_info *);
 
 #endif

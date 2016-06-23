@@ -127,6 +127,8 @@ static int bnxt_update_link(struct bnxt_softc *softc, bool chng_link_state);
 static int bnxt_handle_def_cp(void *arg);
 static int bnxt_handle_rx_cp(void *arg);
 static void bnxt_clear_ids(struct bnxt_softc *softc);
+static void inline bnxt_do_enable_intr(struct bnxt_cp_ring *cpr);
+static void inline bnxt_do_disable_intr(struct bnxt_cp_ring *cpr);
 
 /*
  * Device Interface Declaration
@@ -253,7 +255,7 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 	    M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (!softc->tx_cp_rings) {
 		device_printf(iflib_get_dev(ctx),
-		    "unable to allocate TX completion rings");
+		    "unable to allocate TX completion rings\n");
 		rc = ENOMEM;
 		goto cp_alloc_fail;
 	}
@@ -261,7 +263,7 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 	    M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (!softc->tx_rings) {
 		device_printf(iflib_get_dev(ctx),
-		    "unable to allocate TX rings");
+		    "unable to allocate TX rings\n");
 		rc = ENOMEM;
 		goto ring_alloc_fail;
 	}
@@ -269,6 +271,8 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 	    &softc->tx_stats, 0);
 	if (rc)
 		goto dma_alloc_fail;
+	bus_dmamap_sync(softc->tx_stats.idi_tag, softc->tx_stats.idi_map,
+	    BUS_DMASYNC_PREREAD);
 
 	for (i = 0; i < ntxqsets; i++) {
 		/* Set up the completion ring */
@@ -282,8 +286,6 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		    softc->tx_cp_rings[i].ring.id * 0x80;
 		softc->tx_cp_rings[i].ring.ring_size =
 		    softc->scctx->isc_ntxd * 2;
-		softc->tx_cp_rings[i].ring.ring_mask =
-		    softc->tx_cp_rings[i].ring.ring_size - 1;
 		softc->tx_cp_rings[i].ring.vaddr = vaddrs[i * ntxqs];
 		softc->tx_cp_rings[i].ring.paddr = paddrs[i * ntxqs];
 
@@ -294,8 +296,6 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		    (softc->scctx->isc_nrxqsets * 2) + 1 + i;
 		softc->tx_rings[i].doorbell = softc->tx_rings[i].id * 0x80;
 		softc->tx_rings[i].ring_size = softc->scctx->isc_ntxd;
-		softc->tx_rings[i].ring_mask =
-		    softc->tx_rings[i].ring_size - 1;
 		softc->tx_rings[i].vaddr = vaddrs[i * ntxqs + 1];
 		softc->tx_rings[i].paddr = paddrs[i * ntxqs + 1];
 	}
@@ -317,6 +317,8 @@ bnxt_queues_free(if_ctx_t ctx)
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 
 	// Free TX queues
+	bus_dmamap_sync(softc->tx_stats.idi_tag, softc->tx_stats.idi_map,
+	    BUS_DMASYNC_POSTWRITE);
 	iflib_dma_free(&softc->tx_stats);
 	free(softc->tx_rings, M_DEVBUF);
 	softc->tx_rings = NULL;
@@ -325,6 +327,8 @@ bnxt_queues_free(if_ctx_t ctx)
 	softc->ntxqsets = 0;
 
 	// Free RX queues
+	bus_dmamap_sync(softc->rx_stats.idi_tag, softc->rx_stats.idi_map,
+	    BUS_DMASYNC_POSTWRITE);
 	iflib_dma_free(&softc->rx_stats);
 	free(softc->vnic_info, M_DEVBUF);
 	free(softc->grp_info, M_DEVBUF);
@@ -355,7 +359,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 	    M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (!softc->rx_cp_rings) {
 		device_printf(iflib_get_dev(ctx),
-		    "unable to allocate RX completion rings");
+		    "unable to allocate RX completion rings\n");
 		rc = ENOMEM;
 		goto cp_alloc_fail;
 	}
@@ -363,7 +367,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 	    M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (!softc->rx_rings) {
 		device_printf(iflib_get_dev(ctx),
-		    "unable to allocate RX rings");
+		    "unable to allocate RX rings\n");
 		rc = ENOMEM;
 		goto ring_alloc_fail;
 	}
@@ -371,7 +375,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 	    M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (!softc->ag_rings) {
 		device_printf(iflib_get_dev(ctx),
-		    "unable to allocate aggregation rings");
+		    "unable to allocate aggregation rings\n");
 		rc = ENOMEM;
 		goto ag_alloc_fail;
 	}
@@ -379,7 +383,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 	    M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (!softc->grp_info) {
 		device_printf(iflib_get_dev(ctx),
-		    "unable to allocate ring groups");
+		    "unable to allocate ring groups\n");
 		rc = ENOMEM;
 		goto grp_alloc_fail;
 	}
@@ -387,7 +391,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 	    M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (!softc->vnic_info) {
 		device_printf(iflib_get_dev(ctx),
-		    "unable to allocate ring groups");
+		    "unable to allocate ring groups\n");
 		rc = ENOMEM;
 		goto vnic_alloc_fail;
 	}
@@ -396,6 +400,8 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 	    &softc->rx_stats, 0);
 	if (rc)
 		goto dma_alloc_fail;
+	bus_dmamap_sync(softc->rx_stats.idi_tag, softc->rx_stats.idi_map,
+	    BUS_DMASYNC_PREREAD);
 
 	for (i = 0; i < nrxqsets; i++) {
 		/* Allocation the completion ring */
@@ -408,8 +414,6 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		    softc->rx_cp_rings[i].ring.id * 0x80;
 		softc->rx_cp_rings[i].ring.ring_size =
 		    softc->scctx->isc_nrxd * 2;
-		softc->rx_cp_rings[i].ring.ring_mask =
-		    softc->rx_cp_rings[i].ring.ring_size - 1;
 		softc->rx_cp_rings[i].ring.vaddr = vaddrs[i * nrxqs];
 		softc->rx_cp_rings[i].ring.paddr = paddrs[i * nrxqs];
 
@@ -419,7 +423,6 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->rx_rings[i].id = i + 1;
 		softc->rx_rings[i].doorbell = softc->rx_rings[i].id * 0x80;
 		softc->rx_rings[i].ring_size = softc->scctx->isc_nrxd;
-		softc->rx_rings[i].ring_mask = softc->rx_rings[i].ring_size - 1;
 		softc->rx_rings[i].vaddr = vaddrs[i * nrxqs + 1];
 		softc->rx_rings[i].paddr = paddrs[i * nrxqs + 1];
 
@@ -429,7 +432,6 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->ag_rings[i].id = nrxqsets + i + 1;
 		softc->ag_rings[i].doorbell = softc->ag_rings[i].id * 0x80;
 		softc->ag_rings[i].ring_size = softc->scctx->isc_nrxd;
-		softc->ag_rings[i].ring_mask = softc->ag_rings[i].ring_size - 1;
 		softc->ag_rings[i].vaddr = vaddrs[i * nrxqs + 2];
 		softc->ag_rings[i].paddr = paddrs[i * nrxqs + 2];
 
@@ -470,8 +472,11 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 	return rc;
 
 mc_alloc_fail:
-	for (; i >= 0; i--)
+	for (; i >= 0; i--) {
+		bus_dmamap_sync(softc->vnic_info[i].mc_list.idi_tag,
+		    softc->vnic_info[i].mc_list.idi_map, BUS_DMASYNC_POSTWRITE);
 		iflib_dma_free(&softc->vnic_info[i].mc_list);
+	}
 dma_alloc_fail:
 	free(softc->vnic_info, M_DEVBUF);
 vnic_alloc_fail:
@@ -503,7 +508,7 @@ bnxt_attach_pre(if_ctx_t ctx)
 
 	pci_enable_busmaster(softc->dev);
 
-	if (bnxt_pci_mapping(softc)) 
+	if (bnxt_pci_mapping(softc))
                 return (ENXIO);
 
 	/* HWRM setup/init */
@@ -574,8 +579,8 @@ bnxt_attach_pre(if_ctx_t ctx)
 	softc->def_cp_ring.ring.softc = softc;
 	softc->def_cp_ring.ring.id = 0;
 	softc->def_cp_ring.ring.doorbell = softc->def_cp_ring.ring.id * 0x80;
-	softc->def_cp_ring.ring.ring_size = PAGE_SIZE / sizeof(struct cmpl_base);
-	softc->def_cp_ring.ring.ring_mask = softc->def_cp_ring.ring.ring_size - 1;
+	softc->def_cp_ring.ring.ring_size = PAGE_SIZE /
+	    sizeof(struct cmpl_base);
 	rc = iflib_dma_alloc(ctx,
 	    sizeof(struct cmpl_base) * softc->def_cp_ring.ring.ring_size,
 	    &softc->def_cp_ring_mem, 0);
@@ -612,7 +617,8 @@ bnxt_attach_post(if_ctx_t ctx)
 	bnxt_add_media_types(softc);
 	ifmedia_set(softc->media, IFM_ETHER | IFM_AUTO);
 
-	if_sethwassist(ifp, (CSUM_TCP | CSUM_UDP | CSUM_TCP_IPV6 | CSUM_UDP_IPV6 | CSUM_TSO));
+	if_sethwassist(ifp, (CSUM_TCP | CSUM_UDP | CSUM_TCP_IPV6 |
+	    CSUM_UDP_IPV6 | CSUM_TSO));
 
 	capabilities =
 	    IFCAP_VLAN_MTU | IFCAP_VLAN_HWTAGGING | IFCAP_VLAN_HWTSO |
@@ -630,7 +636,8 @@ bnxt_attach_post(if_ctx_t ctx)
 
 	if_setcapenable(ifp, enabling);
 
-	softc->scctx->isc_max_frame_size = ifp->if_mtu + ETHER_HDR_LEN + ETHER_CRC_LEN;
+	softc->scctx->isc_max_frame_size = ifp->if_mtu + ETHER_HDR_LEN +
+	    ETHER_CRC_LEN;
 
 failed:
 	return rc;
@@ -648,8 +655,12 @@ bnxt_detach(if_ctx_t ctx)
 	/* We need to free() these here... */
 	for (i = softc->nrxqsets-1; i>=0; i--) {
 		iflib_irq_free(ctx, &softc->rx_cp_rings[i].irq);
+		bus_dmamap_sync(softc->vnic_info[i].mc_list.idi_tag,
+		    softc->vnic_info[i].mc_list.idi_map, BUS_DMASYNC_POSTWRITE);
 		iflib_dma_free(&softc->vnic_info[i].mc_list);
 	}
+	bus_dmamap_sync(softc->def_cp_ring_mem.idi_tag,
+	    softc->def_cp_ring_mem.idi_map, BUS_DMASYNC_POSTWRITE);
 	iflib_dma_free(&softc->def_cp_ring_mem);
 
 	/* hwrm is cleaned up in queues_free() since it's called later */
@@ -674,7 +685,8 @@ bnxt_init(if_ctx_t ctx)
 	bnxt_clear_ids(softc);
 
 	/* Allocate the default completion ring */
-	softc->def_cp_ring.raw_cons = -1;
+	softc->def_cp_ring.cons = UINT32_MAX;
+	softc->def_cp_ring.v_bit = 1;
 	rc = bnxt_hwrm_ring_alloc(softc,
 	    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
 	    &softc->def_cp_ring.ring,
@@ -692,7 +704,9 @@ bnxt_init(if_ctx_t ctx)
 			goto fail;
 
 		/* Allocation the completion ring */
-		softc->rx_cp_rings[i].raw_cons = -1;
+		softc->rx_cp_rings[i].cons = UINT32_MAX;
+		softc->rx_cp_rings[i].v_bit = 1;
+		softc->rx_cp_rings[i].last_idx = UINT32_MAX;
 		rc = bnxt_hwrm_ring_alloc(softc,
 		    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
 		    &softc->rx_cp_rings[i].ring, (uint16_t)HWRM_NA_SIGNATURE,
@@ -721,7 +735,8 @@ bnxt_init(if_ctx_t ctx)
 		    softc->rx_cp_rings[i].stats_ctx_id;
 		softc->grp_info[i].rx_ring_id = softc->rx_rings[i].phys_id;
 		softc->grp_info[i].ag_ring_id = softc->ag_rings[i].phys_id;
-		softc->grp_info[i].cp_ring_id = softc->rx_cp_rings[i].ring.phys_id;
+		softc->grp_info[i].cp_ring_id =
+		    softc->rx_cp_rings[i].ring.phys_id;
 		rc = bnxt_hwrm_ring_grp_alloc(softc, &softc->grp_info[i]);
 		if (rc)
 			goto fail;
@@ -750,13 +765,12 @@ bnxt_init(if_ctx_t ctx)
 		rc = bnxt_hwrm_stat_ctx_alloc(softc, &softc->tx_cp_rings[i],
 		    softc->tx_stats.idi_paddr +
 		    (sizeof(struct ctx_hw_stats) * i));
-		if (rc) {
-			i--;
+		if (rc)
 			goto fail;
-		}
 
 		/* Allocate the completion ring */
-		softc->tx_cp_rings[i].raw_cons = -1;
+		softc->tx_cp_rings[i].cons = UINT32_MAX;
+		softc->tx_cp_rings[i].v_bit = 1;
 		rc = bnxt_hwrm_ring_alloc(softc,
 		    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
 		    &softc->tx_cp_rings[i].ring, (uint16_t)HWRM_NA_SIGNATURE,
@@ -813,6 +827,8 @@ bnxt_multi_set(if_ctx_t ctx)
 		mta = vnic->mc_list.idi_vaddr;
 		bzero(mta, vnic->mc_list_size);
 		if_multiaddr_array(ifp, mta, &cnt, mcnt);
+		bus_dmamap_sync(vnic->mc_list.idi_tag, vnic->mc_list.idi_map,
+		    BUS_DMASYNC_PREWRITE);
 		vnic->mc_list_count = cnt;
 		vnic->rx_mask |=
 		    HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_MCAST;
@@ -879,7 +895,7 @@ bnxt_media_status(if_ctx_t ctx, struct ifmediareq * ifmr)
 		return;
 	}
 
-	if (link_info->pause == BNXT_LINK_PAUSE_BOTH) 
+	if (link_info->pause == BNXT_LINK_PAUSE_BOTH)
 		ifmr->ifm_active |= (IFM_ETH_RXPAUSE | IFM_ETH_TXPAUSE);
 	else if (link_info->pause == BNXT_LINK_PAUSE_TX)
 		ifmr->ifm_active |= IFM_ETH_TXPAUSE;
@@ -922,6 +938,25 @@ bnxt_update_admin_status(if_ctx_t ctx)
 	return;
 }
 
+static void inline
+bnxt_do_enable_intr(struct bnxt_cp_ring *cpr)
+{
+	if (cpr->ring.phys_id != (uint16_t)HWRM_NA_SIGNATURE) {
+		/* First time enabling, do not set index */
+		if (cpr->cons == UINT32_MAX)
+			BNXT_CP_ENABLE_DB(&cpr->ring);
+		else
+			BNXT_CP_IDX_ENABLE_DB(&cpr->ring, cpr->cons);
+	}
+}
+
+static void inline
+bnxt_do_disable_intr(struct bnxt_cp_ring *cpr)
+{
+	if (cpr->ring.phys_id != (uint16_t)HWRM_NA_SIGNATURE)
+		BNXT_CP_DISABLE_DB(&cpr->ring);
+}
+
 /* Enable all interrupts */
 static void
 bnxt_enable_intr(if_ctx_t ctx)
@@ -929,10 +964,10 @@ bnxt_enable_intr(if_ctx_t ctx)
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	int i;
 
-	BNXT_CP_ARM_DB(&softc->def_cp_ring.ring, softc->def_cp_ring.raw_cons);
+	bnxt_do_enable_intr(&softc->def_cp_ring);
 	for (i = 0; i < softc->nrxqsets; i++)
-		BNXT_CP_ARM_DB(&softc->rx_cp_rings[i].ring,
-		    softc->rx_cp_rings[i].raw_cons);
+		bnxt_do_enable_intr(&softc->rx_cp_rings[i]);
+
 	return;
 }
 
@@ -942,8 +977,7 @@ bnxt_queue_intr_enable(if_ctx_t ctx, uint16_t qid)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 
-	BNXT_CP_ARM_DB(&softc->rx_cp_rings[qid].ring,
-	    softc->rx_cp_rings[qid].raw_cons);
+	bnxt_do_enable_intr(&softc->rx_cp_rings[qid]);
 	return;
 }
 
@@ -954,18 +988,15 @@ bnxt_disable_intr(if_ctx_t ctx)
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	int i;
 
-	BNXT_CP_DISABLE_DB(&softc->def_cp_ring.ring,
-	    softc->def_cp_ring.raw_cons);
+	bnxt_do_disable_intr(&softc->def_cp_ring);
 	/*
 	 * NOTE: These TX interrupts should never get enabled, so don't
 	 * update the index
 	 */
 	for (i = 0; i < softc->ntxqsets; i++)
-		BNXT_CP_DISABLE_DB(&softc->tx_cp_rings[i].ring,
-		    softc->tx_cp_rings[i].raw_cons);
+		bnxt_do_disable_intr(&softc->tx_cp_rings[i]);
 	for (i = 0; i < softc->nrxqsets; i++)
-		BNXT_CP_DISABLE_DB(&softc->rx_cp_rings[i].ring,
-		    softc->rx_cp_rings[i].raw_cons);
+		bnxt_do_disable_intr(&softc->rx_cp_rings[i]);
 
 	return;
 }
@@ -981,14 +1012,15 @@ bnxt_msix_intr_assign(if_ctx_t ctx, int msix)
 	    softc->def_cp_ring.ring.id + 1, IFLIB_INTR_ADMIN,
 	    bnxt_handle_def_cp, softc, 0, "def_cp");
 	if (rc) {
-		device_printf(iflib_get_dev(ctx), "Failed to register default completion ring handler\n");
+		device_printf(iflib_get_dev(ctx),
+		    "Failed to register default completion ring handler\n");
 		return rc;
 	}
 
 	for (i=0; i<softc->scctx->isc_nrxqsets; i++) {
 		rc = iflib_irq_alloc_generic(ctx, &softc->rx_cp_rings[i].irq,
-		    softc->rx_cp_rings[i].ring.id + 1, IFLIB_INTR_RX, bnxt_handle_rx_cp,
-		    &softc->rx_cp_rings[i], i, "rx_cp");
+		    softc->rx_cp_rings[i].ring.id + 1, IFLIB_INTR_RX,
+		    bnxt_handle_rx_cp, &softc->rx_cp_rings[i], i, "rx_cp");
 		if (rc) {
 			device_printf(iflib_get_dev(ctx),
 			    "Failed to register RX completion ring handler\n");
@@ -998,7 +1030,8 @@ bnxt_msix_intr_assign(if_ctx_t ctx, int msix)
 	}
 
 	for (i=0; i<softc->scctx->isc_ntxqsets; i++)
-		iflib_softirq_alloc_generic(ctx, i + 1, IFLIB_INTR_TX, NULL, i, "tx_cp");
+		iflib_softirq_alloc_generic(ctx, i + 1, IFLIB_INTR_TX, NULL, i,
+		    "tx_cp");
 
 	return rc;
 
@@ -1145,7 +1178,8 @@ bnxt_update_link(struct bnxt_softc *softc, bool chng_link_state)
 {
 	struct bnxt_link_info *link_info = &softc->link_info;
 	struct hwrm_port_phy_qcfg_input req = {0};
-	struct hwrm_port_phy_qcfg_output *resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	struct hwrm_port_phy_qcfg_output *resp =
+	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	uint8_t link_up = link_info->link_up;
 	int rc = 0;
 
@@ -1218,11 +1252,13 @@ bnxt_report_link(struct bnxt_softc *softc)
                         flow_ctrl = "FC - receive";
                 else
                         flow_ctrl = "none";
-		iflib_link_state_change(softc->ctx, LINK_STATE_UP, IF_Gbps(100));
+		iflib_link_state_change(softc->ctx, LINK_STATE_UP,
+		    IF_Gbps(100));
                 device_printf(softc->dev, "Link is UP %s, %s\n", duplex,
 		    flow_ctrl);
         } else {
-		iflib_link_state_change(softc->ctx, LINK_STATE_DOWN, IF_Gbps(100));
+		iflib_link_state_change(softc->ctx, LINK_STATE_DOWN,
+		    IF_Gbps(100));
                 device_printf(softc->dev, "Link is Down %s, %s\n", duplex,
 		    flow_ctrl);
         }
@@ -1234,7 +1270,7 @@ bnxt_handle_rx_cp(void *arg)
 	struct bnxt_cp_ring *cpr = arg;
 
 	/* Disable further interrupts for this queue */
-	BNXT_CP_DISABLE_DB(&cpr->ring, cpr->raw_cons);
+	BNXT_CP_DISABLE_DB(&cpr->ring);
 	return FILTER_SCHEDULE_THREAD;
 }
 

@@ -41,7 +41,7 @@ static int bnxt_hwrm_err_map(uint16_t err);
 static inline int _is_valid_ether_addr(uint8_t *);
 static inline void get_random_ether_addr(uint8_t *);
 static void	bnxt_hwrm_set_link_common(struct bnxt_softc *softc,
-	 	    struct hwrm_port_phy_cfg_input *req);
+		    struct hwrm_port_phy_cfg_input *req);
 static void	bnxt_hwrm_set_pause_common(struct bnxt_softc *softc,
 		    struct hwrm_port_phy_cfg_input *req);
 static void	bnxt_hwrm_set_eee(struct bnxt_softc *softc,
@@ -80,7 +80,8 @@ bnxt_alloc_hwrm_dma_mem(struct bnxt_softc *softc)
 {
 	int rc;
 
-	rc = iflib_dma_alloc(softc->ctx, PAGE_SIZE, &softc->hwrm_cmd_resp, BUS_DMA_NOWAIT);
+	rc = iflib_dma_alloc(softc->ctx, PAGE_SIZE, &softc->hwrm_cmd_resp,
+	    BUS_DMA_NOWAIT);
 	return rc;
 }
 
@@ -116,6 +117,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 	uint8_t *valid;
 	uint16_t err;
 
+	/* TODO: DMASYNC in here. */
 	req->seq_id = htole16(softc->hwrm_cmd_seq++);
 	memset(resp, 0, PAGE_SIZE);
 	cp_ring_id = le16toh(req->cmpl_ring);
@@ -130,8 +132,8 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 
 	/* Clear to the end of the request buffer */
 	for (i = msg_len; i < HWRM_MAX_REQ_LEN; i += 4)
-		bus_space_write_4(softc->hwrm_bar.tag, softc->hwrm_bar.handle, i,
-		    0);
+		bus_space_write_4(softc->hwrm_bar.tag, softc->hwrm_bar.handle,
+		    i, 0);
 
 	/* Ring channel doorbell */
 	bus_space_write_4(softc->hwrm_bar.tag,
@@ -145,10 +147,10 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 		DELAY(1000);
 	}
 	if (i >= softc->hwrm_cmd_timeo) {
-		device_printf(softc->dev, "Timeout sending %s: "
-		    "(timeout: %d) msg {0x%x 0x%x} len:%d\n", GET_HWRM_REQ_TYPE(req->req_type),
-		    softc->hwrm_cmd_timeo, le16toh(req->req_type), le16toh(req->seq_id),
-		    msg_len);
+		device_printf(softc->dev,
+		    "Timeout sending %s: (timeout: %d) seq: %d\n",
+		    GET_HWRM_REQ_TYPE(req->req_type), softc->hwrm_cmd_timeo,
+		    le16toh(req->seq_id));
 		//decode_hwrm_req(req);
 		return ETIMEDOUT;
 	}
@@ -172,9 +174,8 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 
 	err = le16toh(resp->error_code);
 	if (err) {
-		device_printf(softc->dev, "%s command returned %s error.  cmd:0x%02x err:0x%02x\n",
-		    GET_HWRM_REQ_TYPE(req->req_type), GET_HWRM_ERROR_CODE(err),
-		    le16toh(req->req_type), err);
+		device_printf(softc->dev, "%s command returned %s error.\n",
+		    GET_HWRM_REQ_TYPE(req->req_type), GET_HWRM_ERROR_CODE(err));
 		//decode_hwrm_req(req);
 		//decode_hwrm_resp(resp);
 		return bnxt_hwrm_err_map(err);
@@ -198,7 +199,8 @@ int
 bnxt_hwrm_queue_qportcfg(struct bnxt_softc *softc)
 {
 	struct hwrm_queue_qportcfg_input req = {0};
-	struct hwrm_queue_qportcfg_output *resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	struct hwrm_queue_qportcfg_output *resp =
+	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 
 	int	rc = 0;
 	uint8_t	*qptr;
@@ -234,7 +236,8 @@ int
 bnxt_hwrm_ver_get(struct bnxt_softc *softc)
 {
 	struct hwrm_ver_get_input	req = {0};
-	struct hwrm_ver_get_output	*resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	struct hwrm_ver_get_output	*resp =
+	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	int				rc;
 
 	softc->hwrm_max_req_len = HWRM_MAX_REQ_LEN;
@@ -251,9 +254,11 @@ bnxt_hwrm_ver_get(struct bnxt_softc *softc)
 		goto fail;
 
 	if (resp->hwrm_intf_maj < 1) {
-		device_printf(softc->dev, "HWRM interface %d.%d.%d is older than 1.0.0.\n",
-		    resp->hwrm_intf_maj, resp->hwrm_intf_min, resp->hwrm_intf_upd);
-		device_printf(softc->dev, "Please update firmware with " 
+		device_printf(softc->dev,
+		    "HWRM interface %d.%d.%d is older than 1.0.0.\n",
+		    resp->hwrm_intf_maj, resp->hwrm_intf_min,
+		    resp->hwrm_intf_upd);
+		device_printf(softc->dev, "Please update firmware with "
 		    "HWRM interface 1.0.0 or newer.\n");
         }
 	if ((resp->hwrm_intf_maj == 1 && resp->hwrm_intf_min >= 2) ||
@@ -300,7 +305,8 @@ bnxt_hwrm_func_drv_unrgtr(struct bnxt_softc *softc, bool shutdown)
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_FUNC_DRV_UNRGTR, -1, -1);
 	if (shutdown == true)
-		req.flags |= HWRM_FUNC_DRV_UNRGTR_INPUT_FLAGS_PREPARE_FOR_SHUTDOWN;
+		req.flags |=
+		    HWRM_FUNC_DRV_UNRGTR_INPUT_FLAGS_PREPARE_FOR_SHUTDOWN;
 	return hwrm_send_message(softc, &req, sizeof(req));
 }
 
@@ -309,13 +315,13 @@ static inline int
 _is_valid_ether_addr(uint8_t *addr)
 {
         char zero_addr[6] = { 0, 0, 0, 0, 0, 0 };
-                
+
         if ((addr[0] & 1) || (!bcmp(addr, zero_addr, ETHER_ADDR_LEN)))
                 return (FALSE);
-        
+
         return (TRUE);
 }
-        
+
 static inline void
 get_random_ether_addr(uint8_t *addr)
 {
@@ -332,7 +338,8 @@ bnxt_hwrm_func_qcaps(struct bnxt_softc *softc)
 {
 	int rc = 0;
 	struct hwrm_func_qcaps_input req = {0};
-	struct hwrm_func_qcaps_output *resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	struct hwrm_func_qcaps_output *resp =
+	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_FUNC_QCAPS, -1, -1);
 	req.fid = htole16(0xffff);
@@ -401,7 +408,7 @@ bnxt_hwrm_func_reset(struct bnxt_softc *softc)
 
 static void
 bnxt_hwrm_set_link_common(struct bnxt_softc *softc,
-			  struct hwrm_port_phy_cfg_input *req)
+    struct hwrm_port_phy_cfg_input *req)
 {
 	uint8_t autoneg = softc->link_info.autoneg;
 	uint16_t fw_link_speed = softc->link_info.req_link_speed;
@@ -409,15 +416,16 @@ bnxt_hwrm_set_link_common(struct bnxt_softc *softc,
 
 	if (autoneg & BNXT_AUTONEG_SPEED) {
 		req->auto_mode |=
-			HWRM_PORT_PHY_CFG_INPUT_AUTO_MODE_SPEED_MASK;
+		    HWRM_PORT_PHY_CFG_INPUT_AUTO_MODE_SPEED_MASK;
 
 		req->enables |= htole32(
-			HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_LINK_SPEED_MASK);
+		    HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_LINK_SPEED_MASK);
 		req->auto_link_speed_mask = htole16(advertising);
 
-		req->enables |= htole32(HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_MODE);
+		req->enables |=
+		    htole32(HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_MODE);
 		req->flags |=
-			htole32(HWRM_PORT_PHY_CFG_INPUT_FLAGS_RESTART_AUTONEG);
+		    htole32(HWRM_PORT_PHY_CFG_INPUT_FLAGS_RESTART_AUTONEG);
 	} else {
 		req->force_link_speed = htole16(fw_link_speed);
 		req->flags |= htole32(HWRM_PORT_PHY_CFG_INPUT_FLAGS_FORCE);
@@ -429,29 +437,34 @@ bnxt_hwrm_set_link_common(struct bnxt_softc *softc,
 
 
 static void
-bnxt_hwrm_set_pause_common(struct bnxt_softc *softc, struct hwrm_port_phy_cfg_input *req)
+bnxt_hwrm_set_pause_common(struct bnxt_softc *softc,
+    struct hwrm_port_phy_cfg_input *req)
 {
 	if (softc->link_info.autoneg & BNXT_AUTONEG_FLOW_CTRL) {
 		if (softc->flags & BNXT_FLAG_HWRM_120)
 			req->auto_pause =
 			    HWRM_PORT_PHY_CFG_INPUT_AUTO_PAUSE_AUTONEG_PAUSE;
 		if (softc->link_info.req_flow_ctrl & BNXT_LINK_PAUSE_RX)
-			req->auto_pause |= HWRM_PORT_PHY_CFG_INPUT_AUTO_PAUSE_RX;
+			req->auto_pause |=
+			    HWRM_PORT_PHY_CFG_INPUT_AUTO_PAUSE_RX;
 		if (softc->link_info.req_flow_ctrl & BNXT_LINK_PAUSE_TX)
-			req->auto_pause |= HWRM_PORT_PHY_CFG_INPUT_AUTO_PAUSE_RX;
+			req->auto_pause |=
+			    HWRM_PORT_PHY_CFG_INPUT_AUTO_PAUSE_RX;
 		req->enables |=
-			htole32(HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_PAUSE);
+		    htole32(HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_PAUSE);
 	} else {
 		if (softc->link_info.req_flow_ctrl & BNXT_LINK_PAUSE_RX)
-			req->force_pause |= HWRM_PORT_PHY_CFG_INPUT_FORCE_PAUSE_RX;
+			req->force_pause |=
+			    HWRM_PORT_PHY_CFG_INPUT_FORCE_PAUSE_RX;
 		if (softc->link_info.req_flow_ctrl & BNXT_LINK_PAUSE_TX)
-			req->force_pause |= HWRM_PORT_PHY_CFG_INPUT_FORCE_PAUSE_TX;
+			req->force_pause |=
+			    HWRM_PORT_PHY_CFG_INPUT_FORCE_PAUSE_TX;
 		req->enables |=
 			htole32(HWRM_PORT_PHY_CFG_INPUT_ENABLES_FORCE_PAUSE);
 		if (softc->flags & BNXT_FLAG_HWRM_120) {
 			req->auto_pause = req->force_pause;
 			req->enables |= htole32(
-			        HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_PAUSE);
+			    HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_PAUSE);
 		}
 	}
 }
@@ -478,13 +491,15 @@ bnxt_hwrm_set_eee(struct bnxt_softc *softc, struct hwrm_port_phy_cfg_input *req)
 		req->tx_lpi_timer = htole32(eee->tx_lpi_timer);
 #endif
 	} else {
-		req->flags |= htole32(HWRM_PORT_PHY_CFG_INPUT_FLAGS_EEE_DISABLE);
+		req->flags |=
+		    htole32(HWRM_PORT_PHY_CFG_INPUT_FLAGS_EEE_DISABLE);
 	}
 }
 
 
 int
-bnxt_hwrm_set_link_setting(struct bnxt_softc *softc, bool set_pause, bool set_eee)
+bnxt_hwrm_set_link_setting(struct bnxt_softc *softc, bool set_pause,
+    bool set_eee)
 {
 	struct hwrm_port_phy_cfg_input req = {0};
 
@@ -730,7 +745,8 @@ bnxt_hwrm_ring_grp_free(struct bnxt_softc *softc, struct bnxt_grp_info *grp)
  */
 int
 bnxt_hwrm_ring_alloc(struct bnxt_softc *softc, uint8_t type,
-    struct bnxt_ring *ring, uint16_t cmpl_ring_id, uint32_t stat_ctx_id, bool irq)
+    struct bnxt_ring *ring, uint16_t cmpl_ring_id, uint32_t stat_ctx_id,
+    bool irq)
 {
 	struct hwrm_ring_alloc_input req = {0};
 	struct hwrm_ring_alloc_output *resp;
