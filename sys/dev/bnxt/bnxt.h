@@ -435,6 +435,7 @@ struct bnxt_softc {
 
 	struct bnxt_cp_ring	def_cp_ring;
 	struct iflib_dma_info	def_cp_ring_mem;
+	struct grouptask	def_cp_task;
 };
 
 struct bnxt_filter_info {

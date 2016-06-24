@@ -130,6 +130,7 @@ static void bnxt_clear_ids(struct bnxt_softc *softc);
 static void inline bnxt_do_enable_intr(struct bnxt_cp_ring *cpr);
 static void inline bnxt_do_disable_intr(struct bnxt_cp_ring *cpr);
 static void bnxt_mark_cpr_invalid(struct bnxt_cp_ring *cpr);
+static void bnxt_def_cp_task(void *context);
 
 /*
  * Device Interface Declaration
@@ -521,14 +522,14 @@ bnxt_attach_pre(if_ctx_t ctx)
 	/* Get firmware version and compare with driver */
 	rc = bnxt_hwrm_ver_get(softc);
 	if (rc) {
-		printf("attach: hwrm ver get failed\n");
+		device_printf(softc->dev, "attach: hwrm ver get failed\n");
 		goto ver_fail;
 	}
 
 	/* Register the driver with the FW */
 	rc = bnxt_hwrm_func_drv_rgtr(softc);
 	if (rc) {
-		printf("attach: hwrm drv rgtr failed\n");
+		device_printf(softc->dev, "attach: hwrm drv rgtr failed\n");
 		goto ver_fail;
 	}
 
@@ -541,7 +542,7 @@ bnxt_attach_pre(if_ctx_t ctx)
 	/* Get the queue config */
 	rc = bnxt_hwrm_queue_qportcfg(softc);
 	if (rc) {
-		printf("attach: hwrm qportcfg failed\n");
+		device_printf(softc->dev, "attach: hwrm qportcfg failed\n");
 		goto failed;
 	}
 
@@ -587,6 +588,8 @@ bnxt_attach_pre(if_ctx_t ctx)
 	    &softc->def_cp_ring_mem, 0);
 	softc->def_cp_ring.ring.vaddr = softc->def_cp_ring_mem.idi_vaddr;
 	softc->def_cp_ring.ring.paddr = softc->def_cp_ring_mem.idi_paddr;
+	iflib_config_gtask_init(ctx, &softc->def_cp_task, bnxt_def_cp_task,
+	    "dflt_cp");
 
 	return (rc);
 
@@ -650,9 +653,11 @@ bnxt_detach(if_ctx_t ctx)
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	int i;
 
+	bnxt_do_disable_intr(&softc->def_cp_ring);
 	bnxt_hwrm_func_reset(softc);
 	bnxt_clear_ids(softc);
 	iflib_irq_free(ctx, &softc->def_cp_ring.irq);
+	iflib_config_gtask_deinit(&softc->def_cp_task);
 	/* We need to free() these here... */
 	for (i = softc->nrxqsets-1; i>=0; i--) {
 		iflib_irq_free(ctx, &softc->rx_cp_rings[i].irq);
@@ -792,6 +797,8 @@ bnxt_init(if_ctx_t ctx)
 	}
 
 	ifp->if_drv_flags |= IFF_DRV_RUNNING;
+
+	bnxt_do_enable_intr(&softc->def_cp_ring);
 	return;
 
 fail:
@@ -806,6 +813,7 @@ bnxt_stop(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 
+	bnxt_do_disable_intr(&softc->def_cp_ring);
 	bnxt_hwrm_func_reset(softc);
 	bnxt_clear_ids(softc);
 	return;
@@ -986,7 +994,6 @@ bnxt_enable_intr(if_ctx_t ctx)
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	int i;
 
-	bnxt_do_enable_intr(&softc->def_cp_ring);
 	for (i = 0; i < softc->nrxqsets; i++)
 		bnxt_do_enable_intr(&softc->rx_cp_rings[i]);
 
@@ -1010,7 +1017,6 @@ bnxt_disable_intr(if_ctx_t ctx)
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	int i;
 
-	bnxt_do_disable_intr(&softc->def_cp_ring);
 	/*
 	 * NOTE: These TX interrupts should never get enabled, so don't
 	 * update the index
@@ -1301,9 +1307,9 @@ bnxt_handle_def_cp(void *arg)
 {
 	struct bnxt_softc *softc = arg;
 
-	device_printf(softc->dev, "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
+	BNXT_CP_DISABLE_DB(&softc->def_cp_ring.ring);
+	GROUPTASK_ENQUEUE(&softc->def_cp_task);
 	return FILTER_HANDLED;
-	return FILTER_SCHEDULE_THREAD;
 }
 
 static void
@@ -1340,4 +1346,60 @@ bnxt_mark_cpr_invalid(struct bnxt_cp_ring *cpr)
 
 	for (i = 0; i < cpr->ring.ring_size; i++)
 		cmp[i].info3_v = !cpr->v_bit;
+}
+
+static void
+bnxt_def_cp_task(void *context)
+{
+	if_ctx_t ctx = context;
+	struct bnxt_softc *softc = iflib_get_softc(ctx);
+	struct bnxt_cp_ring *cpr = &softc->def_cp_ring;
+
+	/* Handle completions on the default completion ring */
+	struct cmpl_base *cmpl;
+	uint32_t cons = cpr->cons;
+	bool v_bit = cpr->v_bit;
+	bool last_v_bit;
+	uint32_t last_cons;
+	uint16_t type;
+
+	for (;;) {
+		last_cons = cons;
+		last_v_bit = v_bit;
+		NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
+		cmpl = &((struct cmpl_base *)cpr->ring.vaddr)[cons];
+
+		if (!CMP_VALID(cmpl, v_bit))
+			break;
+
+		type = le16toh(cmpl->type) & CMPL_BASE_TYPE_MASK;
+		switch (type) {
+		case CMPL_BASE_TYPE_TX_L2:
+		case CMPL_BASE_TYPE_RX_L2:
+		case CMPL_BASE_TYPE_RX_AGG:
+		case CMPL_BASE_TYPE_RX_TPA_START:
+		case CMPL_BASE_TYPE_RX_TPA_END:
+		case CMPL_BASE_TYPE_STAT_EJECT:
+		case CMPL_BASE_TYPE_HWRM_DONE:
+		case CMPL_BASE_TYPE_HWRM_FWD_REQ:
+		case CMPL_BASE_TYPE_HWRM_FWD_RESP:
+		case CMPL_BASE_TYPE_HWRM_ASYNC_EVENT:
+		case CMPL_BASE_TYPE_CQ_NOTIFICATION:
+		case CMPL_BASE_TYPE_SRQ_EVENT:
+		case CMPL_BASE_TYPE_DBQ_EVENT:
+		case CMPL_BASE_TYPE_QP_EVENT:
+		case CMPL_BASE_TYPE_FUNC_EVENT:
+			device_printf(softc->dev,
+			    "Unhandled completion type %u", type);
+			break;
+		default:
+			device_printf(softc->dev,
+			    "Unknown completion type %u", type);
+			break;
+		}
+	}
+
+	cpr->cons = last_cons;
+	cpr->v_bit = last_v_bit;
+	BNXT_CP_IDX_ENABLE_DB(&cpr->ring, cpr->cons);
 }
