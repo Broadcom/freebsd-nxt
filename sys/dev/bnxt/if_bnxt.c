@@ -129,6 +129,7 @@ static int bnxt_handle_rx_cp(void *arg);
 static void bnxt_clear_ids(struct bnxt_softc *softc);
 static void inline bnxt_do_enable_intr(struct bnxt_cp_ring *cpr);
 static void inline bnxt_do_disable_intr(struct bnxt_cp_ring *cpr);
+static void bnxt_mark_cpr_invalid(struct bnxt_cp_ring *cpr);
 
 /*
  * Device Interface Declaration
@@ -687,6 +688,7 @@ bnxt_init(if_ctx_t ctx)
 	/* Allocate the default completion ring */
 	softc->def_cp_ring.cons = UINT32_MAX;
 	softc->def_cp_ring.v_bit = 1;
+	bnxt_mark_cpr_invalid(&softc->def_cp_ring);
 	rc = bnxt_hwrm_ring_alloc(softc,
 	    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
 	    &softc->def_cp_ring.ring,
@@ -707,6 +709,7 @@ bnxt_init(if_ctx_t ctx)
 		softc->rx_cp_rings[i].cons = UINT32_MAX;
 		softc->rx_cp_rings[i].v_bit = 1;
 		softc->rx_cp_rings[i].last_idx = UINT32_MAX;
+		bnxt_mark_cpr_invalid(&softc->rx_cp_rings[i]);
 		rc = bnxt_hwrm_ring_alloc(softc,
 		    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
 		    &softc->rx_cp_rings[i].ring, (uint16_t)HWRM_NA_SIGNATURE,
@@ -771,6 +774,7 @@ bnxt_init(if_ctx_t ctx)
 		/* Allocate the completion ring */
 		softc->tx_cp_rings[i].cons = UINT32_MAX;
 		softc->tx_cp_rings[i].v_bit = 1;
+		bnxt_mark_cpr_invalid(&softc->tx_cp_rings[i]);
 		rc = bnxt_hwrm_ring_alloc(softc,
 		    HWRM_RING_ALLOC_INPUT_RING_TYPE_CMPL,
 		    &softc->tx_cp_rings[i].ring, (uint16_t)HWRM_NA_SIGNATURE,
@@ -1326,4 +1330,14 @@ bnxt_clear_ids(struct bnxt_softc *softc)
 		softc->vnic_info[i].id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->vnic_info[i].ctx_id = (uint16_t)HWRM_NA_SIGNATURE;
 	}
+}
+
+static void
+bnxt_mark_cpr_invalid(struct bnxt_cp_ring *cpr)
+{
+	struct cmpl_base *cmp = (void *)cpr->ring.vaddr;
+	int i;
+
+	for (i = 0; i < cpr->ring.ring_size; i++)
+		cmp[i].info3_v = !cpr->v_bit;
 }
