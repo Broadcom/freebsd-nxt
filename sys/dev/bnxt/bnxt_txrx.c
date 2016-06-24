@@ -45,6 +45,12 @@ __FBSDID("$FreeBSD$");
 #include "bnxt.h"
 
 /*
+ * Perform redundant checks and fixups.
+ * Helpful for debugging and doesn't seem to slow down the driver.
+ */
+#define BNXT_EXTRA_CHECKS 1
+
+/*
  * Function prototypes
  */
 
@@ -298,7 +304,9 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx)
 	bool v_bit = cpr->v_bit;
 	uint8_t ags;
 	int i;
-uint32_t orig_idx = idx;
+#if BNXT_EXTRA_CHECKS
+	uint32_t orig_idx = idx;
+#endif
 
 	/*
 	 * If idx is behind where we'll be looking, increment avail
@@ -308,7 +316,9 @@ uint32_t orig_idx = idx;
 		idx = RING_NEXT(&softc->rx_rings[rxqid], idx);
 		avail++;
 	}
-if (avail) device_printf(softc->dev, "Extra avail: %d\n", avail);
+#if BNXT_EXTRA_CHECKS
+	if (avail) device_printf(softc->dev, "Extra avail: %d\n", avail);
+#endif
 
 	for (;;) {
 		NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
@@ -333,11 +343,13 @@ if (avail) device_printf(softc->dev, "Extra avail: %d\n", avail);
 				if (!CMP_VALID(cmp, v_bit))
 					break;
 			}
-/* TODO: Remove this once it never happens... :-) */
-if (le32toh(rcp->opaque) == orig_idx) {
-if (avail) device_printf(softc->dev, "Resetting avail from %d!\n", avail);
-avail = 0;
-}
+#if BNXT_EXTRA_CHECKS
+			if (le32toh(rcp->opaque) == orig_idx && avail) {
+				device_printf(softc->dev,
+				    "Resetting avail from %d!\n", avail);
+				avail = 0;
+			}
+#endif
 			avail++;
 		}
 		else {
@@ -365,6 +377,7 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 	NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
 	rcp = &((struct rx_pkt_cmpl *)cpr->ring.vaddr)[cpr->cons];
 
+#if BNXT_EXTRA_CHECKS
 	/* This has already been checked, we shouldn't need to do this again */
 	if (!CMP_VALID(rcp, cpr->v_bit)) {
 		device_printf(softc->dev, "No RX completion\n");
@@ -389,6 +402,9 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 		    RX_PKT_CMPL_ERRORS_BUFFER_ERROR_MASK);
 		return EINVAL;
 	}
+#else
+	flags_type = le16toh(rcp->flags_type);
+#endif
 
 	/* Extract from the first 16-byte BD */
 	if (flags_type & RX_PKT_CMPL_FLAGS_RSS_VALID) {
@@ -419,11 +435,13 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 	NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
 	rcph = &((struct rx_pkt_cmpl_hi *)cpr->ring.vaddr)[cpr->cons];
 
+#if BNXT_EXTRA_CHECKS
 	/* Again, this has already been checked and so is not needed */
 	if (!CMP_VALID(rcph, cpr->v_bit)) {
 		device_printf(softc->dev, "No second RX completion\n");
 		return EINVAL;
 	}
+#endif
 
 	flags2 = le32toh(rcph->flags2);
 	errors = le16toh(rcph->errors_v2);
