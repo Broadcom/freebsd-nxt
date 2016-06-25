@@ -422,9 +422,6 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 		 */
 		// May be documented in the "LSI ES"
 		// also check the firmware code.
-		device_printf(softc->dev,
-		    "TODO: Mystery RSS hash type: %02hhx\n",
-		    rcp->rss_hash_type);
 		ri->iri_rsstype = M_HASHTYPE_OPAQUE;
 	}
 	else {
