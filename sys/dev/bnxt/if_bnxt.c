@@ -557,7 +557,7 @@ bnxt_attach_pre(if_ctx_t ctx)
 	scctx->isc_tx_tso_size_max = BNXT_TSO_SIZE;
 	scctx->isc_tx_tso_segsize_max = BNXT_TSO_SIZE;
 	scctx->isc_vectors = softc->pf.max_cp_rings;
-	scctx->isc_nrxd = 32, //PAGE_SIZE / sizeof(struct rx_pkt_cmpl),
+	scctx->isc_nrxd = PAGE_SIZE / sizeof(struct rx_pkt_cmpl),
 	scctx->isc_ntxd = PAGE_SIZE / sizeof(struct tx_bd_short),
 	scctx->isc_txqsizes[0] = PAGE_SIZE * 2;
 	scctx->isc_txqsizes[1] = PAGE_SIZE;
