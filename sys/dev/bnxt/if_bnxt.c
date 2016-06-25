@@ -200,7 +200,7 @@ static struct if_shared_ctx bnxt_sctx_init = {
 	.isc_txrx = &bnxt_txrx,
 	.isc_driver = &bnxt_iflib_driver,
 	.isc_nfl = 2,				// Number of Free Lists
-	.isc_flags = 0 /*IFLIB_HAS_CQ*/,
+	.isc_flags = IFLIB_HAS_CQ,
 	.isc_q_align = PAGE_SIZE,
 
 	/* We really don't have a maximum here */
