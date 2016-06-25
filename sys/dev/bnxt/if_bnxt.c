@@ -728,6 +728,9 @@ bnxt_init(if_ctx_t ctx)
 		    HWRM_NA_SIGNATURE, false);
 		if (rc)
 			goto fail;
+		BNXT_RX_DB(&softc->rx_rings[i], 0);
+		/* TODO: Cumulus+ doesn't need the double doorbell */
+		BNXT_RX_DB(&softc->rx_rings[i], 0);
 
 		/* Allocate the AG ring */
 		rc = bnxt_hwrm_ring_alloc(softc,
@@ -736,6 +739,9 @@ bnxt_init(if_ctx_t ctx)
 		    HWRM_NA_SIGNATURE, false);
 		if (rc)
 			goto fail;
+		BNXT_RX_DB(&softc->rx_rings[i], 0);
+		/* TODO: Cumulus+ doesn't need the double doorbell */
+		BNXT_RX_DB(&softc->ag_rings[i], 0);
 
 		/* Allocate the ring group */
 		softc->grp_info[i].stats_ctx =
@@ -763,11 +769,9 @@ bnxt_init(if_ctx_t ctx)
 	rc = bnxt_hwrm_vnic_cfg(softc, &softc->vnic_info);
 	if (rc)
 		goto fail;
-	if (i == 0) {
-		rc = bnxt_hwrm_set_filter(softc, &softc->vnic_info);
-		if (rc)
-			goto fail;
-	}
+	rc = bnxt_hwrm_set_filter(softc, &softc->vnic_info);
+	if (rc)
+		goto fail;
 
 	/* Enable RSS on the VNICs */
 	for (i = 0, j = 0; i < HW_HASH_INDEX_SIZE; i++) {
@@ -814,6 +818,9 @@ bnxt_init(if_ctx_t ctx)
 		    softc->tx_cp_rings[i].stats_ctx_id, false);
 		if (rc)
 			goto fail;
+		BNXT_TX_DB(&softc->tx_rings[i], 0);
+		/* TODO: Cumulus+ doesn't need the double doorbell */
+		BNXT_TX_DB(&softc->tx_rings[i], 0);
 	}
 
 	ifp->if_drv_flags |= IFF_DRV_RUNNING;
