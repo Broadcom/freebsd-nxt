@@ -64,8 +64,8 @@ __FBSDID("$FreeBSD$");
 #define CMP_VALID(cmp, v_bit) \
 	((!!(((struct cmpl_base *)(cmp))->info3_v & htole32(CMPL_BASE_V))) == !!(v_bit) )
 #define NEXT_CP_CONS_V(ring, cons, v_bit) \
-	if (__predict_false(++cons == (ring)->ring_size)) \
-		cons = 0, v_bit = !v_bit
+	if (__predict_false(++(cons) == (ring)->ring_size)) \
+		((cons) = 0, (v_bit) = !v_bit)
 
 #define RING_NEXT(ring, idx) (__predict_false(idx + 1 == (ring)->ring_size) ? \
 								0 : idx + 1)
