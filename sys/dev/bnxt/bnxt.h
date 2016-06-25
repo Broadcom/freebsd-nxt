@@ -329,17 +329,13 @@ struct bnxt_vf_info {
 
 struct bnxt_vnic_info {
 	uint16_t	id;
-	uint16_t	ring_grp;
-	uint16_t	rss_rule;
+	uint16_t	def_ring_grp;
 	uint16_t	cos_rule;
 	uint16_t	lb_rule;
 	uint16_t	mru;
 
-	uint16_t	ctx_id;
-
 	uint32_t	rx_mask;
 	struct iflib_dma_info mc_list;
-	int		mc_list_size;
 	int		mc_list_count;
 #define BNXT_MAX_MC_ADDRS	16
 
@@ -348,6 +344,10 @@ struct bnxt_vnic_info {
 
 	uint64_t	filter_id;
 	uint32_t	flow_id;
+
+	uint16_t	rss_id;
+	struct iflib_dma_info rss_hash_key_tbl;
+	struct iflib_dma_info	rss_grp_tbl;
 };
 
 struct bnxt_grp_info {
@@ -425,10 +425,10 @@ struct bnxt_softc {
 	struct iflib_dma_info	tx_stats;
 	int			ntxqsets;
 
+	struct bnxt_vnic_info	vnic_info;
 	struct bnxt_ring	*ag_rings;
 	struct bnxt_ring	*rx_rings;
 	struct bnxt_cp_ring	*rx_cp_rings;
-	struct bnxt_vnic_info	*vnic_info;
 	struct bnxt_grp_info	*grp_info;
 	struct iflib_dma_info	rx_stats;
 	int			nrxqsets;

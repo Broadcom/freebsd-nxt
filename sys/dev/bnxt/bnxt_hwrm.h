@@ -53,8 +53,8 @@ int bnxt_hwrm_func_qcaps(struct bnxt_softc *);
 int bnxt_hwrm_func_reset(struct bnxt_softc *);
 int bnxt_hwrm_set_link_setting(struct bnxt_softc *, bool, bool);
 int bnxt_hwrm_set_pause(struct bnxt_softc *);
-int bnxt_hwrm_vnic_ctx_alloc(struct bnxt_softc *, struct bnxt_vnic_info *);
-int bnxt_hwrm_vnic_ctx_free(struct bnxt_softc *, struct bnxt_vnic_info *);
+int bnxt_hwrm_vnic_ctx_alloc(struct bnxt_softc *, uint16_t *);
+int bnxt_hwrm_vnic_ctx_free(struct bnxt_softc *, uint16_t *);
 int bnxt_hwrm_vnic_cfg(struct bnxt_softc *, struct bnxt_vnic_info *);
 int bnxt_hwrm_stat_ctx_alloc(struct bnxt_softc *softc, struct bnxt_cp_ring *cpr,
     uint64_t paddr);
@@ -72,5 +72,7 @@ int bnxt_hwrm_cfa_l2_set_rx_mask(struct bnxt_softc *softc,
     struct bnxt_vnic_info *vnic);
 int bnxt_hwrm_set_filter(struct bnxt_softc *, struct bnxt_vnic_info *);
 int bnxt_hwrm_clear_filter(struct bnxt_softc *, struct bnxt_vnic_info *);
+int bnxt_hwrm_rss_cfg(struct bnxt_softc *softc, struct bnxt_vnic_info *,
+    uint32_t hash_type);
 
 #endif

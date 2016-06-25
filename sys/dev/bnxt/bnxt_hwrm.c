@@ -555,10 +555,12 @@ bnxt_hwrm_vnic_cfg(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
 
 	if (vnic->flags & BNXT_VNIC_FLAG_DEFAULT)
 		req.flags = htole32(HWRM_VNIC_ALLOC_INPUT_FLAGS_DEFAULT);
-	req.enables = htole32(HWRM_VNIC_CFG_INPUT_ENABLES_DFLT_RING_GRP);
+	req.enables = htole32(HWRM_VNIC_CFG_INPUT_ENABLES_DFLT_RING_GRP |
+	    HWRM_VNIC_CFG_INPUT_ENABLES_RSS_RULE |
+	    HWRM_VNIC_CFG_INPUT_ENABLES_MRU);
 	req.vnic_id = htole16(vnic->id);
-	req.dflt_ring_grp = htole16(vnic->ring_grp);
-	req.rss_rule = htole16(vnic->rss_rule);
+	req.dflt_ring_grp = htole16(vnic->def_ring_grp);
+	req.rss_rule = htole16(vnic->rss_id);
 	req.cos_rule = htole16(vnic->cos_rule);
 	req.lb_rule = htole16(vnic->lb_rule);
 
@@ -630,16 +632,16 @@ fail:
 }
 
 int
-bnxt_hwrm_vnic_ctx_alloc(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
+bnxt_hwrm_vnic_ctx_alloc(struct bnxt_softc *softc, uint16_t *ctx_id)
 {
 	struct hwrm_vnic_rss_cos_lb_ctx_alloc_input req = {0};
 	struct hwrm_vnic_rss_cos_lb_ctx_alloc_output *resp =
 	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	int rc;
 
-	if (vnic->ctx_id != (uint16_t)HWRM_NA_SIGNATURE) {
+	if (*ctx_id != (uint16_t)HWRM_NA_SIGNATURE) {
 		device_printf(softc->dev,
-		    "Attempt to re-allocate vnic ctx %04x\n", vnic->ctx_id);
+		    "Attempt to re-allocate vnic ctx %04x\n", *ctx_id);
 		return EDOOFUS;
 	}
 
@@ -651,7 +653,7 @@ bnxt_hwrm_vnic_ctx_alloc(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
 	if (rc)
 		goto fail;
 
-	vnic->ctx_id = le32toh(resp->rss_cos_lb_ctx_id);
+	*ctx_id = le32toh(resp->rss_cos_lb_ctx_id);
 
 fail:
 	BNXT_HWRM_UNLOCK(softc);
@@ -659,12 +661,12 @@ fail:
 }
 
 int
-bnxt_hwrm_vnic_ctx_free(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
+bnxt_hwrm_vnic_ctx_free(struct bnxt_softc *softc, uint16_t *ctx_id)
 {
 	struct hwrm_vnic_rss_cos_lb_ctx_free_input req = {0};
 	int rc;
 
-	if (vnic->ctx_id == (uint16_t)HWRM_NA_SIGNATURE) {
+	if (*ctx_id == (uint16_t)HWRM_NA_SIGNATURE) {
 		device_printf(softc->dev,
 		    "Attempt to free unallocated vnic ctx\n");
 		return EDOOFUS;
@@ -673,14 +675,14 @@ bnxt_hwrm_vnic_ctx_free(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_VNIC_RSS_COS_LB_CTX_FREE,
 	    -1, -1);
 
-	req.rss_cos_lb_ctx_id = htole16(vnic->ctx_id);
+	req.rss_cos_lb_ctx_id = htole16(*ctx_id);
 
 	BNXT_HWRM_LOCK(softc);
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	if (rc)
 		goto fail;
 
-	vnic->ctx_id = (uint16_t)HWRM_NA_SIGNATURE;
+	*ctx_id = (uint16_t)HWRM_NA_SIGNATURE;
 
 fail:
 	BNXT_HWRM_UNLOCK(softc);
@@ -972,4 +974,22 @@ bnxt_hwrm_clear_filter(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
 	vnic->filter_id = -1;	// HWRM_NA_SIGNATURE is not big enough
 
 	return (rc);
+}
+
+int
+bnxt_hwrm_rss_cfg(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic,
+    uint32_t hash_type)
+{
+	struct hwrm_vnic_rss_cfg_input	req = {0};
+	struct hwrm_vnic_rss_cfg_output	*resp;
+
+	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_VNIC_RSS_CFG, -1, -1);
+
+	req.hash_type = htole32(hash_type);
+	req.ring_grp_tbl_addr = htole64(vnic->rss_grp_tbl.idi_paddr);
+	req.hash_key_tbl_addr = htole64(vnic->rss_hash_key_tbl.idi_paddr);
+	req.rss_ctx_idx = htole16(vnic->rss_id);
+
+	return hwrm_send_message(softc, &req, sizeof(req));
 }

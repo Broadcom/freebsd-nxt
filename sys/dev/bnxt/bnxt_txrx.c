@@ -258,7 +258,7 @@ bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
 	for (i=0; i<count; i++) {
 		rxbd[pidx].flags_type = htole16(type);
 		rxbd[pidx].len = htole16(softc->scctx->isc_max_frame_size);
-		rxbd[pidx].opaque = htole32(pidx);
+		rxbd[pidx].opaque = htole32((flid << 31) | ((rxqid+1) << 24) | pidx);
 		rxbd[pidx].addr = htole64(paddrs[i]);
 		if (++pidx == rx_ring->ring_size)
 			pidx = 0;
@@ -344,15 +344,13 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx)
 					break;
 			}
 #if BNXT_EXTRA_CHECKS
-			if (le32toh(rcp->opaque) == orig_idx && avail) {
+			if ((le32toh(rcp->opaque) & 0xffffff) == orig_idx && avail) {
 				device_printf(softc->dev,
 				    "Resetting avail from %d!\n", avail);
 				avail = 0;
 			}
 #endif
 			avail++;
-		}
-		else {
 		}
 	}
 
@@ -427,8 +425,12 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 	    RX_PKT_CMPL_AGG_BUFS_SFT;
 	ri->iri_nfrags = ags + 1;
 	ri->iri_frags[0].irf_flid = 0;
-	ri->iri_frags[0].irf_idx = le32toh(rcp->opaque);
-	cpr->last_idx = ri->iri_frags[0].irf_idx;
+	cpr->last_idx = le32toh(rcp->opaque);
+	ri->iri_frags[0].irf_idx = cpr->last_idx & 0xffffff;
+	if ((cpr->last_idx >> 24) != (ri->iri_qsidx + 1)) {
+		device_printf(softc->dev, "Completion in Q %u should be in %u\n", ri->iri_qsidx, (cpr->last_idx >> 24));
+	}
+	cpr->last_idx &= 0xffffff;
 	ri->iri_len = le16toh(rcp->len);
 
 	/* Now the second 16-byte BD */
@@ -472,7 +474,7 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 		acp = &((struct rx_abuf_cmpl *)cpr->ring.vaddr)[cpr->cons];
 
 		ri->iri_frags[i].irf_flid = 1;
-		ri->iri_frags[i].irf_idx = le32toh(acp->opaque);
+		ri->iri_frags[i].irf_idx = le32toh(acp->opaque) & 0xffffff;
 		ri->iri_len += le16toh(acp->len);
 	}
 

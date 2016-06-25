@@ -113,7 +113,7 @@ static uint64_t	bnxt_get_counter(if_ctx_t, ift_counter);
 static void bnxt_update_admin_status(if_ctx_t ctx);
 
 /* Interrupt enable / disable */
-static void bnxt_enable_intr(if_ctx_t ctx);
+static void bnxt_intr_enable(if_ctx_t ctx);
 static void bnxt_queue_intr_enable(if_ctx_t ctx, uint16_t qid);
 static void bnxt_disable_intr(if_ctx_t ctx);
 static int bnxt_msix_intr_assign(if_ctx_t ctx, int msix);
@@ -178,7 +178,7 @@ static device_method_t bnxt_iflib_methods[] = {
 	DEVMETHOD(ifdi_get_counter, bnxt_get_counter),
 	DEVMETHOD(ifdi_update_admin_status, bnxt_update_admin_status),
 
-	DEVMETHOD(ifdi_intr_enable, bnxt_enable_intr),
+	DEVMETHOD(ifdi_intr_enable, bnxt_intr_enable),
 	DEVMETHOD(ifdi_queue_intr_enable, bnxt_queue_intr_enable),
 	DEVMETHOD(ifdi_intr_disable, bnxt_disable_intr),
 	DEVMETHOD(ifdi_msix_intr_assign, bnxt_msix_intr_assign),
@@ -319,8 +319,6 @@ bnxt_queues_free(if_ctx_t ctx)
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 
 	// Free TX queues
-	bus_dmamap_sync(softc->tx_stats.idi_tag, softc->tx_stats.idi_map,
-	    BUS_DMASYNC_POSTWRITE);
 	iflib_dma_free(&softc->tx_stats);
 	free(softc->tx_rings, M_DEVBUF);
 	softc->tx_rings = NULL;
@@ -329,10 +327,7 @@ bnxt_queues_free(if_ctx_t ctx)
 	softc->ntxqsets = 0;
 
 	// Free RX queues
-	bus_dmamap_sync(softc->rx_stats.idi_tag, softc->rx_stats.idi_map,
-	    BUS_DMASYNC_POSTWRITE);
 	iflib_dma_free(&softc->rx_stats);
-	free(softc->vnic_info, M_DEVBUF);
 	free(softc->grp_info, M_DEVBUF);
 	free(softc->ag_rings, M_DEVBUF);
 	free(softc->rx_rings, M_DEVBUF);
@@ -389,19 +384,11 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		rc = ENOMEM;
 		goto grp_alloc_fail;
 	}
-	softc->vnic_info = malloc(sizeof(struct bnxt_vnic_info) * nrxqsets,
-	    M_DEVBUF, M_NOWAIT | M_ZERO);
-	if (!softc->vnic_info) {
-		device_printf(iflib_get_dev(ctx),
-		    "unable to allocate ring groups\n");
-		rc = ENOMEM;
-		goto vnic_alloc_fail;
-	}
 
 	rc = iflib_dma_alloc(ctx, sizeof(struct ctx_hw_stats) * nrxqsets,
 	    &softc->rx_stats, 0);
 	if (rc)
-		goto dma_alloc_fail;
+		goto hw_stats_alloc_fail;
 	bus_dmamap_sync(softc->rx_stats.idi_tag, softc->rx_stats.idi_map,
 	    BUS_DMASYNC_PREREAD);
 
@@ -445,43 +432,55 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->grp_info[i].ag_ring_id = softc->ag_rings[i].phys_id;
 		softc->grp_info[i].cp_ring_id =
 		    softc->rx_cp_rings[i].ring.phys_id;
-
-		/* And finally, the VNIC */
-		softc->vnic_info[i].id = (uint16_t)HWRM_NA_SIGNATURE;
-		softc->vnic_info[i].flow_id = (uint16_t)HWRM_NA_SIGNATURE;
-		softc->vnic_info[i].filter_id = -1;
-		softc->vnic_info[i].ring_grp = (uint16_t)HWRM_NA_SIGNATURE;
-		softc->vnic_info[i].rss_rule = (uint16_t)HWRM_NA_SIGNATURE;
-		softc->vnic_info[i].cos_rule = (uint16_t)HWRM_NA_SIGNATURE;
-		softc->vnic_info[i].lb_rule = (uint16_t)HWRM_NA_SIGNATURE;
-		softc->vnic_info[i].ctx_id = (uint16_t)HWRM_NA_SIGNATURE;
-		softc->vnic_info[i].rx_mask =
-		    HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_BCAST;
-		softc->vnic_info[i].mc_list_count = 0;
-		softc->vnic_info[i].mc_list_size =
-		    BNXT_MAX_MC_ADDRS * ETHER_ADDR_LEN;
-		if (i == 0)
-			softc->vnic_info[i].flags = BNXT_VNIC_FLAG_DEFAULT;
-		rc = iflib_dma_alloc(ctx, softc->vnic_info[i].mc_list_size,
-		    &softc->vnic_info[i].mc_list, 0);
-		if (rc) {
-			i--;
-			goto mc_alloc_fail;
-		}
 	}
+
+	/* And finally, the VNIC */
+	softc->vnic_info.id = (uint16_t)HWRM_NA_SIGNATURE;
+	softc->vnic_info.flow_id = (uint16_t)HWRM_NA_SIGNATURE;
+	softc->vnic_info.filter_id = -1;
+	softc->vnic_info.def_ring_grp = (uint16_t)HWRM_NA_SIGNATURE;
+	softc->vnic_info.cos_rule = (uint16_t)HWRM_NA_SIGNATURE;
+	softc->vnic_info.lb_rule = (uint16_t)HWRM_NA_SIGNATURE;
+	softc->vnic_info.rx_mask = HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_BCAST;
+	softc->vnic_info.mc_list_count = 0;
+	softc->vnic_info.flags = BNXT_VNIC_FLAG_DEFAULT;
+	rc = iflib_dma_alloc(ctx, BNXT_MAX_MC_ADDRS * ETHER_ADDR_LEN,
+	    &softc->vnic_info.mc_list, 0);
+	if (rc)
+		goto mc_list_alloc_fail;
+
+	/* The VNIC RSS Hash Key */
+	rc = iflib_dma_alloc(ctx, HW_HASH_KEY_SIZE,
+	    &softc->vnic_info.rss_hash_key_tbl, 0);
+	if (rc)
+		goto rss_hash_alloc_fail;
+	bus_dmamap_sync(softc->vnic_info.rss_hash_key_tbl.idi_tag,
+	    softc->vnic_info.rss_hash_key_tbl.idi_map,
+	    BUS_DMASYNC_PREWRITE);
+	arc4rand(softc->vnic_info.rss_hash_key_tbl.idi_vaddr,
+	    softc->vnic_info.rss_hash_key_tbl.idi_size, 0);
+
+	/* Allocate the RSS tables */
+	rc = iflib_dma_alloc(ctx, HW_HASH_INDEX_SIZE * sizeof(uint16_t),
+	    &softc->vnic_info.rss_grp_tbl, 0);
+	if (rc)
+		goto rss_grp_alloc_fail;
+	bus_dmamap_sync(softc->vnic_info.rss_grp_tbl.idi_tag,
+	    softc->vnic_info.rss_grp_tbl.idi_map,
+	    BUS_DMASYNC_PREWRITE);
+	memset(softc->vnic_info.rss_grp_tbl.idi_vaddr, 0xff,
+	    softc->vnic_info.rss_grp_tbl.idi_size);
 
 	softc->nrxqsets = nrxqsets;
 	return rc;
 
-mc_alloc_fail:
-	for (; i >= 0; i--) {
-		bus_dmamap_sync(softc->vnic_info[i].mc_list.idi_tag,
-		    softc->vnic_info[i].mc_list.idi_map, BUS_DMASYNC_POSTWRITE);
-		iflib_dma_free(&softc->vnic_info[i].mc_list);
-	}
-dma_alloc_fail:
-	free(softc->vnic_info, M_DEVBUF);
-vnic_alloc_fail:
+rss_grp_alloc_fail:
+	iflib_dma_free(&softc->vnic_info.rss_hash_key_tbl);
+rss_hash_alloc_fail:
+	iflib_dma_free(&softc->vnic_info.mc_list);
+mc_list_alloc_fail:
+	iflib_dma_free(&softc->rx_stats);
+hw_stats_alloc_fail:
 	free(softc->grp_info, M_DEVBUF);
 grp_alloc_fail:
 	free(softc->ag_rings, M_DEVBUF);
@@ -571,6 +570,8 @@ bnxt_attach_pre(if_ctx_t ctx)
 	    softc->pf.max_rx_rings);
 	scctx->isc_max_txqsets = min(softc->pf.max_rx_rings,
 	    softc->pf.max_cp_rings - scctx->isc_max_rxqsets - 1);
+	scctx->isc_rss_table_size = HW_HASH_INDEX_SIZE;
+	scctx->isc_rss_table_mask = scctx->isc_rss_table_size - 1;
 
 	/* iflib will map and release this bar */
 	scctx->isc_msix_bar = pci_msix_table_bar(softc->dev);
@@ -661,12 +662,10 @@ bnxt_detach(if_ctx_t ctx)
 	/* We need to free() these here... */
 	for (i = softc->nrxqsets-1; i>=0; i--) {
 		iflib_irq_free(ctx, &softc->rx_cp_rings[i].irq);
-		bus_dmamap_sync(softc->vnic_info[i].mc_list.idi_tag,
-		    softc->vnic_info[i].mc_list.idi_map, BUS_DMASYNC_POSTWRITE);
-		iflib_dma_free(&softc->vnic_info[i].mc_list);
 	}
-	bus_dmamap_sync(softc->def_cp_ring_mem.idi_tag,
-	    softc->def_cp_ring_mem.idi_map, BUS_DMASYNC_POSTWRITE);
+	iflib_dma_free(&softc->vnic_info.mc_list);
+	iflib_dma_free(&softc->vnic_info.rss_hash_key_tbl);
+	iflib_dma_free(&softc->vnic_info.rss_grp_tbl);
 	iflib_dma_free(&softc->def_cp_ring_mem);
 
 	/* hwrm is cleaned up in queues_free() since it's called later */
@@ -682,7 +681,7 @@ bnxt_init(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	struct ifnet *ifp = iflib_get_ifp(ctx);
-	int i;
+	int i, j;
 	int rc;
 
 	rc = bnxt_hwrm_func_reset(softc);
@@ -748,25 +747,46 @@ bnxt_init(if_ctx_t ctx)
 		rc = bnxt_hwrm_ring_grp_alloc(softc, &softc->grp_info[i]);
 		if (rc)
 			goto fail;
-
-		/* Allocate the vnic */
-		softc->vnic_info[i].ring_grp = softc->grp_info[i].grp_id;
-		softc->vnic_info[i].mru = softc->scctx->isc_max_frame_size;
-		rc = bnxt_hwrm_vnic_alloc(softc, &softc->vnic_info[i]);
-		if (rc)
-			goto fail;
-		rc = bnxt_hwrm_vnic_ctx_alloc(softc, &softc->vnic_info[i]);
-		if (rc)
-			goto fail;
-		rc = bnxt_hwrm_vnic_cfg(softc, &softc->vnic_info[i]);
-		if (rc)
-			goto fail;
-		if (i == 0) {
-			rc = bnxt_hwrm_set_filter(softc, &softc->vnic_info[i]);
-			if (rc)
-				goto fail;
-		}
 	}
+
+	/* Allocate the VNIC RSS context */
+	rc = bnxt_hwrm_vnic_ctx_alloc(softc, &softc->vnic_info.rss_id);
+	if (rc)
+		goto fail;
+
+	/* Allocate the vnic */
+	softc->vnic_info.def_ring_grp = softc->grp_info[0].grp_id;
+	softc->vnic_info.mru = softc->scctx->isc_max_frame_size;
+	rc = bnxt_hwrm_vnic_alloc(softc, &softc->vnic_info);
+	if (rc)
+		goto fail;
+	rc = bnxt_hwrm_vnic_cfg(softc, &softc->vnic_info);
+	if (rc)
+		goto fail;
+	if (i == 0) {
+		rc = bnxt_hwrm_set_filter(softc, &softc->vnic_info);
+		if (rc)
+			goto fail;
+	}
+
+	/* Enable RSS on the VNICs */
+	for (i = 0, j = 0; i < HW_HASH_INDEX_SIZE; i++) {
+		((uint16_t *)
+		    softc->vnic_info.rss_grp_tbl.idi_vaddr)[i] =
+		    htole16(softc->grp_info[j].grp_id);
+		if (++j == softc->nrxqsets)
+			j = 0;
+	}
+
+	rc = bnxt_hwrm_rss_cfg(softc, &softc->vnic_info,
+	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_IPV4 |
+	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_TCP_IPV4 |
+	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_UDP_IPV4 |
+	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_IPV6 |
+	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_TCP_IPV6 |
+	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_UDP_IPV6);
+	if (rc)
+		goto fail;
 
 	for (i = 0; i < softc->ntxqsets; i++) {
 		/* Allocate the statistics context */
@@ -823,7 +843,6 @@ static void
 bnxt_multi_set(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
-	struct bnxt_vnic_info *vnic = &softc->vnic_info[0];
 	if_t ifp = iflib_get_ifp(ctx);
 	uint8_t *mta;
 	int cnt, mcnt;
@@ -831,20 +850,22 @@ bnxt_multi_set(if_ctx_t ctx)
 	mcnt = if_multiaddr_count(ifp, -1);
 
 	if (mcnt > BNXT_MAX_MC_ADDRS) {
-		vnic->rx_mask |= HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_ALL_MCAST;
-		bnxt_hwrm_cfa_l2_set_rx_mask(softc, vnic);
+		softc->vnic_info.rx_mask |=
+		    HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_ALL_MCAST;
+		bnxt_hwrm_cfa_l2_set_rx_mask(softc, &softc->vnic_info);
 	}
 	else {
-		vnic->rx_mask &= ~HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_ALL_MCAST;
-		mta = vnic->mc_list.idi_vaddr;
-		bzero(mta, vnic->mc_list_size);
+		softc->vnic_info.rx_mask &=
+		    ~HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_ALL_MCAST;
+		mta = softc->vnic_info.mc_list.idi_vaddr;
+		bzero(mta, softc->vnic_info.mc_list.idi_size);
 		if_multiaddr_array(ifp, mta, &cnt, mcnt);
-		bus_dmamap_sync(vnic->mc_list.idi_tag, vnic->mc_list.idi_map,
-		    BUS_DMASYNC_PREWRITE);
-		vnic->mc_list_count = cnt;
-		vnic->rx_mask |=
+		bus_dmamap_sync(softc->vnic_info.mc_list.idi_tag,
+		    softc->vnic_info.mc_list.idi_map, BUS_DMASYNC_PREWRITE);
+		softc->vnic_info.mc_list_count = cnt;
+		softc->vnic_info.rx_mask |=
 		    HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_MCAST;
-		if (bnxt_hwrm_cfa_l2_set_rx_mask(softc, vnic))
+		if (bnxt_hwrm_cfa_l2_set_rx_mask(softc, &softc->vnic_info))
 			device_printf(softc->dev,
 			    "set_multi: rx_mask set failed\n");
 	}
@@ -928,23 +949,25 @@ static int
 bnxt_promisc_set(if_ctx_t ctx, int flags)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
-	struct bnxt_vnic_info *vnic = &softc->vnic_info[0];
 	if_t ifp = iflib_get_ifp(ctx);
 	int rc;
 
 	if (ifp->if_flags & IFF_ALLMULTI ||
 	    if_multiaddr_count(ifp, -1) > BNXT_MAX_MC_ADDRS)
-		vnic->rx_mask |= HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_ALL_MCAST;
+		softc->vnic_info.rx_mask |=
+		    HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_ALL_MCAST;
 	else
-		vnic->rx_mask &= ~HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_ALL_MCAST;
+		softc->vnic_info.rx_mask &=
+		    ~HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_ALL_MCAST;
 
 	if (ifp->if_flags & IFF_PROMISC)
-		vnic->rx_mask |= HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_PROMISCUOUS;
+		softc->vnic_info.rx_mask |=
+		    HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_PROMISCUOUS;
 	else
-		vnic->rx_mask &=
+		softc->vnic_info.rx_mask &=
 		    ~HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_PROMISCUOUS;
 
-	rc = bnxt_hwrm_cfa_l2_set_rx_mask(softc, vnic);
+	rc = bnxt_hwrm_cfa_l2_set_rx_mask(softc, &softc->vnic_info);
 
 	return rc;
 }
@@ -989,11 +1012,12 @@ bnxt_do_disable_intr(struct bnxt_cp_ring *cpr)
 
 /* Enable all interrupts */
 static void
-bnxt_enable_intr(if_ctx_t ctx)
+bnxt_intr_enable(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	int i;
 
+	bnxt_do_enable_intr(&softc->def_cp_ring);
 	for (i = 0; i < softc->nrxqsets; i++)
 		bnxt_do_enable_intr(&softc->rx_cp_rings[i]);
 
@@ -1332,10 +1356,12 @@ bnxt_clear_ids(struct bnxt_softc *softc)
 		softc->rx_rings[i].phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->ag_rings[i].phys_id = (uint16_t)HWRM_NA_SIGNATURE;
 		softc->grp_info[i].grp_id = (uint16_t)HWRM_NA_SIGNATURE;
-		softc->vnic_info[i].filter_id = -1;
-		softc->vnic_info[i].id = (uint16_t)HWRM_NA_SIGNATURE;
-		softc->vnic_info[i].ctx_id = (uint16_t)HWRM_NA_SIGNATURE;
 	}
+	softc->vnic_info.filter_id = -1;
+	softc->vnic_info.id = (uint16_t)HWRM_NA_SIGNATURE;
+	softc->vnic_info.rss_id = (uint16_t)HWRM_NA_SIGNATURE;
+	memset(softc->vnic_info.rss_grp_tbl.idi_vaddr, 0xff,
+	    softc->vnic_info.rss_grp_tbl.idi_size);
 }
 
 static void
@@ -1390,11 +1416,11 @@ bnxt_def_cp_task(void *context)
 		case CMPL_BASE_TYPE_QP_EVENT:
 		case CMPL_BASE_TYPE_FUNC_EVENT:
 			device_printf(softc->dev,
-			    "Unhandled completion type %u", type);
+			    "Unhandled completion type %u\n", type);
 			break;
 		default:
 			device_printf(softc->dev,
-			    "Unknown completion type %u", type);
+			    "Unknown completion type %u\n", type);
 			break;
 		}
 	}
