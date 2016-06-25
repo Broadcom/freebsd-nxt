@@ -260,7 +260,7 @@ bnxt_hwrm_ver_get(struct bnxt_softc *softc)
 		    resp->hwrm_intf_upd);
 		device_printf(softc->dev, "Please update firmware with "
 		    "HWRM interface 1.0.0 or newer.\n");
-        }
+	}
 	if ((resp->hwrm_intf_maj == 1 && resp->hwrm_intf_min >= 2) ||
 	    (resp->hwrm_intf_maj > 1))
 		softc->flags |= BNXT_FLAG_HWRM_120;
@@ -287,7 +287,7 @@ bnxt_hwrm_func_drv_rgtr(struct bnxt_softc *softc)
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_FUNC_DRV_RGTR, -1, -1);
 
 	req.enables = htole32(HWRM_FUNC_DRV_RGTR_INPUT_ENABLES_VER |
-			      HWRM_FUNC_DRV_RGTR_INPUT_ENABLES_OS_TYPE);
+	    HWRM_FUNC_DRV_RGTR_INPUT_ENABLES_OS_TYPE);
 	req.os_type = htole16(HWRM_FUNC_DRV_RGTR_INPUT_OS_TYPE_FREEBSD);
 
 	req.ver_maj = __FreeBSD_version / 100000;
@@ -314,12 +314,12 @@ bnxt_hwrm_func_drv_unrgtr(struct bnxt_softc *softc, bool shutdown)
 static inline int
 _is_valid_ether_addr(uint8_t *addr)
 {
-        char zero_addr[6] = { 0, 0, 0, 0, 0, 0 };
+	char zero_addr[6] = { 0, 0, 0, 0, 0, 0 };
 
-        if ((addr[0] & 1) || (!bcmp(addr, zero_addr, ETHER_ADDR_LEN)))
-                return (FALSE);
+	if ((addr[0] & 1) || (!bcmp(addr, zero_addr, ETHER_ADDR_LEN)))
+		return (FALSE);
 
-        return (TRUE);
+	return (TRUE);
 }
 
 static inline void
@@ -474,7 +474,7 @@ bnxt_hwrm_set_pause_common(struct bnxt_softc *softc,
 static void
 bnxt_hwrm_set_eee(struct bnxt_softc *softc, struct hwrm_port_phy_cfg_input *req)
 {
-        //struct ethtool_eee *eee = &softc->eee;
+	//struct ethtool_eee *eee = &softc->eee;
 	bool	eee_enabled = false;
 
 	if (eee_enabled) {
@@ -927,9 +927,9 @@ bnxt_hwrm_set_filter(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
 	}
 
 	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
-        bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_CFA_L2_FILTER_ALLOC, -1, -1);
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_CFA_L2_FILTER_ALLOC, -1, -1);
 
-        req.flags = htole32(HWRM_CFA_L2_FILTER_ALLOC_INPUT_FLAGS_PATH_RX);
+	req.flags = htole32(HWRM_CFA_L2_FILTER_ALLOC_INPUT_FLAGS_PATH_RX);
 	enables = HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_ADDR
 	    | HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_L2_ADDR_MASK
 	    | HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_DST_ID;

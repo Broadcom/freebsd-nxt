@@ -152,12 +152,12 @@ __FBSDID("$FreeBSD$");
 
 /* Lock macros */
 #define BNXT_HWRM_LOCK_INIT(_softc, _name) \
-	mtx_init(&(_softc)->hwrm_lock, _name, "BNXT HWRM Lock", MTX_DEF)
+    mtx_init(&(_softc)->hwrm_lock, _name, "BNXT HWRM Lock", MTX_DEF)
 #define BNXT_HWRM_LOCK(_softc)		mtx_lock(&(_softc)->hwrm_lock)
 #define BNXT_HWRM_UNLOCK(_softc)	mtx_unlock(&(_softc)->hwrm_lock)
 #define BNXT_HWRM_LOCK_DESTROY(_softc)	mtx_destroy(&(_softc)->hwrm_lock)
 #define BNXT_HWRM_LOCK_ASSERT(_softc)	mtx_assert(&(_softc)->hwrm_lock,    \
-					           MA_OWNED)
+    MA_OWNED)
 
 /* Chip info */
 #define BNXT_TSO_SIZE	UINT16_MAX

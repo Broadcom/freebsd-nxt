@@ -510,7 +510,7 @@ bnxt_attach_pre(if_ctx_t ctx)
 	pci_enable_busmaster(softc->dev);
 
 	if (bnxt_pci_mapping(softc))
-                return (ENXIO);
+		return (ENXIO);
 
 	/* HWRM setup/init */
 	BNXT_HWRM_LOCK_INIT(softc, device_get_nameunit(softc->dev));
@@ -557,7 +557,7 @@ bnxt_attach_pre(if_ctx_t ctx)
 	scctx->isc_tx_tso_size_max = BNXT_TSO_SIZE;
 	scctx->isc_tx_tso_segsize_max = BNXT_TSO_SIZE;
 	scctx->isc_vectors = softc->pf.max_cp_rings;
-	scctx->isc_nrxd = PAGE_SIZE / sizeof(struct rx_pkt_cmpl),
+	scctx->isc_nrxd = 32, //PAGE_SIZE / sizeof(struct rx_pkt_cmpl),
 	scctx->isc_ntxd = PAGE_SIZE / sizeof(struct tx_bd_short),
 	scctx->isc_txqsizes[0] = PAGE_SIZE * 2;
 	scctx->isc_txqsizes[1] = PAGE_SIZE;
@@ -889,7 +889,7 @@ bnxt_media_status(if_ctx_t ctx, struct ifmediareq * ifmr)
 	ifmr->ifm_status = IFM_AVALID;
 	ifmr->ifm_active = IFM_ETHER;
 
-        if (link_info->link_up)
+	if (link_info->link_up)
 		ifmr->ifm_status |= IFM_ACTIVE;
 	else
 		ifmr->ifm_status &= ~IFM_ACTIVE;
@@ -900,31 +900,31 @@ bnxt_media_status(if_ctx_t ctx, struct ifmediareq * ifmr)
 		ifmr->ifm_active |= IFM_HDX;
 
 	switch (link_info->link_speed) {
-        case BNXT_LINK_SPEED_100MB:
+	case BNXT_LINK_SPEED_100MB:
 		ifmr->ifm_active |= IFM_100_TX;
-                break;
-        case BNXT_LINK_SPEED_1GB:
+		break;
+	case BNXT_LINK_SPEED_1GB:
 		ifmr->ifm_active |= IFM_1000_T;
-                break;
-        case BNXT_LINK_SPEED_2_5GB:
+	break;
+	case BNXT_LINK_SPEED_2_5GB:
 		ifmr->ifm_active |= IFM_2500_SX;
-                break;
-        case BNXT_LINK_SPEED_10GB:
+		break;
+	case BNXT_LINK_SPEED_10GB:
 		ifmr->ifm_active |= IFM_10G_T;
-                break;
-        case BNXT_LINK_SPEED_20GB:
+		break;
+	case BNXT_LINK_SPEED_20GB:
 		ifmr->ifm_active |= IFM_20G_KR2;
-                break;
-        case BNXT_LINK_SPEED_25GB:
+		break;
+	case BNXT_LINK_SPEED_25GB:
 		ifmr->ifm_active |= IFM_25G_CR;
-                break;
-        case BNXT_LINK_SPEED_40GB:
+		break;
+	case BNXT_LINK_SPEED_40GB:
 		ifmr->ifm_active |= IFM_40G_CR4;
-                break;
-        case BNXT_LINK_SPEED_50GB:
+		break;
+	case BNXT_LINK_SPEED_50GB:
 		ifmr->ifm_active |= IFM_50G_CR2;
-                break;
-        default:
+		break;
+	default:
 		return;
 	}
 
@@ -1268,7 +1268,7 @@ bnxt_update_link(struct bnxt_softc *softc, bool chng_link_state)
 	link_info->media_type = resp->media_type;
 	link_info->transceiver = resp->xcvr_pkg_type;
 	link_info->phy_addr = resp->eee_config_phy_addr &
-			      HWRM_PORT_PHY_QCFG_OUTPUT_PHY_ADDR_MASK;
+	    HWRM_PORT_PHY_QCFG_OUTPUT_PHY_ADDR_MASK;
 
 	/* TODO: need to add more logic to report VF link */
 	if (chng_link_state) {
@@ -1291,29 +1291,29 @@ bnxt_report_link(struct bnxt_softc *softc)
 {
 	const char *duplex = NULL, *flow_ctrl = NULL;
 
-        if (softc->link_info.link_up) {
-                if (softc->link_info.duplex == BNXT_LINK_DUPLEX_FULL)
-                        duplex = "full duplex";
-                else
-                        duplex = "half duplex";
-                if (softc->link_info.pause == BNXT_LINK_PAUSE_BOTH)
-                        flow_ctrl = "FC - receive & transmit";
-                else if (softc->link_info.pause == BNXT_LINK_PAUSE_TX)
-                        flow_ctrl = "FC - transmit";
-                else if (softc->link_info.pause == BNXT_LINK_PAUSE_RX)
-                        flow_ctrl = "FC - receive";
-                else
-                        flow_ctrl = "none";
+	if (softc->link_info.link_up) {
+		if (softc->link_info.duplex == BNXT_LINK_DUPLEX_FULL)
+			duplex = "full duplex";
+		else
+			duplex = "half duplex";
+		if (softc->link_info.pause == BNXT_LINK_PAUSE_BOTH)
+			flow_ctrl = "FC - receive & transmit";
+		else if (softc->link_info.pause == BNXT_LINK_PAUSE_TX)
+			flow_ctrl = "FC - transmit";
+		else if (softc->link_info.pause == BNXT_LINK_PAUSE_RX)
+			flow_ctrl = "FC - receive";
+		else
+			flow_ctrl = "none";
 		iflib_link_state_change(softc->ctx, LINK_STATE_UP,
 		    IF_Gbps(100));
-                device_printf(softc->dev, "Link is UP %s, %s\n", duplex,
+		device_printf(softc->dev, "Link is UP %s, %s\n", duplex,
 		    flow_ctrl);
-        } else {
+	} else {
 		iflib_link_state_change(softc->ctx, LINK_STATE_DOWN,
 		    IF_Gbps(100));
-                device_printf(softc->dev, "Link is Down %s, %s\n", duplex,
+		device_printf(softc->dev, "Link is Down %s, %s\n", duplex,
 		    flow_ctrl);
-        }
+	}
 }
 
 static int
