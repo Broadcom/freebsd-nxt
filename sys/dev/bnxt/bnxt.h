@@ -37,6 +37,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/bus.h>
 #include <sys/bus_dma.h>
 #include <sys/socket.h>
+#include <sys/sysctl.h>
 #include <sys/taskqueue.h>
 
 #include <net/ethernet.h>
@@ -438,6 +439,9 @@ struct bnxt_softc {
 	struct bnxt_cp_ring	def_cp_ring;
 	struct iflib_dma_info	def_cp_ring_mem;
 	struct grouptask	def_cp_task;
+
+	struct sysctl_ctx_list	hw_stats;
+	struct sysctl_oid	*hw_stats_oid;
 };
 
 struct bnxt_filter_info {

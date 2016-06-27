@@ -58,6 +58,7 @@ __FBSDID("$FreeBSD$");
 
 #include "bnxt.h"
 #include "bnxt_hwrm.h"
+#include "bnxt_sysctl.h"
 #include "hsi_struct_def.h"
 
 /*
@@ -194,6 +195,7 @@ static driver_t bnxt_iflib_driver = {
  * iflib shared context
  */
 
+char bnxt_driver_version[] = "https://github.com/Broadcom/freebsd-nxt/commits/bnxt-dev";
 extern struct if_txrx bnxt_txrx;
 static struct if_shared_ctx bnxt_sctx_init = {
 	.isc_magic = IFLIB_MAGIC,
@@ -224,6 +226,7 @@ static struct if_shared_ctx bnxt_sctx_init = {
 	.isc_nrxqs = 3,
 	.isc_admin_intrcnt = 1,
 	.isc_vendor_info = bnxt_vendor_info_array,
+	.isc_driver_version = bnxt_driver_version,
 };
 
 if_shared_ctx_t bnxt_sctx = &bnxt_sctx_init;
@@ -300,6 +303,8 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->tx_rings[i].ring_size = softc->scctx->isc_ntxd;
 		softc->tx_rings[i].vaddr = vaddrs[i * ntxqs + 1];
 		softc->tx_rings[i].paddr = paddrs[i * ntxqs + 1];
+
+		bnxt_create_tx_sysctls(softc, i);
 	}
 
 	softc->ntxqsets = ntxqsets;
@@ -432,6 +437,8 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->grp_info[i].ag_ring_id = softc->ag_rings[i].phys_id;
 		softc->grp_info[i].cp_ring_id =
 		    softc->rx_cp_rings[i].ring.phys_id;
+
+		bnxt_create_rx_sysctls(softc, i);
 	}
 
 	/* And finally, the VNIC */
@@ -592,6 +599,10 @@ bnxt_attach_pre(if_ctx_t ctx)
 	iflib_config_gtask_init(ctx, &softc->def_cp_task, bnxt_def_cp_task,
 	    "dflt_cp");
 
+	rc = bnxt_init_sysctl_ctx(softc);
+	if (rc)
+		goto failed;
+
 	return (rc);
 
 failed:
@@ -633,11 +644,17 @@ bnxt_attach_post(if_ctx_t ctx)
 
 	if_setcapabilities(ifp, capabilities);
 
+#if 1
 	/* Don't enable TSO by default until its fixed */
 	enabling =
 	    IFCAP_VLAN_MTU | IFCAP_VLAN_HWTAGGING | IFCAP_VLAN_HWTSO |
 	    IFCAP_VLAN_HWFILTER | IFCAP_VLAN_HWCSUM | IFCAP_HWCSUM |
 	    IFCAP_HWCSUM_IPV6 | IFCAP_JUMBO_MTU | IFCAP_LRO;
+#else
+	/* Some stuff isn't yet supported... */
+	enabling = capabilities & ~(IFCAP_VLAN_HWTAGGING | IFCAP_VLAN_HWFILTER |
+	    IFCAP_LRO);
+#endif
 
 	if_setcapenable(ifp, enabling);
 
@@ -655,6 +672,7 @@ bnxt_detach(if_ctx_t ctx)
 	int i;
 
 	bnxt_do_disable_intr(&softc->def_cp_ring);
+	bnxt_free_sysctl_ctx(softc);
 	bnxt_hwrm_func_reset(softc);
 	bnxt_clear_ids(softc);
 	iflib_irq_free(ctx, &softc->def_cp_ring.irq);
@@ -758,6 +776,7 @@ bnxt_init(if_ctx_t ctx)
 		rc = bnxt_hwrm_ring_grp_alloc(softc, &softc->grp_info[i]);
 		if (rc)
 			goto fail;
+
 	}
 
 	/* Allocate the VNIC RSS context */
