@@ -3099,14 +3099,16 @@ iflib_if_transmit(if_t ifp, struct mbuf *m)
 	DBG_COUNTER_INC(tx_seen);
 	err = ifmp_ring_enqueue(txq->ift_br[0], (void **)&m, 1, TX_BATCH_SIZE);
 
-	if (iflib_txq_can_drain(txq->ift_br[0]))
-		GROUPTASK_ENQUEUE(&txq->ift_task);
 	if (err) {
+		GROUPTASK_ENQUEUE(&txq->ift_task);
 		/* support forthcoming later */
 #ifdef DRIVER_BACKPRESSURE
 		txq->ift_closed = TRUE;
 #endif
 		ifmp_ring_check_drainage(txq->ift_br[0], TX_BATCH_SIZE);
+		m_freem(m);
+	} else if (TXQ_AVAIL(txq) < (txq->ift_size >> 1)) {
+		GROUPTASK_ENQUEUE(&txq->ift_task);
 	}
 
 	return (err);
@@ -3553,6 +3555,7 @@ iflib_device_register(device_t dev, void *sc, if_shared_ctx_t sctx, if_ctx_t *ct
 	}
 	*ctxp = ctx;
 
+	if_setgetcounterfn(ctx->ifc_ifp, iflib_if_get_counter);
 	iflib_add_device_sysctl_post(ctx);
 	return (0);
 fail_detach:
@@ -3834,7 +3837,6 @@ iflib_register(if_ctx_t ctx)
 	if_setioctlfn(ifp, iflib_if_ioctl);
 	if_settransmitfn(ifp, iflib_if_transmit);
 	if_setqflushfn(ifp, iflib_if_qflush);
-	if_setgetcounterfn(ifp, iflib_if_get_counter);
 	if_setflags(ifp, IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST);
 
 	if_setcapabilities(ifp, 0);
@@ -4667,6 +4669,10 @@ iflib_add_device_sysctl_pre(if_ctx_t ctx)
 						      CTLFLAG_RD, NULL, "IFLIB fields");
 	oid_list = SYSCTL_CHILDREN(node);
 
+	SYSCTL_ADD_STRING(ctx_list, oid_list, OID_AUTO, "driver_version",
+		       CTLFLAG_RD, ctx->ifc_sctx->isc_driver_version, 0,
+		       "driver version");
+
 	SYSCTL_ADD_U16(ctx_list, oid_list, OID_AUTO, "override_ntxqs",
 		       CTLFLAG_RWTUN, &ctx->ifc_sysctl_ntxqs, 0,
 			"# of txqs to use, 0 => use default #");
@@ -4683,7 +4689,6 @@ iflib_add_device_sysctl_pre(if_ctx_t ctx)
 	SYSCTL_ADD_U16(ctx_list, oid_list, OID_AUTO, "override_nrxds",
 		       CTLFLAG_RWTUN, &ctx->ifc_sysctl_nrxds, 0,
 			"# of rx descriptors to use, 0 => use default #");
-
 }
 
 static void
