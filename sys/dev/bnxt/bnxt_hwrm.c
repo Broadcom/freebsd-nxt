@@ -993,3 +993,17 @@ bnxt_hwrm_rss_cfg(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic,
 
 	return hwrm_send_message(softc, &req, sizeof(req));
 }
+
+int
+bnxt_hwrm_func_cfg(struct bnxt_softc *softc)
+{
+	struct hwrm_func_cfg_input req = {0};
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_FUNC_CFG, -1, -1);
+
+	req.enables = htole32(HWRM_FUNC_CFG_INPUT_ENABLES_ASYNC_EVENT_CR);
+
+	req.async_event_cr = softc->def_cp_ring.ring.phys_id;
+
+	return hwrm_send_message(softc, &req, sizeof(req));
+}

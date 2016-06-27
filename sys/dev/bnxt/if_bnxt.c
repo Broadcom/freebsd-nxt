@@ -701,6 +701,11 @@ bnxt_init(if_ctx_t ctx)
 	if (rc)
 		goto fail;
 
+	/* And now set the default CP ring as the async CP ring */
+	rc = bnxt_hwrm_func_cfg(softc);
+	if (rc)
+		goto fail;
+
 	for (i = 0; i < softc->nrxqsets; i++) {
 		/* Allocate the statistics context */
 		rc = bnxt_hwrm_stat_ctx_alloc(softc, &softc->rx_cp_rings[i],
