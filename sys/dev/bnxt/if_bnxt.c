@@ -886,8 +886,14 @@ bnxt_multi_set(if_ctx_t ctx)
 static int
 bnxt_mtu_set(if_ctx_t ctx, uint32_t mtu)
 {
-	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
-	return ENOSYS;
+	struct bnxt_softc *softc = iflib_get_softc(ctx);
+
+	if (mtu > BNXT_MAX_MTU)
+		return EINVAL;
+
+	softc->scctx->isc_max_frame_size = mtu + ETHER_HDR_LEN +
+	    ETHER_CRC_LEN;
+	return 0;
 }
 
 static void
