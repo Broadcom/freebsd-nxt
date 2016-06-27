@@ -1297,7 +1297,7 @@ bnxt_update_link(struct bnxt_softc *softc, bool chng_link_state)
 		if (link_up != link_info->link_up)
 			bnxt_report_link(softc);
 	} else {
-		/* alwasy link down if not require to update link state */
+		/* always link down if not require to update link state */
 		link_info->link_up = 0;
 	}
 	BNXT_HWRM_UNLOCK(softc);
