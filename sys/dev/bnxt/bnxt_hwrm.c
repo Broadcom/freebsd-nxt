@@ -1001,6 +1001,7 @@ bnxt_hwrm_func_cfg(struct bnxt_softc *softc)
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_FUNC_CFG, -1, -1);
 
+	req.fid = 0xffff;
 	req.enables = htole32(HWRM_FUNC_CFG_INPUT_ENABLES_ASYNC_EVENT_CR);
 
 	req.async_event_cr = softc->def_cp_ring.ring.phys_id;
