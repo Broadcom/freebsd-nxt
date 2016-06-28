@@ -563,11 +563,7 @@ bnxt_hwrm_vnic_cfg(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
 	req.rss_rule = htole16(vnic->rss_id);
 	req.cos_rule = htole16(vnic->cos_rule);
 	req.lb_rule = htole16(vnic->lb_rule);
-
 	req.mru = htole16(vnic->mru);
-
-	//JFV test - default func?
-	req.flags = 1;
 
 	return hwrm_send_message(softc, &req, sizeof(req));
 }
