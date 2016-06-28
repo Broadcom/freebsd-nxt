@@ -45,12 +45,6 @@ __FBSDID("$FreeBSD$");
 #include "bnxt.h"
 
 /*
- * Perform redundant checks and fixups.
- * Helpful for debugging and doesn't seem to slow down the driver.
- */
-#define BNXT_EXTRA_CHECKS 0
-
-/*
  * Function prototypes
  */
 
@@ -126,12 +120,8 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 	pi->ipi_new_pidx = pi->ipi_pidx;
 	tbd = &((struct tx_bd_long *)txr->vaddr)[pi->ipi_new_pidx];
 	pi->ipi_ndescs = 0;
-#if BNXT_EXTRA_CHECKS
-	tbd->opaque = htole32(pi->ipi_new_pidx);
-#else
 	tbd->opaque = htole32(((pi->ipi_nsegs + need_hi) << 24) |
 	    pi->ipi_new_pidx);
-#endif
 	tbd->len = htole16(pi->ipi_segs[seg].ds_len);
 	tbd->addr = htole64(pi->ipi_segs[seg++].ds_addr);
 	flags_type = (pi->ipi_nsegs + need_hi) << TX_BD_SHORT_FLAGS_BD_CNT_SFT;
@@ -206,11 +196,7 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_cp_ring *cpr = &softc->tx_cp_rings[txqid];
-#if BNXT_EXTRA_CHECKS
-	struct bnxt_ring *txr = &softc->tx_rings[txqid];
-	struct tx_bd_long *tbd;
-#endif
-	struct tx_cmpl *tcp;
+	struct tx_cmpl *cmpl = (struct tx_cmpl *)cpr->ring.vaddr;
 	int avail = 0;
 	uint32_t cons = cpr->cons;
 	bool v_bit = cpr->v_bit;
@@ -221,21 +207,12 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 		last_cons = cons;
 		last_v_bit = v_bit;
 		NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
-		tcp = &((struct tx_cmpl *)cpr->ring.vaddr)[cons];
+		__builtin_prefetch(&cmpl[RING_NEXT(&cpr->ring, cons)]);
 
-		if (!CMP_VALID(tcp, v_bit))
+		if (!CMP_VALID(&cmpl[cons], v_bit))
 			break;
 
-#if BNXT_EXTRA_CHECKS
-		/* Get the BD that this completes */
-		tbd = &((struct tx_bd_long *)txr->vaddr)[le32toh(tcp->opaque)];
-
-		/* And extract how many BDs were used */
-		avail += (tbd->flags_type & TX_BD_SHORT_FLAGS_BD_CNT_MASK) >>
-		    TX_BD_SHORT_FLAGS_BD_CNT_SFT;
-#else
-		avail += le32toh(tcp->opaque) >> 24;
-#endif
+		avail += le32toh(cmpl[cons].opaque) >> 24;
 	}
 
 	if (clear && avail) {
@@ -271,11 +248,7 @@ bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
 	for (i=0; i<count; i++) {
 		rxbd[pidx].flags_type = htole16(type);
 		rxbd[pidx].len = htole16(softc->scctx->isc_max_frame_size);
-#if BNXT_EXTRA_CHECKS
-		rxbd[pidx].opaque = htole32((flid << 31) | ((rxqid+1) << 24) | pidx);
-#else
 		rxbd[pidx].opaque = htole32(pidx);
-#endif
 		rxbd[pidx].addr = htole64(paddrs[i]);
 		if (++pidx == rx_ring->ring_size)
 			pidx = 0;
@@ -321,57 +294,39 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx)
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_cp_ring *cpr = &softc->rx_cp_rings[rxqid];
 	struct rx_pkt_cmpl *rcp;
-	struct cmpl_base *cmp;
+	struct cmpl_base *cmp = (struct cmpl_base *)cpr->ring.vaddr;
 	int avail = 0;
 	uint32_t cons = cpr->cons;
 	bool v_bit = cpr->v_bit;
 	uint8_t ags;
 	int i;
-#if BNXT_EXTRA_CHECKS
-	uint32_t next_idx = RING_NEXT(&softc->rx_rings[rxqid], cpr->last_idx);
-	uint32_t orig_idx = idx;
-
-	/*
-	 * If idx is behind where we'll be looking, increment avail
-	 * appropriately.
-	 */
-	while (idx != next_idx) {
-		idx = RING_NEXT(&softc->rx_rings[rxqid], idx);
-		avail++;
-	}
-	if (avail) device_printf(softc->dev, "Extra avail: %d\n", avail);
-#endif
 
 	for (;;) {
 		NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
-		rcp = &((struct rx_pkt_cmpl *)cpr->ring.vaddr)[cons];
-		if (!CMP_VALID(rcp, v_bit))
+		__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring, cons)]);
+
+		if (!CMP_VALID(&cmp[cons], v_bit))
 			break;
 
+		rcp = (void *)&cmp[cons];
 		if ((le16toh(rcp->flags_type) & RX_PKT_CMPL_TYPE_MASK) ==
 		    RX_PKT_CMPL_TYPE_RX_L2) {
 			ags = (rcp->agg_bufs_v1 & RX_PKT_CMPL_AGG_BUFS_MASK) >>
 			    RX_PKT_CMPL_AGG_BUFS_SFT;
 			NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
-			cmp = &((struct cmpl_base *)cpr->ring.vaddr)[cons];
-			if (!CMP_VALID(cmp, v_bit))
+			__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring, cons)]);
+
+			if (!CMP_VALID(&cmp[cons], v_bit))
 				break;
 
 			/* Now account for all the AG completions */
 			for (i=0; i<ags; i++) {
 				NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
-				cmp = &((struct cmpl_base *)cpr->ring.vaddr)
-				    [cons];
-				if (!CMP_VALID(cmp, v_bit))
+				__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring,
+				    cons)]);
+				if (!CMP_VALID(&cmp[cons], v_bit))
 					break;
 			}
-#if BNXT_EXTRA_CHECKS
-			if ((le32toh(rcp->opaque) & 0xffffff) == orig_idx && avail) {
-				device_printf(softc->dev,
-				    "Resetting avail from %d!\n", avail);
-				avail = 0;
-			}
-#endif
 			avail++;
 		}
 	}
@@ -395,36 +350,10 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 	int i;
 
 	NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
+	__builtin_prefetch(&cpr[RING_NEXT(&cpr->ring, cpr->cons)]);
 	rcp = &((struct rx_pkt_cmpl *)cpr->ring.vaddr)[cpr->cons];
 
-#if BNXT_EXTRA_CHECKS
-	/* This has already been checked, we shouldn't need to do this again */
-	if (!CMP_VALID(rcp, cpr->v_bit)) {
-		device_printf(softc->dev, "No RX completion\n");
-		return EINVAL;
-	}
-
-	/*
-	 * iflib asserts when we return non-zero... maybe move this check into
-	 * bnxt_isc_rxd_available()
-	 */
 	flags_type = le16toh(rcp->flags_type);
-	if ((flags_type & RX_PKT_CMPL_TYPE_MASK) != RX_PKT_CMPL_TYPE_RX_L2) {
-		device_printf(softc->dev, "Invalid RX completion type %u\n",
-		    flags_type & RX_PKT_CMPL_TYPE_MASK);
-		return EINVAL;
-	}
-	if (flags_type & RX_PKT_CMPL_FLAGS_ERROR) {
-		NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
-		rcph = &((struct rx_pkt_cmpl_hi *)cpr->ring.vaddr)[cpr->cons];
-		device_printf(softc->dev, "RX completion error %04x\n",
-		    le16toh(rcph->errors_v2) &
-		    RX_PKT_CMPL_ERRORS_BUFFER_ERROR_MASK);
-		return EINVAL;
-	}
-#else
-	flags_type = le16toh(rcp->flags_type);
-#endif
 
 	/* Extract from the first 16-byte BD */
 	if (flags_type & RX_PKT_CMPL_FLAGS_RSS_VALID) {
@@ -445,26 +374,11 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 	ri->iri_nfrags = ags + 1;
 	ri->iri_frags[0].irf_flid = 0;
 	ri->iri_frags[0].irf_idx = le32toh(rcp->opaque);
-#if BNXT_EXTRA_CHECKS
-	cpr->last_idx = le32toh(rcp->opaque);
-	if ((cpr->last_idx >> 24) != (ri->iri_qsidx + 1)) {
-		device_printf(softc->dev, "Completion in Q %u should be in %u\n", ri->iri_qsidx, (cpr->last_idx >> 24));
-	}
-	cpr->last_idx &= 0xffffff;
-#endif
 	ri->iri_len = le16toh(rcp->len);
 
 	/* Now the second 16-byte BD */
 	NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
 	rcph = &((struct rx_pkt_cmpl_hi *)cpr->ring.vaddr)[cpr->cons];
-
-#if BNXT_EXTRA_CHECKS
-	/* Again, this has already been checked and so is not needed */
-	if (!CMP_VALID(rcph, cpr->v_bit)) {
-		device_printf(softc->dev, "No second RX completion\n");
-		return EINVAL;
-	}
-#endif
 
 	flags2 = le32toh(rcph->flags2);
 	errors = le16toh(rcph->errors_v2);
