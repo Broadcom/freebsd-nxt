@@ -48,7 +48,7 @@ __FBSDID("$FreeBSD$");
  * Perform redundant checks and fixups.
  * Helpful for debugging and doesn't seem to slow down the driver.
  */
-#define BNXT_EXTRA_CHECKS 1
+#define BNXT_EXTRA_CHECKS 0
 
 /*
  * Function prototypes
@@ -126,7 +126,12 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 	pi->ipi_new_pidx = pi->ipi_pidx;
 	tbd = &((struct tx_bd_long *)txr->vaddr)[pi->ipi_new_pidx];
 	pi->ipi_ndescs = 0;
+#if BNXT_EXTRA_CHECKS
 	tbd->opaque = htole32(pi->ipi_new_pidx);
+#else
+	tbd->opaque = htole32(((pi->ipi_nsegs + need_hi) << 24) |
+	    pi->ipi_new_pidx);
+#endif
 	tbd->len = htole16(pi->ipi_segs[seg].ds_len);
 	tbd->addr = htole64(pi->ipi_segs[seg++].ds_addr);
 	flags_type = (pi->ipi_nsegs + need_hi) << TX_BD_SHORT_FLAGS_BD_CNT_SFT;
@@ -201,9 +206,11 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_cp_ring *cpr = &softc->tx_cp_rings[txqid];
+#if BNXT_EXTRA_CHECKS
 	struct bnxt_ring *txr = &softc->tx_rings[txqid];
-	struct tx_cmpl *tcp;
 	struct tx_bd_long *tbd;
+#endif
+	struct tx_cmpl *tcp;
 	int avail = 0;
 	uint32_t cons = cpr->cons;
 	bool v_bit = cpr->v_bit;
@@ -219,12 +226,16 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 		if (!CMP_VALID(tcp, v_bit))
 			break;
 
+#if BNXT_EXTRA_CHECKS
 		/* Get the BD that this completes */
 		tbd = &((struct tx_bd_long *)txr->vaddr)[le32toh(tcp->opaque)];
 
 		/* And extract how many BDs were used */
 		avail += (tbd->flags_type & TX_BD_SHORT_FLAGS_BD_CNT_MASK) >>
 		    TX_BD_SHORT_FLAGS_BD_CNT_SFT;
+#else
+		avail += le32toh(tcp->opaque) >> 24;
+#endif
 	}
 
 	if (clear && avail) {
@@ -260,7 +271,11 @@ bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
 	for (i=0; i<count; i++) {
 		rxbd[pidx].flags_type = htole16(type);
 		rxbd[pidx].len = htole16(softc->scctx->isc_max_frame_size);
+#if BNXT_EXTRA_CHECKS
 		rxbd[pidx].opaque = htole32((flid << 31) | ((rxqid+1) << 24) | pidx);
+#else
+		rxbd[pidx].opaque = htole32(pidx);
+#endif
 		rxbd[pidx].addr = htole64(paddrs[i]);
 		if (++pidx == rx_ring->ring_size)
 			pidx = 0;
@@ -309,13 +324,12 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx)
 	struct cmpl_base *cmp;
 	int avail = 0;
 	uint32_t cons = cpr->cons;
-	uint32_t next_idx = RING_NEXT(&softc->rx_rings[rxqid], cpr->last_idx);
 	bool v_bit = cpr->v_bit;
 	uint8_t ags;
 	int i;
 #if BNXT_EXTRA_CHECKS
+	uint32_t next_idx = RING_NEXT(&softc->rx_rings[rxqid], cpr->last_idx);
 	uint32_t orig_idx = idx;
-#endif
 
 	/*
 	 * If idx is behind where we'll be looking, increment avail
@@ -325,7 +339,6 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx)
 		idx = RING_NEXT(&softc->rx_rings[rxqid], idx);
 		avail++;
 	}
-#if BNXT_EXTRA_CHECKS
 	if (avail) device_printf(softc->dev, "Extra avail: %d\n", avail);
 #endif
 
@@ -431,12 +444,14 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 	    RX_PKT_CMPL_AGG_BUFS_SFT;
 	ri->iri_nfrags = ags + 1;
 	ri->iri_frags[0].irf_flid = 0;
+	ri->iri_frags[0].irf_idx = le32toh(rcp->opaque);
+#if BNXT_EXTRA_CHECKS
 	cpr->last_idx = le32toh(rcp->opaque);
-	ri->iri_frags[0].irf_idx = cpr->last_idx & 0xffffff;
 	if ((cpr->last_idx >> 24) != (ri->iri_qsidx + 1)) {
 		device_printf(softc->dev, "Completion in Q %u should be in %u\n", ri->iri_qsidx, (cpr->last_idx >> 24));
 	}
 	cpr->last_idx &= 0xffffff;
+#endif
 	ri->iri_len = le16toh(rcp->len);
 
 	/* Now the second 16-byte BD */
