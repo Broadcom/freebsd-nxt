@@ -132,6 +132,8 @@ static void inline bnxt_do_enable_intr(struct bnxt_cp_ring *cpr);
 static void inline bnxt_do_disable_intr(struct bnxt_cp_ring *cpr);
 static void bnxt_mark_cpr_invalid(struct bnxt_cp_ring *cpr);
 static void bnxt_def_cp_task(void *context);
+static void bnxt_handle_async_event(struct bnxt_softc *softc,
+    struct cmpl_base *cmpl);
 
 /*
  * Device Interface Declaration
@@ -1412,6 +1414,43 @@ bnxt_mark_cpr_invalid(struct bnxt_cp_ring *cpr)
 }
 
 static void
+bnxt_handle_async_event(struct bnxt_softc *softc, struct cmpl_base *cmpl)
+{
+	struct hwrm_async_event_cmpl *ae = (void *)cmpl;
+	uint16_t async_id = le16toh(ae->event_id);
+	struct ifmediareq ifmr;
+
+	switch (async_id) {
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_LINK_STATUS_CHANGE:
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_LINK_SPEED_CHANGE:
+		bnxt_media_status(softc->ctx, &ifmr);
+		bnxt_report_link(softc);
+		break;
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_LINK_MTU_CHANGE:
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_DCB_CONFIG_CHANGE:
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_PORT_CONN_NOT_ALLOWED:
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_LINK_SPEED_CFG_NOT_ALLOWED:
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_LINK_SPEED_CFG_CHANGE:
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_FUNC_DRVR_UNLOAD:
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_FUNC_DRVR_LOAD:
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_PF_DRVR_UNLOAD:
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_PF_DRVR_LOAD:
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_VF_FLR:
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_VF_MAC_ADDR_CHANGE:
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_PF_VF_COMM_STATUS_CHANGE:
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_VF_CFG_CHANGE:
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_HWRM_ERROR:
+		device_printf(softc->dev,
+		    "Unhandled async completion type %u\n", async_id);
+		break;
+	default:
+		device_printf(softc->dev,
+		    "Unknown async completion type %u\n", async_id);
+		break;
+	}
+}
+
+static void
 bnxt_def_cp_task(void *context)
 {
 	if_ctx_t ctx = context;
@@ -1437,6 +1476,9 @@ bnxt_def_cp_task(void *context)
 
 		type = le16toh(cmpl->type) & CMPL_BASE_TYPE_MASK;
 		switch (type) {
+		case CMPL_BASE_TYPE_HWRM_ASYNC_EVENT:
+			bnxt_handle_async_event(softc, cmpl);
+			break;
 		case CMPL_BASE_TYPE_TX_L2:
 		case CMPL_BASE_TYPE_RX_L2:
 		case CMPL_BASE_TYPE_RX_AGG:
@@ -1446,7 +1488,6 @@ bnxt_def_cp_task(void *context)
 		case CMPL_BASE_TYPE_HWRM_DONE:
 		case CMPL_BASE_TYPE_HWRM_FWD_REQ:
 		case CMPL_BASE_TYPE_HWRM_FWD_RESP:
-		case CMPL_BASE_TYPE_HWRM_ASYNC_EVENT:
 		case CMPL_BASE_TYPE_CQ_NOTIFICATION:
 		case CMPL_BASE_TYPE_SRQ_EVENT:
 		case CMPL_BASE_TYPE_DBQ_EVENT:
