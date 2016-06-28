@@ -1019,7 +1019,6 @@ bnxt_get_counter(if_ctx_t ctx, ift_counter cnt)
 	if (cnt < IFCOUNTERS)
 		return if_get_counter_default(ifp, cnt);
 
-	device_printf(iflib_get_dev(ctx), "STUB: %s(ctx, %d >= %d) @ %s:%d\n", __func__, cnt, IFCOUNTERS, __FILE__, __LINE__);
 	return 0;
 }
 
