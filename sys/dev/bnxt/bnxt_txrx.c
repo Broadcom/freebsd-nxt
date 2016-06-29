@@ -129,13 +129,12 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 
 	if (need_hi) {
 		flags_type |= TX_BD_LONG_TYPE_TX_BD_LONG;
-		tbd->flags_type = htole16(flags_type);
 
 		pi->ipi_new_pidx = RING_NEXT(txr, pi->ipi_new_pidx);
 		tbdh = &((struct tx_bd_long_hi *)txr->vaddr)[pi->ipi_new_pidx];
 		tbdh->mss = htole16(pi->ipi_tso_segsz);
-		tbdh->hdr_size = htole16(pi->ipi_ehdrlen + pi->ipi_ip_hlen +
-		    pi->ipi_tcp_hlen);
+		tbdh->hdr_size = htole16((pi->ipi_ehdrlen + pi->ipi_ip_hlen +
+		    pi->ipi_tcp_hlen) >> 1);
 		tbdh->cfa_action = 0;
 		lflags = 0;
 		cfa_meta = 0;
