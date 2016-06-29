@@ -383,6 +383,11 @@ struct bnxt_cp_ring {
 						 */
 };
 
+struct bnxt_full_tpa_start {
+	struct rx_tpa_start_cmpl low;
+	struct rx_tpa_start_cmpl_hi high;
+};
+
 struct bnxt_softc {
 	device_t	dev;
 	if_ctx_t	ctx;
@@ -410,7 +415,6 @@ struct bnxt_softc {
 	struct if_irq		irq;
 	struct mtx		hwrm_lock;
 	uint16_t		hwrm_max_req_len;
-
 
 #define BNXT_MAX_QUEUE		8
 	uint8_t			max_tc;
@@ -442,6 +446,8 @@ struct bnxt_softc {
 
 	struct sysctl_ctx_list	hw_stats;
 	struct sysctl_oid	*hw_stats_oid;
+
+	struct bnxt_full_tpa_start *tpa_start;
 };
 
 struct bnxt_filter_info {

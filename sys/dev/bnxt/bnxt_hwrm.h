@@ -75,5 +75,7 @@ int bnxt_hwrm_clear_filter(struct bnxt_softc *, struct bnxt_vnic_info *);
 int bnxt_hwrm_rss_cfg(struct bnxt_softc *softc, struct bnxt_vnic_info *,
     uint32_t hash_type);
 int bnxt_hwrm_func_cfg(struct bnxt_softc *softc);
+int bnxt_hwrm_vnic_tpa_cfg(struct bnxt_softc *softc,
+    struct bnxt_vnic_info *vnic, uint32_t flags);
 
 #endif

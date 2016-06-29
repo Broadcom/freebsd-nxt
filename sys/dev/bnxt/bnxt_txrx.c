@@ -288,30 +288,35 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx)
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_cp_ring *cpr = &softc->rx_cp_rings[rxqid];
 	struct rx_pkt_cmpl *rcp;
+	struct rx_tpa_start_cmpl *rtpa;
+	struct rx_tpa_end_cmpl *rtpae;
 	struct cmpl_base *cmp = (struct cmpl_base *)cpr->ring.vaddr;
 	int avail = 0;
 	uint32_t cons = cpr->cons;
 	bool v_bit = cpr->v_bit;
 	uint8_t ags;
 	int i;
+	uint16_t type;
+	uint8_t agg_id;
 
 	for (;;) {
 		NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
 		__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring, cons)]);
 
 		if (!CMP_VALID(&cmp[cons], v_bit))
-			break;
+			goto cmpl_invalid;
 
-		rcp = (void *)&cmp[cons];
-		if ((le16toh(rcp->flags_type) & RX_PKT_CMPL_TYPE_MASK) ==
-		    RX_PKT_CMPL_TYPE_RX_L2) {
+		type = le16toh(cmp[cons].type) & CMPL_BASE_TYPE_MASK;
+		switch (type) {
+		case CMPL_BASE_TYPE_RX_L2:
+			rcp = (void *)&cmp[cons];
 			ags = (rcp->agg_bufs_v1 & RX_PKT_CMPL_AGG_BUFS_MASK) >>
 			    RX_PKT_CMPL_AGG_BUFS_SFT;
 			NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
 			__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring, cons)]);
 
 			if (!CMP_VALID(&cmp[cons], v_bit))
-				break;
+				goto cmpl_invalid;
 
 			/* Now account for all the AG completions */
 			for (i=0; i<ags; i++) {
@@ -319,35 +324,81 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx)
 				__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring,
 				    cons)]);
 				if (!CMP_VALID(&cmp[cons], v_bit))
-					break;
+					goto cmpl_invalid;
 			}
 			avail++;
+			break;
+		case CMPL_BASE_TYPE_RX_TPA_END:
+			rtpae = (void *)&cmp[cons];
+			ags = (rtpae->agg_bufs_v1 &
+			    RX_TPA_END_CMPL_AGG_BUFS_MASK) >>
+			    RX_TPA_END_CMPL_AGG_BUFS_SFT;
+			NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
+			__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring, cons)]);
+
+			if (!CMP_VALID(&cmp[cons], v_bit))
+				goto cmpl_invalid;
+			/* Now account for all the AG completions */
+			for (i=0; i<ags; i++) {
+				NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
+				__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring,
+				    cons)]);
+				if (!CMP_VALID(&cmp[cons], v_bit))
+					goto cmpl_invalid;
+			}
+			avail++;
+			break;
+		case CMPL_BASE_TYPE_RX_TPA_START:
+			rtpa = (void *)&cmp[cons];
+			agg_id = (rtpa->agg_id &
+			    RX_TPA_START_CMPL_AGG_ID_MASK) >>
+			    RX_TPA_START_CMPL_AGG_ID_SFT;
+			softc->tpa_start[agg_id].low = *rtpa;
+			NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
+			__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring, cons)]);
+
+			if (!CMP_VALID(&cmp[cons], v_bit))
+				goto cmpl_invalid;
+			softc->tpa_start[agg_id].high =
+			    ((struct rx_tpa_start_cmpl_hi *)cmp)[cons];
+			break;
+		case CMPL_BASE_TYPE_RX_AGG:
+			break;
+		default:
+			device_printf(softc->dev,
+			    "Unhandled completion type %d on RXQ %d\n",
+			    type, rxqid);
+
+			/* Odd completion types use two completions */
+			if (type & 1) {
+				NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
+				__builtin_prefetch(
+				    &cmp[RING_NEXT(&cpr->ring, cons)]);
+
+				if (!CMP_VALID(&cmp[cons], v_bit))
+					goto cmpl_invalid;
+			}
+			break;
 		}
 	}
+cmpl_invalid:
 
 	return avail;
 }
 
-/* If we return anything but zero, iflib will assert... */
 static int
-bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
+bnxt_pkt_get_l2(struct bnxt_softc *softc, if_rxd_info_t ri,
+    struct bnxt_cp_ring *cpr, uint16_t flags_type)
 {
-	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
-	struct bnxt_cp_ring *cpr = &softc->rx_cp_rings[ri->iri_qsidx];
 	struct rx_pkt_cmpl *rcp;
 	struct rx_pkt_cmpl_hi *rcph;
 	struct rx_abuf_cmpl *acp;
-	uint16_t flags_type;
 	uint32_t flags2;
 	uint32_t errors;
 	uint8_t	ags;
 	int i;
 
-	NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
-	__builtin_prefetch(&cpr[RING_NEXT(&cpr->ring, cpr->cons)]);
 	rcp = &((struct rx_pkt_cmpl *)cpr->ring.vaddr)[cpr->cons];
-
-	flags_type = le16toh(rcp->flags_type);
 
 	/* Extract from the first 16-byte BD */
 	if (flags_type & RX_PKT_CMPL_FLAGS_RSS_VALID) {
@@ -403,8 +454,135 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 		acp = &((struct rx_abuf_cmpl *)cpr->ring.vaddr)[cpr->cons];
 
 		ri->iri_frags[i].irf_flid = 1;
-		ri->iri_frags[i].irf_idx = le32toh(acp->opaque) & 0xffffff;
+		ri->iri_frags[i].irf_idx = le32toh(acp->opaque);
 		ri->iri_len += le16toh(acp->len);
+	}
+
+	return 0;
+}
+
+static int
+bnxt_pkt_get_tpa(struct bnxt_softc *softc, if_rxd_info_t ri,
+    struct bnxt_cp_ring *cpr, uint16_t flags_type)
+{
+	struct rx_tpa_end_cmpl *agend =
+	    &((struct rx_tpa_end_cmpl *)cpr->ring.vaddr)[cpr->cons];
+	struct rx_tpa_end_cmpl_hi *agendh;
+	struct rx_abuf_cmpl *acp;
+	struct bnxt_full_tpa_start *tpas;
+	uint32_t flags2;
+	uint8_t	ags;
+	uint8_t agg_id;
+	int i;
+
+	/* Get the agg_id */
+	agg_id = (agend->agg_id & RX_TPA_END_CMPL_AGG_ID_MASK) >>
+	    RX_TPA_END_CMPL_AGG_ID_SFT;
+	tpas = &softc->tpa_start[agg_id];
+
+	/* Extract from the first 16-byte BD */
+	if (le16toh(tpas->low.flags_type) & RX_TPA_START_CMPL_FLAGS_RSS_VALID) {
+		ri->iri_flowid = le32toh(tpas->low.rss_hash);
+		/*
+		 * TODO: Extract something useful from tpas->low.rss_hash_type
+		 * (undocumented)
+		 */
+		// May be documented in the "LSI ES"
+		// also check the firmware code.
+		ri->iri_rsstype = M_HASHTYPE_OPAQUE;
+	}
+	else {
+		ri->iri_rsstype = M_HASHTYPE_NONE;
+	}
+	ags = (agend->agg_bufs_v1 & RX_TPA_END_CMPL_AGG_BUFS_MASK) >>
+	    RX_TPA_END_CMPL_AGG_BUFS_SFT;
+	ri->iri_nfrags = ags + 1;
+	ri->iri_frags[0].irf_flid = 0;
+	ri->iri_frags[0].irf_idx = le32toh(tpas->low.opaque);
+	ri->iri_len = le16toh(tpas->low.len);
+
+	/* Now the second 16-byte BD */
+	NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
+	agendh = &((struct rx_tpa_end_cmpl_hi *)cpr->ring.vaddr)[cpr->cons];
+
+	flags2 = le32toh(tpas->high.flags2);
+	if ((flags2 & RX_TPA_START_CMPL_FLAGS2_META_FORMAT_MASK) ==
+	    RX_TPA_START_CMPL_FLAGS2_META_FORMAT_VLAN) {
+		ri->iri_flags |= M_VLANTAG;
+		/* TODO: Should this be the entire 16-bits? */
+		ri->iri_vtag = le32toh(tpas->high.metadata) &
+		    (RX_TPA_START_CMPL_METADATA_VID_MASK |
+		    RX_TPA_START_CMPL_METADATA_DE |
+		    RX_TPA_START_CMPL_METADATA_PRI_MASK);
+	}
+	if (flags2 & RX_TPA_START_CMPL_FLAGS2_IP_CS_CALC) {
+		ri->iri_csum_flags |= CSUM_IP_CHECKED;
+		ri->iri_csum_flags |= CSUM_IP_VALID;
+	}
+	if (flags2 & RX_TPA_START_CMPL_FLAGS2_L4_CS_CALC) {
+		ri->iri_csum_flags |= CSUM_L4_CALC;
+		ri->iri_csum_flags |= CSUM_L4_VALID;
+	}
+
+	/* Now the ag ring stuff. */
+	for (i=1; i < ri->iri_nfrags; i++) {
+		NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
+		acp = &((struct rx_abuf_cmpl *)cpr->ring.vaddr)[cpr->cons];
+
+		ri->iri_frags[i].irf_flid = 1;
+		ri->iri_frags[i].irf_idx = le32toh(acp->opaque);
+		ri->iri_len += le16toh(acp->len);
+	}
+
+	/* And finally, the empty BD at the end... */
+	ri->iri_nfrags++;
+	ri->iri_frags[i].irf_flid = 0;
+	ri->iri_frags[i].irf_idx = le32toh(agend->opaque);
+	ri->iri_len += le16toh(agend->len);
+
+	return 0;
+}
+
+/* If we return anything but zero, iflib will assert... */
+static int
+bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
+{
+	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
+	struct bnxt_cp_ring *cpr = &softc->rx_cp_rings[ri->iri_qsidx];
+	struct cmpl_base *cmp;
+	uint16_t flags_type;
+	uint16_t type;
+
+	for (;;) {
+		NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
+		__builtin_prefetch(&cpr[RING_NEXT(&cpr->ring, cpr->cons)]);
+		cmp = &((struct cmpl_base *)cpr->ring.vaddr)[cpr->cons];
+
+		flags_type = le16toh(cmp->type);
+		type = flags_type & CMPL_BASE_TYPE_MASK;
+
+		switch (type) {
+		case CMPL_BASE_TYPE_RX_L2:
+			return bnxt_pkt_get_l2(softc, ri, cpr, flags_type);
+		case CMPL_BASE_TYPE_RX_TPA_END:
+			return bnxt_pkt_get_tpa(softc, ri, cpr, flags_type);
+		case CMPL_BASE_TYPE_RX_TPA_START:
+			NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
+			__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring,
+			    cpr->cons)]);
+			break;
+		default:
+			device_printf(softc->dev,
+			    "Unhandled completion type %d on RXQ %d get\n",
+			    type, ri->iri_qsidx);
+			if (type & 1) {
+				NEXT_CP_CONS_V(&cpr->ring, cpr->cons,
+				    cpr->v_bit);
+				__builtin_prefetch(
+				    &cmp[RING_NEXT(&cpr->ring, cpr->cons)]);
+			}
+			break;
+		}
 	}
 
 	return 0;

@@ -1004,3 +1004,28 @@ bnxt_hwrm_func_cfg(struct bnxt_softc *softc)
 
 	return hwrm_send_message(softc, &req, sizeof(req));
 }
+
+int
+bnxt_hwrm_vnic_tpa_cfg(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic,
+    uint32_t flags)
+{
+	struct hwrm_vnic_tpa_cfg_input req = {0};
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_VNIC_TPA_CFG, -1, -1);
+
+	req.flags = htole32(flags);
+	req.vnic_id = htole16(vnic->id);
+	req.enables = htole32(HWRM_VNIC_TPA_CFG_INPUT_ENABLES_MAX_AGG_SEGS |
+	    HWRM_VNIC_TPA_CFG_INPUT_ENABLES_MAX_AGGS |
+	    /* HWRM_VNIC_TPA_CFG_INPUT_ENABLES_MAX_AGG_TIMER | */
+	    HWRM_VNIC_TPA_CFG_INPUT_ENABLES_MIN_AGG_LEN);
+	/* TODO: Calculate this based on ring size? */
+	req.max_agg_segs = htole16(3);
+	/* Base this in the allocated TPA start size... */
+	req.max_aggs = htole16(2);
+	/* TODO: max_agg_timer? */
+	// req.mag_agg_timer = htole32(XXX);
+	req.min_agg_len = htole32(0);
+
+	return hwrm_send_message(softc, &req, sizeof(req));
+}

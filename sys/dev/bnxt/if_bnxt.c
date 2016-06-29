@@ -527,6 +527,13 @@ bnxt_attach_pre(if_ctx_t ctx)
 	if (rc)
 		goto dma_fail;
 
+	/* Allocate the TPA start buffer */
+	softc->tpa_start = malloc(sizeof(struct bnxt_full_tpa_start) *
+	    (RX_TPA_START_CMPL_AGG_ID_MASK >> RX_TPA_START_CMPL_AGG_ID_SFT),
+	    M_DEVBUF, M_NOWAIT | M_ZERO);
+	if (softc->tpa_start == NULL)
+		goto tpa_failed;
+
 	/* Get firmware version and compare with driver */
 	rc = bnxt_hwrm_ver_get(softc);
 	if (rc) {
@@ -610,9 +617,11 @@ bnxt_attach_pre(if_ctx_t ctx)
 failed:
 	bnxt_hwrm_func_drv_unrgtr(softc, false);
 ver_fail:
+	free(softc->tpa_start, M_DEVBUF);
+tpa_failed:
 	bnxt_free_hwrm_dma_mem(softc);
-	BNXT_HWRM_LOCK_DESTROY(softc);
 dma_fail:
+	BNXT_HWRM_LOCK_DESTROY(softc);
 	bnxt_pci_mapping_free(softc);
 	pci_disable_busmaster(softc->dev);
 	return (rc);
@@ -639,24 +648,19 @@ bnxt_attach_post(if_ctx_t ctx)
 	    CSUM_UDP_IPV6 | CSUM_TSO));
 
 	capabilities =
-	    IFCAP_VLAN_MTU | IFCAP_VLAN_HWTAGGING | IFCAP_VLAN_HWTSO |
-	    IFCAP_VLAN_HWFILTER | IFCAP_VLAN_HWCSUM | IFCAP_HWCSUM |
-	    IFCAP_RXCSUM_IPV6 | IFCAP_TXCSUM_IPV6 |
-	    IFCAP_JUMBO_MTU | IFCAP_LRO | IFCAP_TSO4 | IFCAP_TSO6;
+	    /* These are translated to hwassit bits */
+	    IFCAP_TXCSUM | IFCAP_TXCSUM_IPV6 | IFCAP_TSO4 | IFCAP_TSO6 |
+	    /* These are checked by iflib */
+	    IFCAP_LRO | IFCAP_VLAN_HWFILTER |
+	    /* These are part of the iflib mask */
+	    IFCAP_RXCSUM | IFCAP_RXCSUM_IPV6 | IFCAP_VLAN_MTU |
+	    IFCAP_VLAN_HWTAGGING | IFCAP_VLAN_HWTSO |
+	    /* These likely get lost... */
+	    IFCAP_VLAN_HWCSUM | IFCAP_JUMBO_MTU;
 
 	if_setcapabilities(ifp, capabilities);
 
-#if 1
-	/* Don't enable TSO by default until its fixed */
-	enabling =
-	    IFCAP_VLAN_MTU | IFCAP_VLAN_HWTAGGING | IFCAP_VLAN_HWTSO |
-	    IFCAP_VLAN_HWFILTER | IFCAP_VLAN_HWCSUM | IFCAP_HWCSUM |
-	    IFCAP_HWCSUM_IPV6 | IFCAP_JUMBO_MTU | IFCAP_LRO;
-#else
-	/* Some stuff isn't yet supported... */
-	enabling = capabilities & ~(IFCAP_VLAN_HWTAGGING | IFCAP_VLAN_HWFILTER |
-	    IFCAP_LRO);
-#endif
+	enabling = capabilities;
 
 	if_setcapenable(ifp, enabling);
 
@@ -687,6 +691,7 @@ bnxt_detach(if_ctx_t ctx)
 	iflib_dma_free(&softc->vnic_info.rss_hash_key_tbl);
 	iflib_dma_free(&softc->vnic_info.rss_grp_tbl);
 	iflib_dma_free(&softc->def_cp_ring_mem);
+	free(softc->tpa_start, M_DEVBUF);
 
 	/* hwrm is cleaned up in queues_free() since it's called later */
 	pci_disable_busmaster(softc->dev);
@@ -818,6 +823,11 @@ bnxt_init(if_ctx_t ctx)
 	if (rc)
 		goto fail;
 
+	/* Enable LRO/TPA/GRO */
+	rc = bnxt_hwrm_vnic_tpa_cfg(softc, &softc->vnic_info,
+	    (if_getcapenable(ifp) & IFCAP_LRO) ?
+	    HWRM_VNIC_TPA_CFG_INPUT_FLAGS_TPA : 0);
+
 	for (i = 0; i < softc->ntxqsets; i++) {
 		/* Allocate the statistics context */
 		rc = bnxt_hwrm_stat_ctx_alloc(softc, &softc->tx_cp_rings[i],
@@ -912,6 +922,7 @@ bnxt_mtu_set(if_ctx_t ctx, uint32_t mtu)
 	if (mtu > BNXT_MAX_MTU)
 		return EINVAL;
 
+	/* TODO: Should we do something about PAGE_SIZE blocks here? */
 	softc->scctx->isc_max_frame_size = mtu + ETHER_HDR_LEN +
 	    ETHER_CRC_LEN;
 	return 0;
