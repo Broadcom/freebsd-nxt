@@ -1390,7 +1390,7 @@ iflib_txsd_free(if_ctx_t ctx, iflib_txq_t txq, int i)
 		bus_dmamap_unload(txq->ift_desc_tag,
 				  txq->ift_sds.ifsd_map[i]);
 	}
-	m_freem(*mp);
+	m_free(*mp);
 	DBG_COUNTER_INC(tx_frees);
 	*mp = NULL;
 }
@@ -1988,8 +1988,10 @@ assemble_segments(iflib_rxq_t rxq, if_rxd_info_t ri)
 	struct mbuf *m, *mh, *mt;
 	iflib_rxsd_t sd;
 	caddr_t cl;
+	uint16_t remain;
 
 	i = 0;
+	remain = ri->iri_len;
 	do {
 		sd = rxd_frag_to_sd(rxq, &ri->iri_frags[i], &cltype, TRUE);
 
@@ -2019,7 +2021,9 @@ assemble_segments(iflib_rxq_t rxq, if_rxd_info_t ri)
 		 */
 		m->m_data += padlen;
 		ri->iri_len -= padlen;
-		m->m_len = ri->iri_len;
+		remain -= padlen;
+		m->m_len = min(remain, rxq->ifr_fl->ifl_buf_size);
+		remain -= m->m_len;
 	} while (++i < ri->iri_nfrags);
 
 	return (mh);
@@ -2035,7 +2039,7 @@ iflib_rxd_pkt_get(iflib_rxq_t rxq, if_rxd_info_t ri)
 	iflib_rxsd_t sd;
 
 	/* should I merge this back in now that the two paths are basically duplicated? */
-	if (ri->iri_len <= IFLIB_RX_COPY_THRESH) {
+	if (ri->iri_nfrags == 1 && ri->iri_len <= IFLIB_RX_COPY_THRESH) {
 		sd = rxd_frag_to_sd(rxq, &ri->iri_frags[0], NULL, FALSE);
 		m = sd->ifsd_m;
 		sd->ifsd_m = NULL;
@@ -2474,7 +2478,6 @@ iflib_busdma_load_mbuf_sg(iflib_txq_t txq, bus_dma_tag_t tag, bus_dmamap_t map,
 			mp = &ifsd_m[next];
 			*mp = m;
 			m = m->m_next;
-			(*mp)->m_next = NULL;
 			if (__predict_false((*mp)->m_len == 0)) {
 				m_free(*mp);
 				*mp = NULL;
@@ -2525,7 +2528,6 @@ iflib_busdma_load_mbuf_sg(iflib_txq_t txq, bus_dma_tag_t tag, bus_dmamap_t map,
 			count++;
 			tmp = m;
 			m = m->m_next;
-			tmp->m_next = NULL;
 		} while (m != NULL);
 		*nsegs = i;
 	}
@@ -2756,7 +2758,7 @@ iflib_tx_desc_free(iflib_txq_t txq, int n)
 				/* XXX we don't support any drivers that batch packets yet */
 				MPASS(m->m_nextpkt == NULL);
 
-				m_freem(m);
+				m_free(m);
 				ifsd_m[cidx] = NULL;
 #if MEMORY_LOGGING
 				txq->ift_dequeued++;
@@ -2852,7 +2854,7 @@ iflib_txq_drain(struct ifmp_ring *r, uint32_t cidx, uint32_t pidx)
 	if (__predict_false(ctx->ifc_flags & IFC_QFLUSH)) {
 		DBG_COUNTER_INC(txq_drain_flushing);
 		for (i = 0; i < avail; i++) {
-			m_freem(r->items[(cidx + i) & (r->size-1)]);
+			m_free(r->items[(cidx + i) & (r->size-1)]);
 			r->items[(cidx + i) & (r->size-1)] = NULL;
 		}
 		return (avail);
