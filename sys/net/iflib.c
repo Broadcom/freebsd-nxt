@@ -931,7 +931,7 @@ iflib_netmap_rxsync(struct netmap_kring *kring, int flags)
 			/*
 			 * XXX we should be batching this operation - TODO
 			 */
-			ctx->isc_rxd_refill(ctx->ifc_softc, rxq->ifr_id, fl->ifl_id, nic_i, &paddr, &vaddr, 1);
+			ctx->isc_rxd_refill(ctx->ifc_softc, rxq->ifr_id, fl->ifl_id, nic_i, &paddr, &vaddr, 1, fl->ifl_buf_size);
 			bus_dmamap_sync(fl->ifl_ifdi->idi_tag, fl->ifl_sds[nic_i].ifsd_map,
 			    BUS_DMASYNC_PREREAD);
 			nm_i = nm_next(nm_i, lim);
@@ -1023,7 +1023,7 @@ iflib_netmap_rxq_init(if_ctx_t ctx, iflib_rxq_t rxq)
 			vaddr = addr = PNMB(na, slot + sj, &paddr);
 			netmap_load_map(na, rxq->ifr_fl[0].ifl_ifdi->idi_tag, sd->ifsd_map, addr);
 			/* Update descriptor and the cached value */
-			ctx->isc_rxd_refill(ctx->ifc_softc, rxq->ifr_id, 0 /* fl_id */, i, &paddr, &vaddr, 1);
+			ctx->isc_rxd_refill(ctx->ifc_softc, rxq->ifr_id, 0 /* fl_id */, i, &paddr, &vaddr, 1, fl->ifl_buf_size);
 	}
 	/* preserve queue */
 	if (ctx->ifc_ifp->if_capenable & IFCAP_NETMAP) {
@@ -1627,7 +1627,7 @@ _iflib_fl_refill(if_ctx_t ctx, iflib_fl_t fl, int count)
 		}
 		if (n == 0 || i == IFLIB_MAX_RX_REFRESH) {
 			ctx->isc_rxd_refill(ctx->ifc_softc, fl->ifl_rxq->ifr_id, fl->ifl_id, pidx,
-								 fl->ifl_bus_addrs, fl->ifl_vm_addrs, i);
+								 fl->ifl_bus_addrs, fl->ifl_vm_addrs, i, fl->ifl_buf_size);
 			i = 0;
 			pidx = fl->ifl_pidx;
 		}
@@ -1995,6 +1995,7 @@ assemble_segments(iflib_rxq_t rxq, if_rxd_info_t ri)
 
 		MPASS(sd->ifsd_cl != NULL);
 		MPASS(sd->ifsd_m != NULL);
+
 		m = sd->ifsd_m;
 		if (i == 0) {
 			flags = M_PKTHDR|M_EXT;
