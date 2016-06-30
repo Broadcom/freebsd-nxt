@@ -526,6 +526,7 @@ bnxt_pkt_get_tpa(struct bnxt_softc *softc, if_rxd_info_t ri,
 	if (flags2 & RX_TPA_START_CMPL_FLAGS2_L4_CS_CALC) {
 		ri->iri_csum_flags |= CSUM_L4_CALC;
 		ri->iri_csum_flags |= CSUM_L4_VALID;
+		ri->iri_csum_data = 0xffff;
 	}
 
 	/* Now the ag ring stuff. */
