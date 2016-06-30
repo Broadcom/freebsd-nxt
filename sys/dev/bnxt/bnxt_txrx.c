@@ -233,6 +233,17 @@ bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
 	struct rx_prod_pkt_bd *rxbd;
 	uint16_t type;
 	uint16_t i;
+	uint16_t len;
+
+	/* TODO: We had to copy this from iflib! */
+	if (softc->scctx->isc_max_frame_size <= 2048)
+		len = MCLBYTES;
+	else if (softc->scctx->isc_max_frame_size <= 4096)
+		len = MJUMPAGESIZE;
+	else if (softc->scctx->isc_max_frame_size <= 9216)
+		len = MJUM9BYTES;
+	else
+		len = MJUM16BYTES;
 
 	if (flid == 0) {
 		rx_ring = &softc->rx_rings[rxqid];
@@ -246,7 +257,7 @@ bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
 	}
 	for (i=0; i<count; i++) {
 		rxbd[pidx].flags_type = htole16(type);
-		rxbd[pidx].len = htole16(softc->scctx->isc_max_frame_size);
+		rxbd[pidx].len = htole16(len);
 		rxbd[pidx].opaque = htole32(pidx);
 		rxbd[pidx].addr = htole64(paddrs[i]);
 		if (++pidx == rx_ring->ring_size)
