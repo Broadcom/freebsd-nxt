@@ -430,6 +430,7 @@ bnxt_pkt_get_l2(struct bnxt_softc *softc, if_rxd_info_t ri,
 	ri->iri_nfrags = ags + 1;
 	ri->iri_frags[0].irf_flid = le32toh(rcp->opaque) >> 24;
 	ri->iri_frags[0].irf_idx = le32toh(rcp->opaque) & 0xffffff;
+	ri->iri_frags[0].irf_len = le16toh(rcp->len);
 	ri->iri_len = le16toh(rcp->len);
 
 	/* Now the second 16-byte BD */
@@ -466,6 +467,7 @@ bnxt_pkt_get_l2(struct bnxt_softc *softc, if_rxd_info_t ri,
 
 		ri->iri_frags[i].irf_flid = le32toh(acp->opaque) >> 24;
 		ri->iri_frags[i].irf_idx = le32toh(acp->opaque) & 0xffffff;
+		ri->iri_frags[i].irf_len = le16toh(acp->len);
 		ri->iri_len += le16toh(acp->len);
 	}
 
@@ -510,6 +512,7 @@ bnxt_pkt_get_tpa(struct bnxt_softc *softc, if_rxd_info_t ri,
 	ri->iri_nfrags = ags + 1;
 	ri->iri_frags[0].irf_flid = le32toh(tpas->low.opaque) >> 24;
 	ri->iri_frags[0].irf_idx = le32toh(tpas->low.opaque) & 0xffffff;
+	ri->iri_frags[0].irf_len = le16toh(tpas->low.len);
 	ri->iri_len = le16toh(tpas->low.len);
 
 	/* Now the second 16-byte BD */
@@ -542,6 +545,7 @@ bnxt_pkt_get_tpa(struct bnxt_softc *softc, if_rxd_info_t ri,
 
 		ri->iri_frags[i].irf_flid = le32toh(acp->opaque) >> 24;
 		ri->iri_frags[i].irf_idx = le32toh(acp->opaque) & 0xffffff;
+		ri->iri_frags[i].irf_len = le16toh(acp->len);
 		ri->iri_len += le16toh(acp->len);
 	}
 
@@ -549,6 +553,7 @@ bnxt_pkt_get_tpa(struct bnxt_softc *softc, if_rxd_info_t ri,
 	ri->iri_nfrags++;
 	ri->iri_frags[i].irf_flid = le32toh(agend->opaque) >> 24;
 	ri->iri_frags[i].irf_idx = le32toh(agend->opaque) & 0xffffff;
+	ri->iri_frags[i].irf_len = le16toh(agend->len);
 	ri->iri_len += le16toh(agend->len);
 
 	return 0;
