@@ -827,6 +827,8 @@ bnxt_init(if_ctx_t ctx)
 	rc = bnxt_hwrm_vnic_tpa_cfg(softc, &softc->vnic_info,
 	    (if_getcapenable(ifp) & IFCAP_LRO) ?
 	    HWRM_VNIC_TPA_CFG_INPUT_FLAGS_TPA : 0);
+	if (rc)
+		goto fail;
 
 	for (i = 0; i < softc->ntxqsets; i++) {
 		/* Allocate the statistics context */
