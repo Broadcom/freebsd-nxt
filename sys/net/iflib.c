@@ -1998,8 +1998,13 @@ assemble_segments(iflib_rxq_t rxq, if_rxd_info_t ri)
 		MPASS(sd->ifsd_m != NULL);
 
 		/* Don't include zero-length frags */
-		if (ri->iri_frags[i].irf_len == 0)
+		if (ri->iri_frags[i].irf_len == 0) {
+			/* XXX we can save the cluster here, but not the mbuf */
+			m_init(sd->ifsd_m, M_NOWAIT, MT_DATA, 0);
+			m_free(sd->ifsd_m);
+			sd->ifsd_m = NULL;
 			continue;
+		}
 
 		m = sd->ifsd_m;
 		if (mh == NULL) {
