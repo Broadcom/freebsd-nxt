@@ -54,7 +54,8 @@ static int bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t cidx,
     bool clear);
 
 static void bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
-    uint32_t pidx, uint64_t *paddrs, caddr_t *vaddrs, uint16_t count);
+    uint32_t pidx, uint64_t *paddrs, caddr_t *vaddrs, uint16_t count,
+    uint16_t buf_size);
 static void bnxt_isc_rxd_flush(void *sc, uint16_t rxqid, uint8_t flid,
     uint32_t pidx);
 static int bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx);
@@ -226,24 +227,13 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 static void
 bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
 				uint32_t pidx, uint64_t *paddrs,
-				caddr_t *vaddrs, uint16_t count)
+				caddr_t *vaddrs, uint16_t count, uint16_t len)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_ring *rx_ring;
 	struct rx_prod_pkt_bd *rxbd;
 	uint16_t type;
 	uint16_t i;
-	uint16_t len;
-
-	/* TODO: We had to copy this from iflib! */
-	if (softc->scctx->isc_max_frame_size <= 2048)
-		len = MCLBYTES;
-	else if (softc->scctx->isc_max_frame_size <= 4096)
-		len = MJUMPAGESIZE;
-	else if (softc->scctx->isc_max_frame_size <= 9216)
-		len = MJUM9BYTES;
-	else
-		len = MJUM16BYTES;
 
 	if (flid == 0) {
 		rx_ring = &softc->rx_rings[rxqid];

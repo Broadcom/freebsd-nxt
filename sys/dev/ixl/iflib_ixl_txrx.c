@@ -58,7 +58,7 @@ static void ixl_isc_txd_flush(void *arg, uint16_t txqid, uint32_t pidx);
 static int ixl_isc_txd_credits_update(void *arg, uint16_t qid, uint32_t cidx, bool clear);
 
 static void ixl_isc_rxd_refill(void *arg, uint16_t rxqid, uint8_t flid __unused,
-				   uint32_t pidx, uint64_t *paddrs, caddr_t *vaddrs __unused, uint16_t count);
+				   uint32_t pidx, uint64_t *paddrs, caddr_t *vaddrs __unused, uint16_t count, uint16_t buf_len);
 static void ixl_isc_rxd_flush(void *arg, uint16_t rxqid, uint8_t flid __unused, uint32_t pidx);
 static int ixl_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx);
 static int ixl_isc_rxd_pkt_get(void *arg, if_rxd_info_t ri);
@@ -358,7 +358,7 @@ ixl_isc_txd_credits_update(void *arg, uint16_t qid, uint32_t cidx, bool clear)
  **********************************************************************/
 static void
 ixl_isc_rxd_refill(void *arg, uint16_t rxqid, uint8_t flid __unused,
-				   uint32_t pidx, uint64_t *paddrs, caddr_t *vaddrs __unused, uint16_t count)
+				   uint32_t pidx, uint64_t *paddrs, caddr_t *vaddrs __unused, uint16_t count, uint16_t buf_len)
 
 {
 	struct ixl_vsi		*vsi = arg;
@@ -526,6 +526,7 @@ ixl_isc_rxd_pkt_get(void *arg, if_rxd_info_t ri)
 		}
 		ri->iri_frags[i].irf_flid = 0;
 		ri->iri_frags[i].irf_idx = cidx;
+		ri->iri_frags[i].irf_len = plen;
 		if (++cidx == scctx->isc_ntxd)
 			cidx = 0;
 		i++;

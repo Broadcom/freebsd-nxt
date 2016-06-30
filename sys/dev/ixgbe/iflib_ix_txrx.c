@@ -54,7 +54,7 @@ static void ixgbe_isc_txd_flush(void *arg, uint16_t txqid, uint32_t pidx);
 static int ixgbe_isc_txd_credits_update(void *arg, uint16_t txqid, uint32_t cidx, bool clear);
 
 static void ixgbe_isc_rxd_refill(void *arg, uint16_t rxqid, uint8_t flid __unused,
-				   uint32_t pidx, uint64_t *paddrs, caddr_t *vaddrs __unused, uint16_t count);
+				   uint32_t pidx, uint64_t *paddrs, caddr_t *vaddrs __unused, uint16_t count, uint16_t buf_len);
 static void ixgbe_isc_rxd_flush(void *arg, uint16_t rxqid, uint8_t flid __unused, uint32_t pidx);
 static int ixgbe_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx);
 static int ixgbe_isc_rxd_pkt_get(void *arg, if_rxd_info_t ri);
@@ -325,7 +325,7 @@ ixgbe_isc_txd_credits_update(void *arg, uint16_t txqid, uint32_t cidx_init, bool
 
 static void
 ixgbe_isc_rxd_refill(void *arg, uint16_t rxqid, uint8_t flid __unused,
-				 uint32_t pidx, uint64_t *paddrs, caddr_t *vaddrs __unused, uint16_t count)
+				 uint32_t pidx, uint64_t *paddrs, caddr_t *vaddrs __unused, uint16_t count, uint16_t buf_len)
 {
 	struct adapter *sc       = arg;
 	struct ix_rx_queue *que     = &sc->rx_queues[rxqid];
@@ -436,6 +436,7 @@ ixgbe_isc_rxd_pkt_get(void *arg, if_rxd_info_t ri)
 		}
 		ri->iri_frags[i].irf_flid = 0;
 		ri->iri_frags[i].irf_idx = cidx;
+		ri->iri_frags[i].irf_len = len;
 		if (++cidx == adapter->shared->isc_nrxd)
 			cidx = 0;
 		i++;
