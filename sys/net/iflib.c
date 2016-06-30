@@ -1023,7 +1023,7 @@ iflib_netmap_rxq_init(if_ctx_t ctx, iflib_rxq_t rxq)
 			vaddr = addr = PNMB(na, slot + sj, &paddr);
 			netmap_load_map(na, rxq->ifr_fl[0].ifl_ifdi->idi_tag, sd->ifsd_map, addr);
 			/* Update descriptor and the cached value */
-			ctx->isc_rxd_refill(ctx->ifc_softc, rxq->ifr_id, 0 /* fl_id */, i, &paddr, &vaddr, 1, fl->ifl_buf_size);
+			ctx->isc_rxd_refill(ctx->ifc_softc, rxq->ifr_id, 0 /* fl_id */, i, &paddr, &vaddr, 1, rxq->ifr_fl[0].ifl_buf_size);
 	}
 	/* preserve queue */
 	if (ctx->ifc_ifp->if_capenable & IFCAP_NETMAP) {
