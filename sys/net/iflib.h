@@ -64,12 +64,14 @@ typedef struct if_int_delay_info  *if_int_delay_info_t;
 typedef struct if_rxd_frag {
 	uint8_t irf_flid;
 	uint16_t irf_idx;
+	uint16_t irf_len;
 } *if_rxd_frag_t;
 
 typedef struct if_rxd_info {
 	/* set by iflib */
 	uint16_t iri_qsidx;		/* qset index */
 	uint16_t iri_vtag;		/* vlan tag - if flag set */
+	/* XXX redundant with the new irf_len field */
 	uint16_t iri_len;		/* packet length */
 	uint16_t iri_cidx;		/* consumer index of cq */
 	struct ifnet *iri_ifp;		/* some drivers >1 interface per softc */

@@ -1988,10 +1988,8 @@ assemble_segments(iflib_rxq_t rxq, if_rxd_info_t ri)
 	struct mbuf *m, *mh, *mt;
 	iflib_rxsd_t sd;
 	caddr_t cl;
-	uint16_t remain;
 
 	i = 0;
-	remain = ri->iri_len;
 	do {
 		sd = rxd_frag_to_sd(rxq, &ri->iri_frags[i], &cltype, TRUE);
 
@@ -2021,9 +2019,7 @@ assemble_segments(iflib_rxq_t rxq, if_rxd_info_t ri)
 		 */
 		m->m_data += padlen;
 		ri->iri_len -= padlen;
-		remain -= padlen;
-		m->m_len = min(remain, rxq->ifr_fl->ifl_buf_size);
-		remain -= m->m_len;
+		m->m_len = ri->iri_frags[i].irf_len;
 	} while (++i < ri->iri_nfrags);
 
 	return (mh);
@@ -2039,13 +2035,14 @@ iflib_rxd_pkt_get(iflib_rxq_t rxq, if_rxd_info_t ri)
 	iflib_rxsd_t sd;
 
 	/* should I merge this back in now that the two paths are basically duplicated? */
-	if (ri->iri_nfrags == 1 && ri->iri_len <= IFLIB_RX_COPY_THRESH) {
+	if (ri->iri_nfrags == 1 &&
+	    ri->iri_frags[0].irf_len <= IFLIB_RX_COPY_THRESH) {
 		sd = rxd_frag_to_sd(rxq, &ri->iri_frags[0], NULL, FALSE);
 		m = sd->ifsd_m;
 		sd->ifsd_m = NULL;
 		m_init(m, M_NOWAIT, MT_DATA, M_PKTHDR);
 		memcpy(m->m_data, sd->ifsd_cl, ri->iri_len);
-		m->m_len = ri->iri_len;
+		m->m_len = ri->iri_frags[0].irf_len;
        } else {
 		m = assemble_segments(rxq, ri);
 	}
