@@ -1990,14 +1990,19 @@ assemble_segments(iflib_rxq_t rxq, if_rxd_info_t ri)
 	caddr_t cl;
 
 	i = 0;
+	mh = NULL;
 	do {
 		sd = rxd_frag_to_sd(rxq, &ri->iri_frags[i], &cltype, TRUE);
 
 		MPASS(sd->ifsd_cl != NULL);
 		MPASS(sd->ifsd_m != NULL);
 
+		/* Don't include zero-length frags */
+		if (ri->iri_frags[i].irf_len == 0)
+			continue;
+
 		m = sd->ifsd_m;
-		if (i == 0) {
+		if (mh == NULL) {
 			flags = M_PKTHDR|M_EXT;
 			mh = mt = m;
 			padlen = ri->iri_pad;
