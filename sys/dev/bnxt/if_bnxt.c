@@ -408,8 +408,11 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->rx_cp_rings[i].ring.id = i + 1;
 		softc->rx_cp_rings[i].ring.doorbell =
 		    softc->rx_cp_rings[i].ring.id * 0x80;
+		/*
+		 * If this ring overflows, RX stops working.
+		 */
 		softc->rx_cp_rings[i].ring.ring_size =
-		    softc->scctx->isc_nrxd * 2;
+		    softc->scctx->isc_nrxd * 5;
 		softc->rx_cp_rings[i].ring.vaddr = vaddrs[i * nrxqs];
 		softc->rx_cp_rings[i].ring.paddr = paddrs[i * nrxqs];
 
@@ -577,7 +580,7 @@ bnxt_attach_pre(if_ctx_t ctx)
 	scctx->isc_ntxd = PAGE_SIZE / sizeof(struct tx_bd_short),
 	scctx->isc_txqsizes[0] = PAGE_SIZE * 2;
 	scctx->isc_txqsizes[1] = PAGE_SIZE;
-	scctx->isc_rxqsizes[0] = PAGE_SIZE * 2;
+	scctx->isc_rxqsizes[0] = PAGE_SIZE * 5;
 	scctx->isc_rxqsizes[1] = PAGE_SIZE;
 	scctx->isc_rxqsizes[2] = PAGE_SIZE;
 	scctx->isc_max_rxqsets = min(pci_msix_count(softc->dev)-1,
