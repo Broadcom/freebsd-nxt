@@ -1765,9 +1765,9 @@ iflib_rx_sds_free(iflib_rxq_t rxq)
 				bus_dma_tag_destroy(fl->ifl_desc_tag);
 				fl->ifl_desc_tag = NULL;
 			}
-			if (fl->ifl_sds != NULL)
-				free(fl->ifl_sds, M_IFLIB);
 		}
+		if (rxq->ifr_fl->ifl_sds != NULL)
+			free(rxq->ifr_fl->ifl_sds, M_IFLIB);
 
 		free(rxq->ifr_fl, M_IFLIB);
 		rxq->ifr_fl = NULL;
