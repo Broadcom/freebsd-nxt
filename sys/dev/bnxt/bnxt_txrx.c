@@ -84,20 +84,6 @@ static const uint16_t bnxt_tx_lhint[] = {
 	TX_BD_SHORT_FLAGS_LHINT_LT2K,
 	TX_BD_SHORT_FLAGS_LHINT_LT2K,
 	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
-	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
-	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
-	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
-	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
-	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
-	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
-	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
-	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
-	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
-	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
-	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
-	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
-	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
-	TX_BD_SHORT_FLAGS_LHINT_GTE2K,
 };
 
 static int
@@ -125,8 +111,12 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 	    pi->ipi_new_pidx);
 	tbd->len = htole16(pi->ipi_segs[seg].ds_len);
 	tbd->addr = htole64(pi->ipi_segs[seg++].ds_addr);
-	flags_type = (pi->ipi_nsegs + need_hi) << TX_BD_SHORT_FLAGS_BD_CNT_SFT;
-	flags_type |= bnxt_tx_lhint[pi->ipi_len >> 9];
+	flags_type = ((pi->ipi_nsegs + need_hi) <<
+	    TX_BD_SHORT_FLAGS_BD_CNT_SFT) & TX_BD_SHORT_FLAGS_BD_CNT_MASK;
+	if (pi->ipi_len >= 2048)
+		flags_type |= TX_BD_SHORT_FLAGS_LHINT_GTE2K;
+	else
+		flags_type |= bnxt_tx_lhint[pi->ipi_len >> 9];
 
 	if (need_hi) {
 		flags_type |= TX_BD_LONG_TYPE_TX_BD_LONG;
@@ -202,6 +192,8 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 	bool v_bit = cpr->v_bit;
 	bool last_v_bit;
 	uint32_t last_cons;
+	uint16_t type;
+	uint16_t err;
 
 	for (;;) {
 		last_cons = cons;
@@ -210,10 +202,31 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 		__builtin_prefetch(&cmpl[RING_NEXT(&cpr->ring, cons)]);
 
 		if (!CMP_VALID(&cmpl[cons], v_bit))
-			break;
+			goto cmpl_invalid;
 
-		avail += le32toh(cmpl[cons].opaque) >> 24;
+		type = cmpl[cons].flags_type & TX_CMPL_TYPE_MASK;
+		switch (type) {
+		case TX_CMPL_TYPE_TX_L2:
+			err = (le16toh(cmpl[cons].errors_v) &
+			    TX_CMPL_ERRORS_BUFFER_ERROR_MASK) >>
+			    TX_CMPL_ERRORS_BUFFER_ERROR_SFT;
+			if (err)
+				device_printf(softc->dev,
+				    "TX completion error %u\n", err);
+			avail += le32toh(cmpl[cons].opaque) >> 24;
+			break;
+		default:
+			if (type & 1) {
+				NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
+				if (!CMP_VALID(&cmpl[cons], v_bit))
+					goto cmpl_invalid;
+			}
+			device_printf(softc->dev,
+			    "Unhandled TX completion type %u\n", type);
+			break;
+		}
 	}
+cmpl_invalid:
 
 	if (clear && avail) {
 		cpr->cons = last_cons;

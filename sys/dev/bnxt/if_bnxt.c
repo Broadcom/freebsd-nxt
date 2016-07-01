@@ -293,8 +293,9 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		    softc->tx_cp_rings[i].ring.id * 0x80;
 		softc->tx_cp_rings[i].ring.ring_size =
 		    softc->scctx->isc_ntxd * 2;
-		softc->tx_cp_rings[i].ring.vaddr = vaddrs[i * ntxqs];
-		softc->tx_cp_rings[i].ring.paddr = paddrs[i * ntxqs];
+		/* The second one never gets a bus DMA sync... use it for cp */
+		softc->tx_cp_rings[i].ring.vaddr = vaddrs[i * ntxqs + 1];
+		softc->tx_cp_rings[i].ring.paddr = paddrs[i * ntxqs + 1];
 
 		/* Set up the TX ring */
 		softc->tx_rings[i].phys_id = (uint16_t)HWRM_NA_SIGNATURE;
@@ -303,8 +304,8 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		    (softc->scctx->isc_nrxqsets * 2) + 1 + i;
 		softc->tx_rings[i].doorbell = softc->tx_rings[i].id * 0x80;
 		softc->tx_rings[i].ring_size = softc->scctx->isc_ntxd;
-		softc->tx_rings[i].vaddr = vaddrs[i * ntxqs + 1];
-		softc->tx_rings[i].paddr = paddrs[i * ntxqs + 1];
+		softc->tx_rings[i].vaddr = vaddrs[i * ntxqs];
+		softc->tx_rings[i].paddr = paddrs[i * ntxqs];
 
 		bnxt_create_tx_sysctls(softc, i);
 	}
@@ -571,8 +572,8 @@ bnxt_attach_pre(if_ctx_t ctx)
 		goto failed;
 
 	/* Now set up iflib sc */
-	scctx->isc_tx_nsegments = 32,
-	scctx->isc_tx_tso_segments_max = 32;
+	scctx->isc_tx_nsegments = 31,
+	scctx->isc_tx_tso_segments_max = 31;
 	scctx->isc_tx_tso_size_max = BNXT_TSO_SIZE;
 	scctx->isc_tx_tso_segsize_max = BNXT_TSO_SIZE;
 	scctx->isc_vectors = softc->pf.max_cp_rings;
