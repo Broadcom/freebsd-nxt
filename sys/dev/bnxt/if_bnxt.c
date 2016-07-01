@@ -993,8 +993,14 @@ bnxt_media_status(if_ctx_t ctx, struct ifmediareq * ifmr)
 static int
 bnxt_media_change(if_ctx_t ctx)
 {
-	device_printf(iflib_get_dev(ctx), "STUB: %s @ %s:%d\n", __func__, __FILE__, __LINE__);
-	return ENOSYS;
+	struct bnxt_softc *softc = iflib_get_softc(ctx);
+	struct ifmediareq ifmr;
+	int rc;
+
+	rc = bnxt_hwrm_set_link_setting(softc, true, true);
+	bnxt_media_status(softc->ctx, &ifmr);
+	bnxt_report_link(softc);
+	return rc;
 }
 
 static int
