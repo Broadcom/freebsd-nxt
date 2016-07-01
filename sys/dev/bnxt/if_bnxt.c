@@ -664,7 +664,8 @@ bnxt_attach_post(if_ctx_t ctx)
 
 	if_setcapabilities(ifp, capabilities);
 
-	enabling = capabilities;
+	enabling = capabilities & ~(IFCAP_LRO | IFCAP_VLAN_HWFILTER |
+	    IFCAP_VLAN_HWTAGGING | IFCAP_VLAN_HWTSO | IFCAP_VLAN_HWCSUM);
 
 	if_setcapenable(ifp, enabling);
 
