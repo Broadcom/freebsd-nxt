@@ -1372,8 +1372,7 @@ bnxt_report_link(struct bnxt_softc *softc)
 	} else {
 		iflib_link_state_change(softc->ctx, LINK_STATE_DOWN,
 		    IF_Gbps(100));
-		device_printf(softc->dev, "Link is Down %s, %s\n", duplex,
-		    flow_ctrl);
+		device_printf(softc->dev, "Link is Down\n");
 	}
 }
 
