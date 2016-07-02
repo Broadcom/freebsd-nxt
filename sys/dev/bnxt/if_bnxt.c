@@ -204,7 +204,7 @@ static struct if_shared_ctx bnxt_sctx_init = {
 	.isc_txrx = &bnxt_txrx,
 	.isc_driver = &bnxt_iflib_driver,
 	.isc_nfl = 2,				// Number of Free Lists
-	.isc_flags = IFLIB_HAS_CQ,
+	.isc_flags = IFLIB_HAS_RXCQ | IFLIB_HAS_TXCQ,
 	.isc_q_align = PAGE_SIZE,
 
 	/* We really don't have a maximum here */
@@ -292,7 +292,7 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->tx_cp_rings[i].ring.doorbell =
 		    softc->tx_cp_rings[i].ring.id * 0x80;
 		softc->tx_cp_rings[i].ring.ring_size =
-		    softc->scctx->isc_ntxd * 2;
+		    softc->scctx->isc_ntxd[0];
 		softc->tx_cp_rings[i].ring.vaddr = vaddrs[i * ntxqs];
 		softc->tx_cp_rings[i].ring.paddr = paddrs[i * ntxqs];
 
@@ -302,7 +302,7 @@ bnxt_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->tx_rings[i].id =
 		    (softc->scctx->isc_nrxqsets * 2) + 1 + i;
 		softc->tx_rings[i].doorbell = softc->tx_rings[i].id * 0x80;
-		softc->tx_rings[i].ring_size = softc->scctx->isc_ntxd;
+		softc->tx_rings[i].ring_size = softc->scctx->isc_ntxd[1];
 		softc->tx_rings[i].vaddr = vaddrs[i * ntxqs + 1];
 		softc->tx_rings[i].paddr = paddrs[i * ntxqs + 1];
 
@@ -412,7 +412,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		 * If this ring overflows, RX stops working.
 		 */
 		softc->rx_cp_rings[i].ring.ring_size =
-		    softc->scctx->isc_nrxd * 5;
+		    softc->scctx->isc_nrxd[0];
 		softc->rx_cp_rings[i].ring.vaddr = vaddrs[i * nrxqs];
 		softc->rx_cp_rings[i].ring.paddr = paddrs[i * nrxqs];
 
@@ -421,7 +421,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->rx_rings[i].softc = softc;
 		softc->rx_rings[i].id = i + 1;
 		softc->rx_rings[i].doorbell = softc->rx_rings[i].id * 0x80;
-		softc->rx_rings[i].ring_size = softc->scctx->isc_nrxd;
+		softc->rx_rings[i].ring_size = softc->scctx->isc_nrxd[1];
 		softc->rx_rings[i].vaddr = vaddrs[i * nrxqs + 1];
 		softc->rx_rings[i].paddr = paddrs[i * nrxqs + 1];
 
@@ -430,7 +430,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 		softc->ag_rings[i].softc = softc;
 		softc->ag_rings[i].id = nrxqsets + i + 1;
 		softc->ag_rings[i].doorbell = softc->ag_rings[i].id * 0x80;
-		softc->ag_rings[i].ring_size = softc->scctx->isc_nrxd;
+		softc->ag_rings[i].ring_size = softc->scctx->isc_nrxd[2];
 		softc->ag_rings[i].vaddr = vaddrs[i * nrxqs + 2];
 		softc->ag_rings[i].paddr = paddrs[i * nrxqs + 2];
 
@@ -576,8 +576,12 @@ bnxt_attach_pre(if_ctx_t ctx)
 	scctx->isc_tx_tso_size_max = BNXT_TSO_SIZE;
 	scctx->isc_tx_tso_segsize_max = BNXT_TSO_SIZE;
 	scctx->isc_vectors = softc->pf.max_cp_rings;
-	scctx->isc_nrxd = PAGE_SIZE / sizeof(struct rx_pkt_cmpl),
-	scctx->isc_ntxd = PAGE_SIZE / sizeof(struct tx_bd_short),
+	scctx->isc_nrxd[0] = (PAGE_SIZE / sizeof(struct rx_pkt_cmpl)) * 8,
+	scctx->isc_nrxd[1] = PAGE_SIZE / sizeof(struct rx_pkt_cmpl),
+	/* XXX this should be bigger... at least when using jumbo or LRO */
+	scctx->isc_nrxd[2] = PAGE_SIZE / sizeof(struct rx_pkt_cmpl),
+	scctx->isc_ntxd[0] = (PAGE_SIZE / sizeof(struct tx_bd_short)) * 2,
+	scctx->isc_ntxd[1] = PAGE_SIZE / sizeof(struct tx_bd_short),
 	scctx->isc_txqsizes[0] = PAGE_SIZE * 2;
 	scctx->isc_txqsizes[1] = PAGE_SIZE;
 	scctx->isc_rxqsizes[0] = PAGE_SIZE * 5;

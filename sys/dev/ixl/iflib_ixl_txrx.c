@@ -55,7 +55,7 @@ static void ixl_rx_checksum(if_rxd_info_t ri, u32 status, u32 error, u8 ptype);
 
 static int ixl_isc_txd_encap(void *arg, if_pkt_info_t pi);
 static void ixl_isc_txd_flush(void *arg, uint16_t txqid, uint32_t pidx);
-static int ixl_isc_txd_credits_update(void *arg, uint16_t qid, uint32_t cidx, bool clear);
+static int ixl_isc_txd_credits_update(void *arg, uint16_t qid, uint16_t *cidx, bool clear);
 
 static void ixl_isc_rxd_refill(void *arg, uint16_t rxqid, uint8_t flid __unused,
 				   uint32_t pidx, uint64_t *paddrs, caddr_t *vaddrs __unused, uint16_t count, uint16_t buf_len);
@@ -197,7 +197,7 @@ ixl_tso_setup(struct tx_ring *txr, if_pkt_info_t pi)
 
 	TXD->tunneling_params = htole32(0);
 
-	return ((idx + 1) & (scctx->isc_ntxd-1));
+	return ((idx + 1) & (scctx->isc_ntxd[0]-1));
 }
 
 /*********************************************************************
@@ -244,7 +244,7 @@ ixl_isc_txd_encap(void *arg, if_pkt_info_t pi)
 		cmd |= I40E_TX_DESC_CMD_IL2TAG1;
 
 	cmd |= I40E_TX_DESC_CMD_ICRC;
-	mask = scctx->isc_ntxd-1;
+	mask = scctx->isc_ntxd[0]-1;
 	for (j = 0; j < nsegs; j++) {
 		bus_size_t seglen;
 
@@ -297,7 +297,7 @@ ixl_init_tx_ring(struct ixl_vsi *vsi, struct ixl_tx_queue *que)
 
 	/* Clear the old ring contents */
 	bzero((void *)txr->tx_base,
-	      (sizeof(struct i40e_tx_desc)) * scctx->isc_ntxd);
+	      (sizeof(struct i40e_tx_desc)) * scctx->isc_ntxd[0]);
 
 #ifdef IXL_FDIR
 	/* Initialize flow director */
@@ -317,7 +317,7 @@ ixl_get_tx_head(struct ixl_tx_queue *que)
 {
 	if_softc_ctx_t		scctx = que->vsi->shared;
 	struct tx_ring  *txr = &que->txr;
-	void *head = &txr->tx_base[scctx->isc_ntxd];
+	void *head = &txr->tx_base[scctx->isc_ntxd[0]];
 
 	return LE32_TO_CPU(*(volatile __le32 *)head);
 }
@@ -330,7 +330,7 @@ ixl_get_tx_head(struct ixl_tx_queue *que)
  *
  **********************************************************************/
 static int
-ixl_isc_txd_credits_update(void *arg, uint16_t qid, uint32_t cidx, bool clear)
+ixl_isc_txd_credits_update(void *arg, uint16_t qid, uint16_t *cidx, bool clear)
 {
 	struct ixl_vsi		*vsi = arg;
 	if_softc_ctx_t		scctx = vsi->shared;
@@ -341,9 +341,9 @@ ixl_isc_txd_credits_update(void *arg, uint16_t qid, uint32_t cidx, bool clear)
 	/* Get the Head WB value */
 	head = ixl_get_tx_head(que);
 
-	credits = head - cidx;
+	credits = head - *cidx;
 	if (credits < 0)
-		credits += scctx->isc_ntxd;
+		credits += scctx->isc_ntxd[0];
 	return (credits);
 }
 
@@ -527,7 +527,7 @@ ixl_isc_rxd_pkt_get(void *arg, if_rxd_info_t ri)
 		ri->iri_frags[i].irf_flid = 0;
 		ri->iri_frags[i].irf_idx = cidx;
 		ri->iri_frags[i].irf_len = plen;
-		if (++cidx == scctx->isc_ntxd)
+		if (++cidx == scctx->isc_ntxd[0])
 			cidx = 0;
 		i++;
 		/* even a 16K packet shouldn't consume more than 8 clusters */

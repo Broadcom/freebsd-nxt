@@ -50,7 +50,7 @@ __FBSDID("$FreeBSD$");
 
 static int bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi);
 static void bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t pidx);
-static int bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t cidx,
+static int bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint16_t *cidx,
     bool clear);
 
 static void bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
@@ -182,7 +182,7 @@ bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t pidx)
 }
 
 static int
-bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
+bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint16_t *idx, bool clear)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_cp_ring *cpr = &softc->tx_cp_rings[txqid];
@@ -230,6 +230,7 @@ cmpl_invalid:
 
 	if (clear && avail) {
 		cpr->cons = last_cons;
+		*idx = RING_NEXT(&cpr->ring, last_cons);
 		cpr->v_bit = last_v_bit;
 		BNXT_CP_IDX_DISABLE_DB(&cpr->ring, cpr->cons);
 	}
@@ -438,6 +439,7 @@ bnxt_pkt_get_l2(struct bnxt_softc *softc, if_rxd_info_t ri,
 
 	/* Now the second 16-byte BD */
 	NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
+	ri->iri_cidx = RING_NEXT(&cpr->ring, ri->iri_cidx);
 	rcph = &((struct rx_pkt_cmpl_hi *)cpr->ring.vaddr)[cpr->cons];
 
 	flags2 = le32toh(rcph->flags2);
@@ -466,6 +468,7 @@ bnxt_pkt_get_l2(struct bnxt_softc *softc, if_rxd_info_t ri,
 	/* And finally the ag ring stuff. */
 	for (i=1; i < ri->iri_nfrags; i++) {
 		NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
+		ri->iri_cidx = RING_NEXT(&cpr->ring, ri->iri_cidx);
 		acp = &((struct rx_abuf_cmpl *)cpr->ring.vaddr)[cpr->cons];
 
 		ri->iri_frags[i].irf_flid = le32toh(acp->opaque) >> 24;
@@ -520,6 +523,7 @@ bnxt_pkt_get_tpa(struct bnxt_softc *softc, if_rxd_info_t ri,
 
 	/* Now the second 16-byte BD */
 	NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
+	ri->iri_cidx = RING_NEXT(&cpr->ring, ri->iri_cidx);
 	agendh = &((struct rx_tpa_end_cmpl_hi *)cpr->ring.vaddr)[cpr->cons];
 
 	flags2 = le32toh(tpas->high.flags2);
@@ -545,6 +549,7 @@ bnxt_pkt_get_tpa(struct bnxt_softc *softc, if_rxd_info_t ri,
 	/* Now the ag ring stuff. */
 	for (i=1; i < ri->iri_nfrags; i++) {
 		NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
+		ri->iri_cidx = RING_NEXT(&cpr->ring, ri->iri_cidx);
 		acp = &((struct rx_abuf_cmpl *)cpr->ring.vaddr)[cpr->cons];
 
 		ri->iri_frags[i].irf_flid = le32toh(acp->opaque) >> 24;
@@ -575,6 +580,7 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 
 	for (;;) {
 		NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
+		ri->iri_cidx = RING_NEXT(&cpr->ring, ri->iri_cidx);
 		__builtin_prefetch(&cpr[RING_NEXT(&cpr->ring, cpr->cons)]);
 		cmp = &((struct cmpl_base *)cpr->ring.vaddr)[cpr->cons];
 
@@ -588,6 +594,7 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 			return bnxt_pkt_get_tpa(softc, ri, cpr, flags_type);
 		case CMPL_BASE_TYPE_RX_TPA_START:
 			NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
+			ri->iri_cidx = RING_NEXT(&cpr->ring, ri->iri_cidx);
 			__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring,
 			    cpr->cons)]);
 			break;
@@ -598,6 +605,8 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 			if (type & 1) {
 				NEXT_CP_CONS_V(&cpr->ring, cpr->cons,
 				    cpr->v_bit);
+				ri->iri_cidx = RING_NEXT(&cpr->ring,
+				    ri->iri_cidx);
 				__builtin_prefetch(
 				    &cmp[RING_NEXT(&cpr->ring, cpr->cons)]);
 			}

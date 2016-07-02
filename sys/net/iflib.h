@@ -157,7 +157,7 @@ typedef struct pci_vendor_info {
 typedef struct if_txrx {
 	int (*ift_txd_encap) (void *, if_pkt_info_t);
 	void (*ift_txd_flush) (void *, uint16_t, uint32_t);
-	int (*ift_txd_credits_update) (void *, uint16_t, uint32_t, bool);
+	int (*ift_txd_credits_update) (void *, uint16_t, uint16_t *, bool);
 
 	int (*ift_rxd_available) (void *, uint16_t qsidx, uint32_t pidx);
 	int (*ift_rxd_pkt_get) (void *, if_rxd_info_t ri);
@@ -173,8 +173,8 @@ typedef struct if_softc_ctx {
 	int isc_ntxqsets;
 	int isc_msix_bar;		/* can be model specific - initialize in attach_pre */
 	int isc_tx_nsegments;		/* can be model specific - initialize in attach_pre */
-	int isc_ntxd;
-	int isc_nrxd;
+	int isc_ntxd[8];
+	int isc_nrxd[8];
 
 	uint32_t isc_txqsizes[8];
 	uint32_t isc_rxqsizes[8];
@@ -245,9 +245,9 @@ typedef enum {
 
 
 /*
- * Interface has a separate command queue
+ * Interface has a separate command queue for RX
  */
-#define IFLIB_HAS_CQ		0x1
+#define IFLIB_HAS_RXCQ		0x1
 /*
  * Driver has already allocated vectors
  */
@@ -257,6 +257,10 @@ typedef enum {
  * Interface is a virtual function
  */
 #define IFLIB_IS_VF		0x4
+/*
+ * Interface has a separate command queue for TX
+ */
+#define IFLIB_HAS_TXCQ		0x8
 
 
 /*
