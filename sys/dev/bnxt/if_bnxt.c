@@ -665,6 +665,9 @@ bnxt_attach_post(if_ctx_t ctx)
 	    /* These likely get lost... */
 	    IFCAP_VLAN_HWCSUM | IFCAP_JUMBO_MTU;
 
+	/* Disable LRO until iflib allows using mbufs out of order */
+	capabilities &= ~IFCAP_LRO;
+
 	if_setcapabilities(ifp, capabilities);
 
 	enabling = capabilities & ~(IFCAP_LRO | IFCAP_VLAN_HWFILTER |
