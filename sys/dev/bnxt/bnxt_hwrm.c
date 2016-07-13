@@ -912,7 +912,7 @@ bnxt_hwrm_cfa_l2_set_rx_mask(struct bnxt_softc *softc,
 			vnic->vlan_tag_list.idi_vaddr = NULL;
 		}
 		rc = iflib_dma_alloc(softc->ctx, 4 * num_vlan_tags,
-		    &vnic->vlan_tag_list, BUS_DMA_WAITOK);
+		    &vnic->vlan_tag_list, BUS_DMA_NOWAIT);
 		if (rc)
 			return rc;
 		tags = (uint32_t *)vnic->vlan_tag_list.idi_vaddr;

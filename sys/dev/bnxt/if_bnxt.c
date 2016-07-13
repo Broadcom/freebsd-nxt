@@ -1192,7 +1192,7 @@ bnxt_vlan_register(if_ctx_t ctx, uint16_t vtag)
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	struct bnxt_vlan_tag *new_tag;
 
-	new_tag = malloc(sizeof(struct bnxt_vlan_tag), M_DEVBUF, M_WAITOK);
+	new_tag = malloc(sizeof(struct bnxt_vlan_tag), M_DEVBUF, M_NOWAIT);
 	if (new_tag == NULL)
 		return;
 	SLIST_INSERT_HEAD(&softc->vnic_info.vlan_tags, new_tag, next);
