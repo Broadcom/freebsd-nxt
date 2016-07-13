@@ -119,6 +119,10 @@ static void bnxt_queue_intr_enable(if_ctx_t ctx, uint16_t qid);
 static void bnxt_disable_intr(if_ctx_t ctx);
 static int bnxt_msix_intr_assign(if_ctx_t ctx, int msix);
 
+/* vlan support */
+static void bnxt_vlan_register(if_ctx_t ctx, uint16_t vtag);
+static void bnxt_vlan_unregister(if_ctx_t ctx, uint16_t vtag);
+
 /* Internal support functions */
 static int bnxt_probe_phy(struct bnxt_softc *softc);
 static void bnxt_add_media_types(struct bnxt_softc *softc);
@@ -185,6 +189,9 @@ static device_method_t bnxt_iflib_methods[] = {
 	DEVMETHOD(ifdi_queue_intr_enable, bnxt_queue_intr_enable),
 	DEVMETHOD(ifdi_intr_disable, bnxt_disable_intr),
 	DEVMETHOD(ifdi_msix_intr_assign, bnxt_msix_intr_assign),
+
+	DEVMETHOD(ifdi_vlan_register, bnxt_vlan_register),
+	DEVMETHOD(ifdi_vlan_unregister, bnxt_vlan_unregister),
 
 	DEVMETHOD_END
 };
@@ -453,7 +460,9 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 	softc->vnic_info.def_ring_grp = (uint16_t)HWRM_NA_SIGNATURE;
 	softc->vnic_info.cos_rule = (uint16_t)HWRM_NA_SIGNATURE;
 	softc->vnic_info.lb_rule = (uint16_t)HWRM_NA_SIGNATURE;
-	softc->vnic_info.rx_mask = HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_BCAST;
+	/* TODO: Add a sysctl to select between vlan_novlan and vlanonly */
+	softc->vnic_info.rx_mask = HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_BCAST |
+	    HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_VLAN_NONVLAN;
 	softc->vnic_info.mc_list_count = 0;
 	softc->vnic_info.flags = BNXT_VNIC_FLAG_DEFAULT;
 	rc = iflib_dma_alloc(ctx, BNXT_MAX_MC_ADDRS * ETHER_ADDR_LEN,
@@ -619,6 +628,10 @@ bnxt_attach_pre(if_ctx_t ctx)
 	if (rc)
 		goto failed;
 
+	/* Initialize the vlan list */
+	SLIST_INIT(&softc->vnic_info.vlan_tags);
+	softc->vnic_info.vlan_tag_list.idi_vaddr = NULL;
+
 	return (rc);
 
 failed:
@@ -670,8 +683,7 @@ bnxt_attach_post(if_ctx_t ctx)
 
 	if_setcapabilities(ifp, capabilities);
 
-	enabling = capabilities & ~(IFCAP_LRO | IFCAP_VLAN_HWFILTER |
-	    IFCAP_VLAN_HWTAGGING | IFCAP_VLAN_HWTSO | IFCAP_VLAN_HWCSUM);
+	enabling = capabilities;
 
 	if_setcapenable(ifp, enabling);
 
@@ -686,6 +698,8 @@ static int
 bnxt_detach(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
+	struct bnxt_vlan_tag *tag;
+	struct bnxt_vlan_tag *tmp;
 	int i;
 
 	bnxt_do_disable_intr(&softc->def_cp_ring);
@@ -701,6 +715,10 @@ bnxt_detach(if_ctx_t ctx)
 	iflib_dma_free(&softc->vnic_info.mc_list);
 	iflib_dma_free(&softc->vnic_info.rss_hash_key_tbl);
 	iflib_dma_free(&softc->vnic_info.rss_grp_tbl);
+	if (softc->vnic_info.vlan_tag_list.idi_vaddr)
+		iflib_dma_free(&softc->vnic_info.vlan_tag_list);
+	SLIST_FOREACH_SAFE(tag, &softc->vnic_info.vlan_tags, next, tmp)
+		free(tag, M_DEVBUF);
 	iflib_dma_free(&softc->def_cp_ring_mem);
 	free(softc->tpa_start, M_DEVBUF);
 
@@ -1031,10 +1049,12 @@ bnxt_promisc_set(if_ctx_t ctx, int flags)
 
 	if (ifp->if_flags & IFF_PROMISC)
 		softc->vnic_info.rx_mask |=
-		    HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_PROMISCUOUS;
+		    HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_PROMISCUOUS |
+		    HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_ANYVLAN_NONVLAN;
 	else
 		softc->vnic_info.rx_mask &=
-		    ~HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_PROMISCUOUS;
+		    ~(HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_PROMISCUOUS |
+		    HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_ANYVLAN_NONVLAN);
 
 	rc = bnxt_hwrm_cfa_l2_set_rx_mask(softc, &softc->vnic_info);
 
@@ -1160,6 +1180,38 @@ fail:
 		iflib_irq_free(ctx, &softc->rx_cp_rings[i].irq);
 	iflib_irq_free(ctx, &softc->def_cp_ring.irq);
 	return rc;
+}
+
+/*
+ * We're explicitly allowing duplicates here.  They will need to be
+ * removed as many times as they are added.
+ */
+static void
+bnxt_vlan_register(if_ctx_t ctx, uint16_t vtag)
+{
+	struct bnxt_softc *softc = iflib_get_softc(ctx);
+	struct bnxt_vlan_tag *new_tag;
+
+	new_tag = malloc(sizeof(struct bnxt_vlan_tag), M_DEVBUF, M_WAITOK);
+	if (new_tag == NULL)
+		return;
+	SLIST_INSERT_HEAD(&softc->vnic_info.vlan_tags, new_tag, next);
+};
+
+static void
+bnxt_vlan_unregister(if_ctx_t ctx, uint16_t vtag)
+{
+	struct bnxt_softc *softc = iflib_get_softc(ctx);
+	struct bnxt_vlan_tag *vlan_tag;
+
+	SLIST_FOREACH(vlan_tag, &softc->vnic_info.vlan_tags, next) {
+		if (vlan_tag->tag == vtag) {
+			SLIST_REMOVE(&softc->vnic_info.vlan_tags, vlan_tag,
+			    bnxt_vlan_tag, next);
+			free(vlan_tag, M_DEVBUF);
+			break;
+		}
+	}
 }
 
 /*

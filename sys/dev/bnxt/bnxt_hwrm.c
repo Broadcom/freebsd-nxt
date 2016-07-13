@@ -897,13 +897,40 @@ bnxt_hwrm_cfa_l2_set_rx_mask(struct bnxt_softc *softc,
     struct bnxt_vnic_info *vnic)
 {
 	struct hwrm_cfa_l2_set_rx_mask_input req = {0};
+	struct bnxt_vlan_tag *tag;
+	uint32_t *tags;
+	uint32_t num_vlan_tags = 0;;
+	uint32_t i;
+	int rc;
 
+	SLIST_FOREACH(tag, &vnic->vlan_tags, next)
+		num_vlan_tags++;
+
+	if (num_vlan_tags) {
+		if (vnic->vlan_tag_list.idi_vaddr) {
+			iflib_dma_free(&vnic->vlan_tag_list);
+			vnic->vlan_tag_list.idi_vaddr = NULL;
+		}
+		rc = iflib_dma_alloc(softc->ctx, 4 * num_vlan_tags,
+		    &vnic->vlan_tag_list, BUS_DMA_WAITOK);
+		if (rc)
+			return rc;
+		tags = (uint32_t *)vnic->vlan_tag_list.idi_vaddr;
+
+		i = 0;
+		SLIST_FOREACH(tag, &vnic->vlan_tags, next) {
+			tags[i] = (tag->tpid << 16) | tag->tag;
+			i++;
+		}
+	}
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_CFA_L2_SET_RX_MASK, -1, -1);
 
 	req.vnic_id = htole32(vnic->id);
 	req.mask = htole32(vnic->rx_mask);
 	req.mc_tbl_addr = htole64(vnic->mc_list.idi_paddr);
 	req.num_mc_entries = htole32(vnic->mc_list_count);
+	req.vlan_tag_tbl_addr = htole64(vnic->vlan_tag_list.idi_paddr);
+	req.num_vlan_tags = htole32(num_vlan_tags);
 	return hwrm_send_message(softc, &req, sizeof(req));
 }
 

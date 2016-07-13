@@ -330,6 +330,12 @@ struct bnxt_vf_info {
 #define BNXT_PF(softc)		(!((softc)->flags & BNXT_FLAG_VF))
 #define BNXT_VF(softc)		((softc)->flags & BNXT_FLAG_VF)
 
+struct bnxt_vlan_tag {
+	SLIST_ENTRY(bnxt_vlan_tag) next;
+	uint16_t	tpid;
+	uint16_t	tag;
+};
+
 struct bnxt_vnic_info {
 	uint16_t	id;
 	uint16_t	def_ring_grp;
@@ -351,6 +357,8 @@ struct bnxt_vnic_info {
 	uint16_t	rss_id;
 	struct iflib_dma_info rss_hash_key_tbl;
 	struct iflib_dma_info	rss_grp_tbl;
+	SLIST_HEAD(vlan_head, bnxt_vlan_tag) vlan_tags;
+	struct iflib_dma_info vlan_tag_list;
 };
 
 struct bnxt_grp_info {
