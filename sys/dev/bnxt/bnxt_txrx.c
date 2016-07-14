@@ -261,7 +261,8 @@ bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
 	for (i=0; i<count; i++) {
 		rxbd[pidx].flags_type = htole16(type);
 		rxbd[pidx].len = htole16(len);
-		rxbd[pidx].opaque = htole32((flid << 24) | pidx);
+		rxbd[pidx].opaque = htole32(((rxqid & 0xff) << 24) |
+		    (flid << 16) | pidx);
 		rxbd[pidx].addr = htole64(paddrs[i]);
 		if (++pidx == rx_ring->ring_size)
 			pidx = 0;
@@ -431,8 +432,8 @@ bnxt_pkt_get_l2(struct bnxt_softc *softc, if_rxd_info_t ri,
 	ags = (rcp->agg_bufs_v1 & RX_PKT_CMPL_AGG_BUFS_MASK) >>
 	    RX_PKT_CMPL_AGG_BUFS_SFT;
 	ri->iri_nfrags = ags + 1;
-	ri->iri_frags[0].irf_flid = le32toh(rcp->opaque) >> 24;
-	ri->iri_frags[0].irf_idx = le32toh(rcp->opaque) & 0xffffff;
+	ri->iri_frags[0].irf_flid = (le32toh(rcp->opaque) >> 16) & 0xff;
+	ri->iri_frags[0].irf_idx = le32toh(rcp->opaque) & 0xffff;
 	ri->iri_frags[0].irf_len = le16toh(rcp->len);
 	ri->iri_len = le16toh(rcp->len);
 
@@ -470,8 +471,8 @@ bnxt_pkt_get_l2(struct bnxt_softc *softc, if_rxd_info_t ri,
 		ri->iri_cidx = RING_NEXT(&cpr->ring, ri->iri_cidx);
 		acp = &((struct rx_abuf_cmpl *)cpr->ring.vaddr)[cpr->cons];
 
-		ri->iri_frags[i].irf_flid = le32toh(acp->opaque) >> 24;
-		ri->iri_frags[i].irf_idx = le32toh(acp->opaque) & 0xffffff;
+		ri->iri_frags[i].irf_flid = (le32toh(acp->opaque) >> 16 & 0xff);
+		ri->iri_frags[i].irf_idx = le32toh(acp->opaque) & 0xffff;
 		ri->iri_frags[i].irf_len = le16toh(acp->len);
 		ri->iri_len += le16toh(acp->len);
 	}
@@ -515,8 +516,8 @@ bnxt_pkt_get_tpa(struct bnxt_softc *softc, if_rxd_info_t ri,
 	ags = (agend->agg_bufs_v1 & RX_TPA_END_CMPL_AGG_BUFS_MASK) >>
 	    RX_TPA_END_CMPL_AGG_BUFS_SFT;
 	ri->iri_nfrags = ags + 1;
-	ri->iri_frags[0].irf_flid = le32toh(tpas->low.opaque) >> 24;
-	ri->iri_frags[0].irf_idx = le32toh(tpas->low.opaque) & 0xffffff;
+	ri->iri_frags[0].irf_flid = (le32toh(tpas->low.opaque) >> 16) & 0xff;
+	ri->iri_frags[0].irf_idx = le32toh(tpas->low.opaque) & 0xffff;
 	ri->iri_frags[0].irf_len = le16toh(tpas->low.len);
 	ri->iri_len = le16toh(tpas->low.len);
 
@@ -551,16 +552,16 @@ bnxt_pkt_get_tpa(struct bnxt_softc *softc, if_rxd_info_t ri,
 		ri->iri_cidx = RING_NEXT(&cpr->ring, ri->iri_cidx);
 		acp = &((struct rx_abuf_cmpl *)cpr->ring.vaddr)[cpr->cons];
 
-		ri->iri_frags[i].irf_flid = le32toh(acp->opaque) >> 24;
-		ri->iri_frags[i].irf_idx = le32toh(acp->opaque) & 0xffffff;
+		ri->iri_frags[i].irf_flid = (le32toh(acp->opaque) >> 16) & 0xff;
+		ri->iri_frags[i].irf_idx = le32toh(acp->opaque) & 0xffff;
 		ri->iri_frags[i].irf_len = le16toh(acp->len);
 		ri->iri_len += le16toh(acp->len);
 	}
 
 	/* And finally, the empty BD at the end... */
 	ri->iri_nfrags++;
-	ri->iri_frags[i].irf_flid = le32toh(agend->opaque) >> 24;
-	ri->iri_frags[i].irf_idx = le32toh(agend->opaque) & 0xffffff;
+	ri->iri_frags[i].irf_flid = (le32toh(agend->opaque) >> 16) % 0xff;
+	ri->iri_frags[i].irf_idx = le32toh(agend->opaque) & 0xffff;
 	ri->iri_frags[i].irf_len = le16toh(agend->len);
 	ri->iri_len += le16toh(agend->len);
 
