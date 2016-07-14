@@ -68,6 +68,7 @@ __FBSDID("$FreeBSD$");
 #include "common/t4_regs.h"
 #include "common/t4_regs_values.h"
 #include "common/t4_msg.h"
+#include "t4_l2t.h"
 #include "t4_mp_ring.h"
 
 #ifdef T4_PKT_TIMESTAMP
@@ -253,12 +254,110 @@ static int sysctl_tc(SYSCTL_HANDLER_ARGS);
 static counter_u64_t extfree_refs;
 static counter_u64_t extfree_rels;
 
+an_handler_t t4_an_handler;
+fw_msg_handler_t t4_fw_msg_handler[NUM_FW6_TYPES];
+cpl_handler_t t4_cpl_handler[NUM_CPL_CMDS];
+
+
+static int
+an_not_handled(struct sge_iq *iq, const struct rsp_ctrl *ctrl)
+{
+
+#ifdef INVARIANTS
+	panic("%s: async notification on iq %p (ctrl %p)", __func__, iq, ctrl);
+#else
+	log(LOG_ERR, "%s: async notification on iq %p (ctrl %p)\n",
+	    __func__, iq, ctrl);
+#endif
+	return (EDOOFUS);
+}
+
+int
+t4_register_an_handler(an_handler_t h)
+{
+	uintptr_t *loc, new;
+
+	new = h ? (uintptr_t)h : (uintptr_t)an_not_handled;
+	loc = (uintptr_t *) &t4_an_handler;
+	atomic_store_rel_ptr(loc, new);
+
+	return (0);
+}
+
+static int
+fw_msg_not_handled(struct adapter *sc, const __be64 *rpl)
+{
+	const struct cpl_fw6_msg *cpl =
+	    __containerof(rpl, struct cpl_fw6_msg, data[0]);
+
+#ifdef INVARIANTS
+	panic("%s: fw_msg type %d", __func__, cpl->type);
+#else
+	log(LOG_ERR, "%s: fw_msg type %d\n", __func__, cpl->type);
+#endif
+	return (EDOOFUS);
+}
+
+int
+t4_register_fw_msg_handler(int type, fw_msg_handler_t h)
+{
+	uintptr_t *loc, new;
+
+	if (type >= nitems(t4_fw_msg_handler))
+		return (EINVAL);
+
+	/*
+	 * These are dispatched by the handler for FW{4|6}_CPL_MSG using the CPL
+	 * handler dispatch table.  Reject any attempt to install a handler for
+	 * this subtype.
+	 */
+	if (type == FW_TYPE_RSSCPL || type == FW6_TYPE_RSSCPL)
+		return (EINVAL);
+
+	new = h ? (uintptr_t)h : (uintptr_t)fw_msg_not_handled;
+	loc = (uintptr_t *) &t4_fw_msg_handler[type];
+	atomic_store_rel_ptr(loc, new);
+
+	return (0);
+}
+
+static int
+cpl_not_handled(struct sge_iq *iq, const struct rss_header *rss, struct mbuf *m)
+{
+
+#ifdef INVARIANTS
+	panic("%s: opcode 0x%02x on iq %p with payload %p",
+	    __func__, rss->opcode, iq, m);
+#else
+	log(LOG_ERR, "%s: opcode 0x%02x on iq %p with payload %p\n",
+	    __func__, rss->opcode, iq, m);
+	m_freem(m);
+#endif
+	return (EDOOFUS);
+}
+
+int
+t4_register_cpl_handler(int opcode, cpl_handler_t h)
+{
+	uintptr_t *loc, new;
+
+	if (opcode >= nitems(t4_cpl_handler))
+		return (EINVAL);
+
+	new = h ? (uintptr_t)h : (uintptr_t)cpl_not_handled;
+	loc = (uintptr_t *) &t4_cpl_handler[opcode];
+	atomic_store_rel_ptr(loc, new);
+
+	return (0);
+}
+
 /*
  * Called on MOD_LOAD.  Validates and calculates the SGE tunables.
  */
 void
 t4_sge_modload(void)
 {
+	int i;
 
 	if (fl_pktshift < 0 || fl_pktshift > 7) {
 		printf("Invalid hw.cxgbe.fl_pktshift value (%d),"
@@ -291,6 +390,18 @@ t4_sge_modload(void)
 	extfree_rels = counter_u64_alloc(M_WAITOK);
 	counter_u64_zero(extfree_refs);
 	counter_u64_zero(extfree_rels);
+
+	t4_an_handler = an_not_handled;
+	for (i = 0; i < nitems(t4_fw_msg_handler); i++)
+		t4_fw_msg_handler[i] = fw_msg_not_handled;
+	for (i = 0; i < nitems(t4_cpl_handler); i++)
+		t4_cpl_handler[i] = cpl_not_handled;
+
+	t4_register_cpl_handler(CPL_FW4_MSG, handle_fw_msg);
+	t4_register_cpl_handler(CPL_FW6_MSG, handle_fw_msg);
+	t4_register_cpl_handler(CPL_SGE_EGR_UPDATE, handle_sge_egr_update);
+	t4_register_cpl_handler(CPL_RX_PKT, t4_eth_rx);
+	t4_register_fw_msg_handler(FW6_TYPE_CMD_RPL, t4_handle_fw_rpl);
 }
 
 void
@@ -310,17 +421,6 @@ t4_sge_extfree_refs(void)
 	refs = counter_u64_fetch(extfree_refs);
 
 	return (refs - rels);
-}
-
-void
-t4_init_sge_cpl_handlers(struct adapter *sc)
-{
-
-	t4_register_cpl_handler(sc, CPL_FW4_MSG, handle_fw_msg);
-	t4_register_cpl_handler(sc, CPL_FW6_MSG, handle_fw_msg);
-	t4_register_cpl_handler(sc, CPL_SGE_EGR_UPDATE, handle_sge_egr_update);
-	t4_register_cpl_handler(sc, CPL_RX_PKT, t4_eth_rx);
-	t4_register_fw_msg_handler(sc, FW6_TYPE_CMD_RPL, t4_handle_fw_rpl);
 }
 
 static inline void
@@ -813,8 +913,6 @@ vi_intr_iq(struct vi_info *vi, int idx)
 	if (sc->intr_count == 1)
 		return (&sc->sge.fwq);
 
-	KASSERT(!(vi->flags & VI_NETMAP),
-	    ("%s: called on netmap VI", __func__));
 	nintr = vi->nintr;
 	KASSERT(nintr != 0,
 	    ("%s: vi %p has no exclusive interrupts, total interrupts = %d",
@@ -881,6 +979,7 @@ t4_setup_vi_queues(struct vi_info *vi)
 	struct sge_wrq *ofld_txq;
 #endif
 #ifdef DEV_NETMAP
+	int saved_idx;
 	struct sge_nm_rxq *nm_rxq;
 	struct sge_nm_txq *nm_txq;
 #endif
@@ -896,13 +995,18 @@ t4_setup_vi_queues(struct vi_info *vi)
 	intr_idx = first_vector(vi);
 
 #ifdef DEV_NETMAP
-	if (vi->flags & VI_NETMAP) {
+	saved_idx = intr_idx;
+	if (ifp->if_capabilities & IFCAP_NETMAP) {
+
+		/* netmap is supported with direct interrupts only. */
+		MPASS(vi->flags & INTR_RXQ);
+
 		/*
 		 * We don't have buffers to back the netmap rx queues
 		 * right now so we create the queues in a way that
 		 * doesn't set off any congestion signal in the chip.
 		 */
-		oid = SYSCTL_ADD_NODE(&vi->ctx, children, OID_AUTO, "rxq",
+		oid = SYSCTL_ADD_NODE(&vi->ctx, children, OID_AUTO, "nm_rxq",
 		    CTLFLAG_RD, NULL, "rx queues");
 		for_each_nm_rxq(vi, i, nm_rxq) {
 			rc = alloc_nm_rxq(vi, nm_rxq, intr_idx, i, oid);
@@ -911,16 +1015,18 @@ t4_setup_vi_queues(struct vi_info *vi)
 			intr_idx++;
 		}
 
-		oid = SYSCTL_ADD_NODE(&vi->ctx, children, OID_AUTO, "txq",
+		oid = SYSCTL_ADD_NODE(&vi->ctx, children, OID_AUTO, "nm_txq",
 		    CTLFLAG_RD, NULL, "tx queues");
 		for_each_nm_txq(vi, i, nm_txq) {
-			iqid = vi->first_rxq + (i % vi->nrxq);
+			iqid = vi->first_nm_rxq + (i % vi->nnmrxq);
 			rc = alloc_nm_txq(vi, nm_txq, iqid, i, oid);
 			if (rc != 0)
 				goto done;
 		}
-		goto done;
 	}
+
+	/* Normal rx queues and netmap rx queues share the same interrupts. */
+	intr_idx = saved_idx;
 #endif
 
 	/*
@@ -949,6 +1055,10 @@ t4_setup_vi_queues(struct vi_info *vi)
 			intr_idx++;
 		}
 	}
+#ifdef DEV_NETMAP
+	if (ifp->if_capabilities & IFCAP_NETMAP)
+		intr_idx = saved_idx + max(vi->nrxq, vi->nnmrxq);
+#endif
 #ifdef TCP_OFFLOAD
 	maxp = mtu_to_max_payload(sc, mtu, 1);
 	if (vi->flags & INTR_OFLD_RXQ) {
@@ -1101,7 +1211,7 @@ t4_teardown_vi_queues(struct vi_info *vi)
 	}
 
 #ifdef DEV_NETMAP
-	if (vi->flags & VI_NETMAP) {
+	if (vi->ifp->if_capabilities & IFCAP_NETMAP) {
 		for_each_nm_txq(vi, i, nm_txq) {
 			free_nm_txq(vi, nm_txq);
 		}
@@ -1109,7 +1219,6 @@ t4_teardown_vi_queues(struct vi_info *vi)
 		for_each_nm_rxq(vi, i, nm_rxq) {
 			free_nm_rxq(vi, nm_rxq);
 		}
-		return (0);
 	}
 #endif
 
@@ -1213,6 +1322,21 @@ t4_intr(void *arg)
 	}
 }
 
+void
+t4_vi_intr(void *arg)
+{
+	struct irq *irq = arg;
+
+#ifdef DEV_NETMAP
+	if (atomic_cmpset_int(&irq->nm_state, NM_ON, NM_BUSY)) {
+		t4_nm_intr(irq->nm_rxq);
+		atomic_cmpset_int(&irq->nm_state, NM_BUSY, NM_ON);
+	}
+#endif
+	if (irq->rxq != NULL)
+		t4_intr(irq->rxq);
+}
+
 /*
  * Deals with anything and everything on the given ingress queue.
  */
@@ -1292,7 +1416,7 @@ service_iq(struct sge_iq *iq, int budget)
 				KASSERT(d->rss.opcode < NUM_CPL_CMDS,
 				    ("%s: bad opcode %02x.", __func__,
 				    d->rss.opcode));
-				sc->cpl_handler[d->rss.opcode](iq, &d->rss, m0);
+				t4_cpl_handler[d->rss.opcode](iq, &d->rss, m0);
 				break;
 
 			case X_RSPD_TYPE_INTR:
@@ -1314,7 +1438,7 @@ service_iq(struct sge_iq *iq, int budget)
 				 * iWARP async notification.
 				 */
 				if (lq >= 1024) {
-                                        sc->an_handler(iq, &d->rsp);
+                                        t4_an_handler(iq, &d->rsp);
                                         break;
                                 }
 
@@ -2765,6 +2889,8 @@ alloc_fwq(struct adapter *sc)
 	init_iq(fwq, sc, 0, 0, FW_IQ_QSIZE);
 	fwq->flags |= IQ_INTR;	/* always */
 	intr_idx = sc->intr_count > 1 ? 1 : 0;
+	fwq->set_tcb_rpl = t4_filter_rpl;
+	fwq->l2t_write_rpl = do_l2t_write_rpl;
 	rc = alloc_iq_fl(&sc->port[0]->vi[0], fwq, NULL, intr_idx, -1);
 	if (rc != 0) {
 		device_printf(sc->dev,
@@ -4650,10 +4776,10 @@ handle_fw_msg(struct sge_iq *iq, const struct rss_header *rss, struct mbuf *m)
 		const struct rss_header *rss2;
 
 		rss2 = (const struct rss_header *)&cpl->data[0];
-		return (sc->cpl_handler[rss2->opcode](iq, rss2, m));
+		return (t4_cpl_handler[rss2->opcode](iq, rss2, m));
 	}
 
-	return (sc->fw_msg_handler[cpl->type](sc, &cpl->data[0]));
+	return (t4_fw_msg_handler[cpl->type](sc, &cpl->data[0]));
 }
 
 static int

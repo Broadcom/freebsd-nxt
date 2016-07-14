@@ -80,7 +80,7 @@ static void	ixlv_if_init(if_ctx_t);
 static void	ixlv_if_stop(if_ctx_t);
 static void ixlv_if_intr_enable(if_ctx_t ctx);
 static void ixlv_if_intr_disable(if_ctx_t ctx);
-static void ixlv_if_queue_intr_enable(if_ctx_t ctx, uint16_t qid);
+static int ixlv_if_queue_intr_enable(if_ctx_t ctx, uint16_t qid);
 static void ixlv_if_queue_intr_disable(if_ctx_t ctx, uint16_t qid);
 static void	ixlv_if_media_status(if_ctx_t, struct ifmediareq *);
 static void ixlv_if_timer(if_ctx_t ctx, uint16_t qid);
@@ -1463,7 +1463,6 @@ ixlv_disable_adminq_irq(struct i40e_hw *hw)
 	wr32(hw, I40E_VFINT_ICR0_ENA1, 0);
 	/* flush */
 	rd32(hw, I40E_VFGEN_RSTAT);
-	return;
 }
 
 static void
@@ -1475,10 +1474,9 @@ ixlv_enable_adminq_irq(struct i40e_hw *hw)
 	wr32(hw, I40E_VFINT_ICR0_ENA1, I40E_VFINT_ICR0_ENA1_ADMINQ_MASK);
 	/* flush */
 	rd32(hw, I40E_VFGEN_RSTAT);
-	return;
 }
 
-static void
+static int
 ixlv_if_queue_intr_enable(if_ctx_t ctx, uint16_t id)
 {
 	struct ixlv_sc			*sc = iflib_get_softc(ctx);
@@ -1489,6 +1487,7 @@ ixlv_if_queue_intr_enable(if_ctx_t ctx, uint16_t id)
 	reg = I40E_VFINT_DYN_CTLN1_INTENA_MASK |
 	    I40E_VFINT_DYN_CTLN1_CLEARPBA_MASK; 
 	wr32(hw, I40E_VFINT_DYN_CTLN1(id), reg);
+	return (0);
 }
 
 static void

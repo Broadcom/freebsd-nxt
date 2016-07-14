@@ -360,6 +360,8 @@ insert_ddp_data(struct toepcb *toep, uint32_t n)
 		placed = n;
 		if (placed > job->uaiocb.aio_nbytes - copied)
 			placed = job->uaiocb.aio_nbytes - copied;
+		if (placed > 0)
+			job->msgrcv = 1;
 		if (!aio_clear_cancel_function(job)) {
 			/*
 			 * Update the copied length for when
@@ -602,6 +604,7 @@ handle_ddp_data(struct toepcb *toep, __be32 ddp_report, __be32 rcv_nxt, int len)
 	toep->rx_credits += len;
 #endif
 
+	job->msgrcv = 1;
 	if (db->cancel_pending) {
 		/*
 		 * Update the job's length but defer completion to the
@@ -756,6 +759,8 @@ handle_ddp_close(struct toepcb *toep, struct tcpcb *tp, __be32 rcv_nxt)
 		placed = len;
 		if (placed > job->uaiocb.aio_nbytes - copied)
 			placed = job->uaiocb.aio_nbytes - copied;
+		if (placed > 0)
+			job->msgrcv = 1;
 		if (!aio_clear_cancel_function(job)) {
 			/*
 			 * Update the copied length for when
@@ -781,6 +786,8 @@ handle_ddp_close(struct toepcb *toep, struct tcpcb *tp, __be32 rcv_nxt)
 	 F_DDP_INVALID_TAG | F_DDP_COLOR_ERR | F_DDP_TID_MISMATCH |\
 	 F_DDP_INVALID_PPOD | F_DDP_HDRCRC_ERR | F_DDP_DATACRC_ERR)
 
+extern cpl_handler_t t4_cpl_handler[];
+
 static int
 do_rx_data_ddp(struct sge_iq *iq, const struct rss_header *rss, struct mbuf *m)
 {
@@ -802,7 +809,7 @@ do_rx_data_ddp(struct sge_iq *iq, const struct rss_header *rss, struct mbuf *m)
 	}
 
 	if (toep->ulp_mode == ULP_MODE_ISCSI) {
-		sc->cpl_handler[CPL_RX_ISCSI_DDP](iq, rss, m);
+		t4_cpl_handler[CPL_RX_ISCSI_DDP](iq, rss, m);
 		return (0);
 	}
 
@@ -843,13 +850,14 @@ enable_ddp(struct adapter *sc, struct toepcb *toep)
 
 	DDP_ASSERT_LOCKED(toep);
 	toep->ddp_flags |= DDP_SC_REQ;
-	t4_set_tcb_field(sc, toep, 1, W_TCB_RX_DDP_FLAGS,
+	t4_set_tcb_field(sc, toep->ctrlq, toep->tid, W_TCB_RX_DDP_FLAGS,
 	    V_TF_DDP_OFF(1) | V_TF_DDP_INDICATE_OUT(1) |
 	    V_TF_DDP_BUF0_INDICATE(1) | V_TF_DDP_BUF1_INDICATE(1) |
 	    V_TF_DDP_BUF0_VALID(1) | V_TF_DDP_BUF1_VALID(1),
-	    V_TF_DDP_BUF0_INDICATE(1) | V_TF_DDP_BUF1_INDICATE(1));
-	t4_set_tcb_field(sc, toep, 1, W_TCB_T_FLAGS,
-	    V_TF_RCV_COALESCE_ENABLE(1), 0);
+	    V_TF_DDP_BUF0_INDICATE(1) | V_TF_DDP_BUF1_INDICATE(1), 0, 0,
+	    toep->ofld_rxq->iq.abs_id);
+	t4_set_tcb_field(sc, toep->ctrlq, toep->tid, W_TCB_T_FLAGS,
+	    V_TF_RCV_COALESCE_ENABLE(1), 0, 0, 0, toep->ofld_rxq->iq.abs_id);
 }
 
 static int
@@ -1065,9 +1073,6 @@ t4_init_ddp(struct adapter *sc, struct tom_data *td)
 	td->ppod_start = sc->vres.ddp.start;
 	td->ppod_arena = vmem_create("DDP page pods", sc->vres.ddp.start,
 	    sc->vres.ddp.size, 1, 32, M_FIRSTFIT | M_NOWAIT);
-
-	t4_register_cpl_handler(sc, CPL_RX_DATA_DDP, do_rx_data_ddp);
-	t4_register_cpl_handler(sc, CPL_RX_DDP_COMPLETE, do_rx_ddp_complete);
 }
 
 void
@@ -1458,6 +1463,7 @@ sbcopy:
 	if (copied != 0) {
 		sbdrop_locked(sb, copied);
 		job->aio_received += copied;
+		job->msgrcv = 1;
 		copied = job->aio_received;
 		inp = sotoinpcb(so);
 		if (!INP_TRY_WLOCK(inp)) {
@@ -1677,8 +1683,10 @@ t4_aio_cancel_active(struct kaiocb *job)
 			 */
 			valid_flag = i == 0 ? V_TF_DDP_BUF0_VALID(1) :
 			    V_TF_DDP_BUF1_VALID(1);
-			t4_set_tcb_field_rpl(sc, toep, 1, W_TCB_RX_DDP_FLAGS,
-			    valid_flag, 0, i + DDP_BUF0_INVALIDATED);
+			t4_set_tcb_field(sc, toep->ctrlq, toep->tid,
+			    W_TCB_RX_DDP_FLAGS, valid_flag, 0, 1,
+			    i + DDP_BUF0_INVALIDATED,
+			    toep->ofld_rxq->iq.abs_id);
 			toep->db[i].cancel_pending = 1;
 			CTR2(KTR_CXGBE, "%s: request %p marked pending",
 			    __func__, job);
@@ -1750,6 +1758,8 @@ int
 t4_ddp_mod_load(void)
 {
 
+	t4_register_cpl_handler(CPL_RX_DATA_DDP, do_rx_data_ddp);
+	t4_register_cpl_handler(CPL_RX_DDP_COMPLETE, do_rx_ddp_complete);
 	TAILQ_INIT(&ddp_orphan_pagesets);
 	mtx_init(&ddp_orphan_pagesets_lock, "ddp orphans", NULL, MTX_DEF);
 	TASK_INIT(&ddp_orphan_task, 0, ddp_free_orphan_pagesets, NULL);
@@ -1763,5 +1773,7 @@ t4_ddp_mod_unload(void)
 	taskqueue_drain(taskqueue_thread, &ddp_orphan_task);
 	MPASS(TAILQ_EMPTY(&ddp_orphan_pagesets));
 	mtx_destroy(&ddp_orphan_pagesets_lock);
+	t4_register_cpl_handler(CPL_RX_DATA_DDP, NULL);
+	t4_register_cpl_handler(CPL_RX_DDP_COMPLETE, NULL);
 }
 #endif

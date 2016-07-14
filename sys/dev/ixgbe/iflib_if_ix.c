@@ -116,7 +116,7 @@ static void ixgbe_if_stop(if_ctx_t ctx);
 static void ixgbe_if_init(if_ctx_t ctx);
 void ixgbe_if_enable_intr(if_ctx_t ctx);
 static void ixgbe_if_disable_intr(if_ctx_t ctx);
-static void ixgbe_if_queue_intr_enable(if_ctx_t ctx, uint16_t qid);
+static int ixgbe_if_queue_intr_enable(if_ctx_t ctx, uint16_t qid);
 static void ixgbe_if_media_status(if_ctx_t ctx, struct ifmediareq * ifmr);
 static int ixgbe_if_media_change(if_ctx_t ctx);
 static int ixgbe_if_msix_intr_assign(if_ctx_t, int);
@@ -440,6 +440,13 @@ static struct if_shared_ctx ixgbe_sctx_init = {
 	.isc_driver_version = ixgbe_driver_version,
 	.isc_txrx = &ixgbe_txrx,
 	.isc_driver = &ixgbe_if_driver,
+
+	.isc_nrxd_min = MIN_RXD,
+	.isc_ntxd_min = MIN_TXD,
+	.isc_nrxd_max = MAX_RXD,
+	.isc_ntxd_max = MAX_TXD,
+	.isc_nrxd_default = DEFAULT_RXD,
+	.isc_ntxd_default = DEFAULT_TXD,
 };
 
 if_shared_ctx_t ixgbe_sctx = &ixgbe_sctx_init;
@@ -976,20 +983,6 @@ ixgbe_if_attach_pre(if_ctx_t ctx)
 		hw->phy.smart_speed = ixgbe_smart_speed;
 		scctx->isc_tx_nsegments = IXGBE_82599_SCATTER;
 		scctx->isc_msix_bar = PCIR_BAR(MSIX_82599_BAR);
-	}
-	if (scctx->isc_ntxd[0] == 0)
-		scctx->isc_ntxd[0] = DEFAULT_TXD;
-	if (scctx->isc_nrxd[0] == 0)
-		scctx->isc_nrxd[0] = DEFAULT_RXD;
-	if (scctx->isc_nrxd[0] < MIN_RXD || scctx->isc_nrxd[0] > MAX_RXD) {
-		device_printf(dev, "nrxd: %d not within permitted range of %d-%d setting to default value: %d\n",
-			     scctx->isc_nrxd[0], MIN_RXD, MAX_RXD, DEFAULT_RXD);
-		scctx->isc_nrxd[0] = DEFAULT_RXD;
-	}
-	if (scctx->isc_ntxd[0] < MIN_TXD || scctx->isc_ntxd[0] > MAX_TXD) {
-		device_printf(dev, "ntxd: %d not within permitted range of %d-%d setting to default value: %d\n",
-			      scctx->isc_ntxd[0], MIN_TXD, MAX_TXD, DEFAULT_TXD);
-		scctx->isc_ntxd[0] = DEFAULT_TXD;
 	}
 	scctx->isc_txqsizes[0] = roundup2(scctx->isc_ntxd[0] * sizeof(union ixgbe_adv_tx_desc) + sizeof(u32), DBA_ALIGN),
 	scctx->isc_rxqsizes[0] = roundup2(scctx->isc_nrxd[0] * sizeof(union ixgbe_adv_rx_desc), DBA_ALIGN);
@@ -3937,13 +3930,14 @@ ixgbe_if_disable_intr(if_ctx_t ctx)
 }
 
 
-static void
+static int
 ixgbe_if_queue_intr_enable(if_ctx_t ctx, uint16_t rxqid)
 {
 	struct adapter	*adapter = iflib_get_softc(ctx);
 	struct ix_rx_queue *que = &adapter->rx_queues[rxqid];
 
 	ixgbe_enable_queue(adapter, que->rxr.me);
+	return (0);
 }
  
 /*

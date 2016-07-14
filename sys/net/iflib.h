@@ -185,6 +185,8 @@ typedef struct if_softc_ctx {
 	int isc_tx_tso_segsize_max;
 	int isc_rss_table_size;
 	int isc_rss_table_mask;
+	int isc_nrxqsets_max;
+	int isc_ntxqsets_max;
 
 	iflib_intr_mode_t isc_intr;
 	uint16_t isc_max_frame_size; /* set at init time by driver */
@@ -220,6 +222,12 @@ struct if_shared_ctx {
 /* optional function to transform the read values to match the table*/
 	void (*isc_parse_devinfo) (uint16_t *device_id, uint16_t *subvendor_id,
 				   uint16_t *subdevice_id, uint16_t *rev_id);
+	int isc_nrxd_min;
+	int isc_nrxd_default;
+	int isc_nrxd_max;
+	int isc_ntxd_min;
+	int isc_ntxd_default;
+	int isc_ntxd_max;
 };
 
 typedef struct iflib_dma_info {

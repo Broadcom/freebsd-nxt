@@ -210,7 +210,7 @@ static void		ixl_if_stop(if_ctx_t ctx);
 
 static void		ixl_if_intr_enable(if_ctx_t ctx);
 static void		ixl_if_intr_disable(if_ctx_t ctx);
-static void		ixl_if_queue_intr_enable(if_ctx_t ctx, uint16_t qid);
+static int		ixl_if_queue_intr_enable(if_ctx_t ctx, uint16_t qid);
 #if 0
 static void		ixl_if_queue_intr_disable(if_ctx_t ctx, uint16_t qid);
 #endif
@@ -385,6 +385,14 @@ static struct if_shared_ctx ixl_sctx_init = {
 	.isc_driver_version = ixl_driver_version,
 	.isc_txrx = &ixl_txrx,
 	.isc_driver = &ixl_if_driver,
+
+	.isc_nrxd_min = MIN_RXD,
+	.isc_ntxd_min = MIN_TXD,
+	.isc_nrxd_max = MAX_RXD,
+	.isc_ntxd_max = MAX_TXD,
+	.isc_nrxd_default = DEFAULT_RXD,
+	.isc_ntxd_default = DEFAULT_TXD,
+
 };
 
 if_shared_ctx_t ixl_sctx = &ixl_sctx_init;
@@ -3271,7 +3279,7 @@ ixl_if_intr_disable(if_ctx_t ctx)
 		ixl_disable_legacy(hw);
 }
 
-static void
+static int
 ixl_if_queue_intr_enable(if_ctx_t ctx, uint16_t qid)
 {
 	struct ixl_vsi	*vsi = iflib_get_softc(ctx);
@@ -3281,6 +3289,7 @@ ixl_if_queue_intr_enable(if_ctx_t ctx, uint16_t qid)
 	    I40E_PFINT_DYN_CTLN_CLEARPBA_MASK |
 	    (IXL_ITR_NONE << I40E_PFINT_DYN_CTLN_ITR_INDX_SHIFT);
 	wr32(vsi->hw, I40E_PFINT_DYN_CTLN(qid), reg);
+	return (0);
 }
 
 #if 0

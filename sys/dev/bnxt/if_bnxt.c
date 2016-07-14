@@ -115,7 +115,7 @@ static void bnxt_update_admin_status(if_ctx_t ctx);
 
 /* Interrupt enable / disable */
 static void bnxt_intr_enable(if_ctx_t ctx);
-static void bnxt_queue_intr_enable(if_ctx_t ctx, uint16_t qid);
+static int bnxt_queue_intr_enable(if_ctx_t ctx, uint16_t qid);
 static void bnxt_disable_intr(if_ctx_t ctx);
 static int bnxt_msix_intr_assign(if_ctx_t ctx, int msix);
 
@@ -215,24 +215,23 @@ static struct if_shared_ctx bnxt_sctx_init = {
 	.isc_q_align = PAGE_SIZE,
 
 	/* We really don't have a maximum here */
-#if 0
-	// But specifying that messes stuff up.
-	.isc_tx_maxsize = UINT32_MAX * sizeof(struct tx_bd_short),
-	.isc_tx_maxsegsize = UINT32_MAX * sizeof(struct tx_bd_short),
-	.isc_rx_maxsize = UINT32_MAX * sizeof(struct rx_pkt_cmpl),
-	.isc_rx_maxsegsize = UINT32_MAX * sizeof(struct rx_pkt_cmpl),
-#else
 	// TODO: Play around with these...
 	.isc_tx_maxsize = BNXT_TSO_SIZE,
 	.isc_tx_maxsegsize = BNXT_TSO_SIZE,
 	.isc_rx_maxsize = BNXT_TSO_SIZE,
 	.isc_rx_maxsegsize = BNXT_TSO_SIZE,
-#endif
 
 	// Only use a single segment to avoid page size constraints
 	.isc_rx_nsegments = 1,
 	.isc_ntxqs = 2,
 	.isc_nrxqs = 3,
+	.isc_nrxd_min = 16,
+	.isc_nrxd_default = PAGE_SIZE / sizeof(struct bd_base),
+	.isc_nrxd_max = INT32_MAX,
+	.isc_ntxd_min = 16,
+	.isc_ntxd_default = PAGE_SIZE / sizeof(struct bd_base),
+	.isc_ntxd_max = INT32_MAX,
+
 	.isc_admin_intrcnt = 1,
 	.isc_vendor_info = bnxt_vendor_info_array,
 	.isc_driver_version = bnxt_driver_version,
@@ -585,17 +584,19 @@ bnxt_attach_pre(if_ctx_t ctx)
 	scctx->isc_tx_tso_size_max = BNXT_TSO_SIZE;
 	scctx->isc_tx_tso_segsize_max = BNXT_TSO_SIZE;
 	scctx->isc_vectors = softc->pf.max_cp_rings;
+#if 0
 	scctx->isc_nrxd[0] = (PAGE_SIZE / sizeof(struct rx_pkt_cmpl)) * 8,
 	scctx->isc_nrxd[1] = PAGE_SIZE / sizeof(struct rx_pkt_cmpl),
 	/* XXX this should be bigger... at least when using jumbo or LRO */
 	scctx->isc_nrxd[2] = PAGE_SIZE / sizeof(struct rx_pkt_cmpl),
 	scctx->isc_ntxd[0] = (PAGE_SIZE / sizeof(struct tx_bd_short)) * 2,
 	scctx->isc_ntxd[1] = PAGE_SIZE / sizeof(struct tx_bd_short),
-	scctx->isc_txqsizes[0] = PAGE_SIZE * 2;
-	scctx->isc_txqsizes[1] = PAGE_SIZE;
-	scctx->isc_rxqsizes[0] = PAGE_SIZE * 8;
-	scctx->isc_rxqsizes[1] = PAGE_SIZE;
-	scctx->isc_rxqsizes[2] = PAGE_SIZE;
+#endif
+	scctx->isc_txqsizes[0] = sizeof(struct cmpl_base) * scctx->isc_ntxd[0];
+	scctx->isc_txqsizes[1] = sizeof(struct bd_base) * scctx->isc_ntxd[1];
+	scctx->isc_rxqsizes[0] = sizeof(struct cmpl_base) * scctx->isc_nrxd[0];
+	scctx->isc_rxqsizes[1] = sizeof(struct bd_base) * scctx->isc_nrxd[1];
+	scctx->isc_rxqsizes[2] = sizeof(struct bd_base) * scctx->isc_nrxd[2];
 	scctx->isc_max_rxqsets = min(pci_msix_count(softc->dev)-1,
 	    softc->pf.max_cp_rings - 1);
 	scctx->isc_max_rxqsets = min(scctx->isc_max_rxqsets,
@@ -1113,13 +1114,13 @@ bnxt_intr_enable(if_ctx_t ctx)
 }
 
 /* Enable interrupt for a single queue */
-static void
+static int
 bnxt_queue_intr_enable(if_ctx_t ctx, uint16_t qid)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 
 	bnxt_do_enable_intr(&softc->rx_cp_rings[qid]);
-	return;
+	return 0;
 }
 
 /* Disable all interrupts */

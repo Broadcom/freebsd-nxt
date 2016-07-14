@@ -295,10 +295,11 @@ typedef struct iflib_sw_tx_desc_array {
 
 #define IFLIB_RESTART_BUDGET		8
 
-#define	IFC_LEGACY		0x1
-#define	IFC_QFLUSH		0x2
-#define	IFC_MULTISEG		0x4
-#define	IFC_DMAR		0x8
+#define	IFC_LEGACY		0x01
+#define	IFC_QFLUSH		0x02
+#define	IFC_MULTISEG		0x04
+#define	IFC_DMAR		0x08
+#define	IFC_SC_ALLOCATED	0x10
 
 #define CSUM_OFFLOAD		(CSUM_IP_TSO|CSUM_IP6_TSO|CSUM_IP| \
 				 CSUM_IP_UDP|CSUM_IP_TCP|CSUM_IP_SCTP| \
@@ -2956,6 +2957,7 @@ _task_fn_rx(void *context)
 	iflib_rxq_t rxq = context;
 	if_ctx_t ctx = rxq->ifr_ctx;
 	bool more;
+	int rc;
 
 	DBG_COUNTER_INC(task_fn_rxs);
 	if (__predict_false(!(if_getdrvflags(ctx->ifc_ifp) & IFF_DRV_RUNNING)))
@@ -2966,7 +2968,8 @@ _task_fn_rx(void *context)
 			IFDI_INTR_ENABLE(ctx);
 		else {
 			DBG_COUNTER_INC(rx_intr_enables);
-			IFDI_QUEUE_INTR_ENABLE(ctx, rxq->ifr_id);
+			rc = IFDI_QUEUE_INTR_ENABLE(ctx, rxq->ifr_id);
+			KASSERT(rc != ENOTSUP, ("MSI-X support requires queue_intr_enable, but not implemented in driver"));
 		}
 	}
 	if (__predict_false(!(if_getdrvflags(ctx->ifc_ifp) & IFF_DRV_RUNNING)))
@@ -3454,6 +3457,7 @@ iflib_device_register(device_t dev, void *sc, if_shared_ctx_t sctx, if_ctx_t *ct
 	if (sc == NULL) {
 		sc = malloc(sctx->isc_driver->size, M_IFLIB, M_WAITOK|M_ZERO);
 		device_set_softc(dev, ctx);
+		ctx->ifc_flags |= IFC_SC_ALLOCATED;
 	}
 
 	ctx->ifc_sctx = sctx;
@@ -3480,16 +3484,46 @@ iflib_device_register(device_t dev, void *sc, if_shared_ctx_t sctx, if_ctx_t *ct
 	for (i = 0; i < sctx->isc_ntxqs; i++) {
 		if (ctx->ifc_sysctl_ntxds != 0)
 			scctx->isc_ntxd[i] = ctx->ifc_sysctl_ntxds;
-	}
-	for (i = 0; i < sctx->isc_nrxqs; i++) {
+		else
+			scctx->isc_ntxd[i] = sctx->isc_ntxd_default;
 		if (ctx->ifc_sysctl_nrxds != 0)
 			scctx->isc_nrxd[i] = ctx->ifc_sysctl_nrxds;
+		else
+			scctx->isc_nrxd[i] = sctx->isc_nrxd_default;
+	}
+
+	for (i = 0; i < sctx->isc_nrxqs; i++) {
+		if (scctx->isc_nrxd[i] < sctx->isc_nrxd_min) {
+			device_printf(dev, "nrxd: %d less than nrxd_min %d - resetting to min\n",
+				      scctx->isc_nrxd[i], sctx->isc_nrxd_min);
+			scctx->isc_nrxd[i] = sctx->isc_nrxd_min;
+		}
+		if (scctx->isc_nrxd[i] > sctx->isc_nrxd_max) {
+			device_printf(dev, "nrxd: %d greater than nrxd_max %d - resetting to max\n",
+				      scctx->isc_nrxd[i], sctx->isc_nrxd_max);
+			scctx->isc_nrxd[i] = sctx->isc_nrxd_max;
+		}
+	}
+
+	for (i = 0; i < sctx->isc_ntxqs; i++) {
+		if (scctx->isc_ntxd[i] < sctx->isc_ntxd_min) {
+			device_printf(dev, "ntxd: %d less than ntxd_min %d - resetting to min\n",
+				      scctx->isc_ntxd[i], sctx->isc_ntxd_min);
+			scctx->isc_ntxd[i] = sctx->isc_ntxd_min;
+		}
+		if (scctx->isc_ntxd[i] > sctx->isc_ntxd_max) {
+			device_printf(dev, "ntxd: %d greater than ntxd_max %d - resetting to max\n",
+				      scctx->isc_ntxd[i], sctx->isc_ntxd_max);
+			scctx->isc_ntxd[i] = sctx->isc_ntxd_max;
+		}
 	}
 
 	if ((err = IFDI_ATTACH_PRE(ctx)) != 0) {
 		device_printf(dev, "IFDI_ATTACH_PRE failed %d\n", err);
 		return (err);
 	}
+	scctx->isc_ntxqsets = max(1, min(scctx->isc_ntxqsets, scctx->isc_ntxqsets_max));
+	scctx->isc_nrxqsets = max(1, min(scctx->isc_nrxqsets, scctx->isc_nrxqsets_max));
 #ifdef ACPI_DMAR
 	if (dmar_get_dma_tag(device_get_parent(dev), dev) != NULL)
 		ctx->ifc_flags |= IFC_DMAR;
@@ -3550,7 +3584,7 @@ iflib_device_register(device_t dev, void *sc, if_shared_ctx_t sctx, if_ctx_t *ct
 	ifp->if_hw_tsomaxsegsize = scctx->isc_tx_tso_segsize_max;
 	if (scctx->isc_rss_table_size == 0)
 		scctx->isc_rss_table_size = 64;
-	scctx->isc_rss_table_mask = scctx->isc_rss_table_size-1;;
+	scctx->isc_rss_table_mask = scctx->isc_rss_table_size-1;
 	/*
 	** Now setup MSI or MSI/X, should
 	** return us the number of supported
@@ -3588,7 +3622,7 @@ iflib_device_register(device_t dev, void *sc, if_shared_ctx_t sctx, if_ctx_t *ct
 			MPASS(msix == 1);
 			rid = 1;
 		}
-		if ((err = iflib_legacy_setup(ctx, ctx->isc_legacy_intr, ctx, &rid, "irq0")) != 0) {
+		if ((err = iflib_legacy_setup(ctx, ctx->isc_legacy_intr, ctx->ifc_softc, &rid, "irq0")) != 0) {
 			device_printf(dev, "iflib_legacy_setup failed %d\n", err);
 			goto fail_intr_free;
 		}
@@ -3685,6 +3719,7 @@ iflib_device_deregister(if_ctx_t ctx)
 		taskqgroup_detach(tqg, &ctx->ifc_vflr_task);
 
 	IFDI_DETACH(ctx);
+	device_set_softc(ctx->ifc_dev, NULL);
 	if (ctx->ifc_softc_ctx.isc_intr != IFLIB_INTR_LEGACY) {
 		pci_release_msi(dev);
 	}
@@ -3702,6 +3737,9 @@ iflib_device_deregister(if_ctx_t ctx)
 
 	iflib_tx_structures_free(ctx);
 	iflib_rx_structures_free(ctx);
+	if (ctx->ifc_flags & IFC_SC_ALLOCATED)
+		free(ctx->ifc_softc, M_IFLIB);
+	free(ctx, M_IFLIB);
 	return (0);
 }
 
@@ -3851,6 +3889,13 @@ _iflib_assert(if_shared_ctx_t sctx)
 	MPASS(sctx->isc_txrx->ift_rxd_pkt_get);
 	MPASS(sctx->isc_txrx->ift_rxd_refill);
 	MPASS(sctx->isc_txrx->ift_rxd_flush);
+
+	MPASS(sctx->isc_nrxd_min);
+	MPASS(sctx->isc_nrxd_max);
+	MPASS(sctx->isc_nrxd_default);
+	MPASS(sctx->isc_ntxd_min);
+	MPASS(sctx->isc_ntxd_max);
+	MPASS(sctx->isc_ntxd_default);
 }
 
 static int
@@ -3864,7 +3909,6 @@ iflib_register(if_ctx_t ctx)
 	_iflib_assert(sctx);
 
 	CTX_LOCK_INIT(ctx, device_get_nameunit(ctx->ifc_dev));
-	MPASS(ctx->ifc_flags == 0);
 
 	ifp = ctx->ifc_ifp = if_gethandle(IFT_ETHER);
 	if (ifp == NULL) {
@@ -3916,7 +3960,7 @@ iflib_queues_alloc(if_ctx_t ctx)
 	iflib_txq_t txq;
 	iflib_rxq_t rxq;
 	iflib_fl_t fl = NULL;
-	int i, j, err, txconf, rxconf;
+	int i, j, cpu, err, txconf, rxconf;
 	iflib_dma_info_t ifdip;
 	uint32_t *rxqsizes = scctx->isc_rxqsizes;
 	uint32_t *txqsizes = scctx->isc_txqsizes;
@@ -3964,7 +4008,7 @@ iflib_queues_alloc(if_ctx_t ctx)
 	/*
 	 * XXX handle allocation failure
 	 */
-	for (txconf = i = 0; i < ntxqsets; i++, txconf++, txq++) {
+	for (txconf = i = 0, cpu = CPU_FIRST(); i < ntxqsets; i++, txconf++, txq++, cpu = CPU_NEXT(cpu)) {
 		/* Set up some basics */
 
 		if ((ifdip = malloc(sizeof(struct iflib_dma_info) * ntxqs, M_IFLIB, M_WAITOK|M_ZERO)) == NULL) {
@@ -3989,8 +4033,8 @@ iflib_queues_alloc(if_ctx_t ctx)
 			txq->ift_br_offset = 0;
 		}
 		/* XXX fix this */
-		txq->ift_timer.c_cpu = i % mp_ncpus;
-		txq->ift_db_check.c_cpu = i % mp_ncpus;
+		txq->ift_timer.c_cpu = cpu;
+		txq->ift_db_check.c_cpu = cpu;
 		txq->ift_nbr = nbuf_rings;
 
 		if (iflib_txsd_alloc(txq)) {
@@ -4547,8 +4591,9 @@ iflib_msix_init(if_ctx_t ctx)
 	int iflib_num_tx_queues, iflib_num_rx_queues;
 	int err, admincnt, bar;
 
-	iflib_num_tx_queues = ctx->ifc_sysctl_ntxqs;
-	iflib_num_rx_queues = ctx->ifc_sysctl_nrxqs;
+	iflib_num_tx_queues = scctx->isc_ntxqsets;
+	iflib_num_rx_queues = scctx->isc_nrxqsets;
+
 	bar = ctx->ifc_softc_ctx.isc_msix_bar;
 	admincnt = sctx->isc_admin_intrcnt;
 	/* Override by tuneable */
