@@ -184,10 +184,13 @@ struct bnxt_link_info {
 	uint8_t		wire_speed;
 	uint8_t		loop_back;
 	uint8_t		link_up;
+	uint8_t		last_link_up;
 	uint8_t		duplex;
+	uint8_t		last_duplex;
 #define BNXT_LINK_DUPLEX_HALF	HWRM_PORT_PHY_QCFG_OUTPUT_DUPLEX_HALF
 #define BNXT_LINK_DUPLEX_FULL	HWRM_PORT_PHY_QCFG_OUTPUT_DUPLEX_FULL
 	uint8_t		pause;
+	uint8_t		last_pause;
 #define BNXT_LINK_PAUSE_TX	HWRM_PORT_PHY_QCFG_OUTPUT_PAUSE_TX
 #define BNXT_LINK_PAUSE_RX	HWRM_PORT_PHY_QCFG_OUTPUT_PAUSE_RX
 #define BNXT_LINK_PAUSE_BOTH	(HWRM_PORT_PHY_QCFG_OUTPUT_PAUSE_RX |	    \

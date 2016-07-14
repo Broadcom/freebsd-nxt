@@ -1413,6 +1413,14 @@ bnxt_report_link(struct bnxt_softc *softc)
 {
 	const char *duplex = NULL, *flow_ctrl = NULL;
 
+	if (softc->link_info.link_up == softc->link_info.last_link_up) {
+		if (!softc->link_info.link_up)
+			return;
+		if (softc->link_info.pause == softc->link_info.last_pause &&
+		    softc->link_info.duplex == softc->link_info.last_duplex)
+			return;
+	}
+
 	if (softc->link_info.link_up) {
 		if (softc->link_info.duplex == BNXT_LINK_DUPLEX_FULL)
 			duplex = "full duplex";
@@ -1435,6 +1443,10 @@ bnxt_report_link(struct bnxt_softc *softc)
 		    IF_Gbps(100));
 		device_printf(softc->dev, "Link is Down\n");
 	}
+
+	softc->link_info.last_link_up = softc->link_info.link_up;
+	softc->link_info.last_pause = softc->link_info.pause;
+	softc->link_info.last_duplex = softc->link_info.duplex;
 }
 
 static int
