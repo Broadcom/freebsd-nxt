@@ -919,7 +919,7 @@ bnxt_hwrm_cfa_l2_set_rx_mask(struct bnxt_softc *softc,
 
 		i = 0;
 		SLIST_FOREACH(tag, &vnic->vlan_tags, next) {
-			tags[i] = (tag->tpid << 16) | tag->tag;
+			tags[i] = htole32((tag->tpid << 16) | tag->tag);
 			i++;
 		}
 	}

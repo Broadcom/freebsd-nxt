@@ -1195,6 +1195,8 @@ bnxt_vlan_register(if_ctx_t ctx, uint16_t vtag)
 	new_tag = malloc(sizeof(struct bnxt_vlan_tag), M_DEVBUF, M_NOWAIT);
 	if (new_tag == NULL)
 		return;
+	new_tag->tag = vtag;
+	new_tag->tpid = 8100;
 	SLIST_INSERT_HEAD(&softc->vnic_info.vlan_tags, new_tag, next);
 };
 
