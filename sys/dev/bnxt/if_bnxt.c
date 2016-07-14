@@ -593,7 +593,7 @@ bnxt_attach_pre(if_ctx_t ctx)
 	scctx->isc_ntxd[1] = PAGE_SIZE / sizeof(struct tx_bd_short),
 	scctx->isc_txqsizes[0] = PAGE_SIZE * 2;
 	scctx->isc_txqsizes[1] = PAGE_SIZE;
-	scctx->isc_rxqsizes[0] = PAGE_SIZE * 5;
+	scctx->isc_rxqsizes[0] = PAGE_SIZE * 8;
 	scctx->isc_rxqsizes[1] = PAGE_SIZE;
 	scctx->isc_rxqsizes[2] = PAGE_SIZE;
 	scctx->isc_max_rxqsets = min(pci_msix_count(softc->dev)-1,
