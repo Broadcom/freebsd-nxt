@@ -50,7 +50,7 @@ __FBSDID("$FreeBSD$");
 
 static int bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi);
 static void bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t pidx);
-static int bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint16_t *cidx,
+static int bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t cidx,
     bool clear);
 
 static void bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
@@ -182,7 +182,7 @@ bnxt_isc_txd_flush(void *sc, uint16_t txqid, uint32_t pidx)
 }
 
 static int
-bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint16_t *idx, bool clear)
+bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_cp_ring *cpr = &softc->tx_cp_rings[txqid];
@@ -230,7 +230,6 @@ cmpl_invalid:
 
 	if (clear && avail) {
 		cpr->cons = last_cons;
-		*idx = RING_NEXT(&cpr->ring, last_cons);
 		cpr->v_bit = last_v_bit;
 		BNXT_CP_IDX_DISABLE_DB(&cpr->ring, cpr->cons);
 	}
@@ -251,14 +250,14 @@ bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
 
 	if (flid == 0) {
 		rx_ring = &softc->rx_rings[rxqid];
-		rxbd = (void *)rx_ring->vaddr;
 		type = RX_PROD_PKT_BD_TYPE_RX_PROD_PKT;
 	}
 	else {
 		rx_ring = &softc->ag_rings[rxqid];
-		rxbd = (void *)rx_ring->vaddr;
 		type = RX_PROD_AGG_BD_TYPE_RX_PROD_AGG;
 	}
+	rxbd = (void *)rx_ring->vaddr;
+
 	for (i=0; i<count; i++) {
 		rxbd[pidx].flags_type = htole16(type);
 		rxbd[pidx].len = htole16(len);

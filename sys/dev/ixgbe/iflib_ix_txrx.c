@@ -51,7 +51,7 @@
  *********************************************************************/
 static int ixgbe_isc_txd_encap(void *arg, if_pkt_info_t pi);
 static void ixgbe_isc_txd_flush(void *arg, uint16_t txqid, uint32_t pidx);
-static int ixgbe_isc_txd_credits_update(void *arg, uint16_t txqid, uint16_t *cidx, bool clear);
+static int ixgbe_isc_txd_credits_update(void *arg, uint16_t txqid, uint32_t cidx, bool clear);
 
 static void ixgbe_isc_rxd_refill(void *arg, uint16_t rxqid, uint8_t flid __unused,
 				   uint32_t pidx, uint64_t *paddrs, caddr_t *vaddrs __unused, uint16_t count, uint16_t buf_len);
@@ -257,7 +257,7 @@ ixgbe_isc_txd_flush(void *arg, uint16_t txqid, uint32_t pidx)
 }
 
 static int
-ixgbe_isc_txd_credits_update(void *arg, uint16_t txqid, uint16_t *cidx_init, bool clear)
+ixgbe_isc_txd_credits_update(void *arg, uint16_t txqid, uint32_t cidx_init, bool clear)
 {
 	struct adapter   *sc = arg;
 	if_softc_ctx_t scctx = sc->shared;
@@ -270,7 +270,7 @@ ixgbe_isc_txd_credits_update(void *arg, uint16_t txqid, uint16_t *cidx_init, boo
 	struct ixgbe_tx_buf	*buf;
 	union ixgbe_adv_tx_desc *txd;
 
-	cidx = *cidx_init;
+	cidx = cidx_init;
 
 	buf = &txr->tx_buffers[cidx];
 	txd = &txr->tx_base[cidx];
@@ -318,7 +318,7 @@ ixgbe_isc_txd_credits_update(void *arg, uint16_t txqid, uint16_t *cidx_init, boo
 		}
 		prefetch(txd);
 		prefetch(txd+1);
-	} while (__predict_true(--limit) && cidx != *cidx_init);
+	} while (__predict_true(--limit) && cidx != cidx_init);
 
 	return (processed);
 }

@@ -157,7 +157,7 @@ typedef struct pci_vendor_info {
 typedef struct if_txrx {
 	int (*ift_txd_encap) (void *, if_pkt_info_t);
 	void (*ift_txd_flush) (void *, uint16_t, uint32_t);
-	int (*ift_txd_credits_update) (void *, uint16_t, uint16_t *, bool);
+	int (*ift_txd_credits_update) (void *, uint16_t, uint32_t, bool);
 
 	int (*ift_rxd_available) (void *, uint16_t qsidx, uint32_t pidx);
 	int (*ift_rxd_pkt_get) (void *, if_rxd_info_t ri);

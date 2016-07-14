@@ -2850,7 +2850,7 @@ iflib_txq_can_drain(struct ifmp_ring *r)
 	if_ctx_t ctx = txq->ift_ctx;
 
 	return ((TXQ_AVAIL(txq) >= MAX_TX_DESC(ctx)) ||
-		ctx->isc_txd_credits_update(ctx->ifc_softc, txq->ift_id, &txq->ift_cidx_processed, false));
+		ctx->isc_txd_credits_update(ctx->ifc_softc, txq->ift_id, txq->ift_cidx_processed, false));
 }
 
 static uint32_t
@@ -4498,15 +4498,14 @@ iflib_tx_credits_update(if_ctx_t ctx, iflib_txq_t txq)
 	if (ctx->isc_txd_credits_update == NULL)
 		return (0);
 
-	if ((credits = ctx->isc_txd_credits_update(ctx->ifc_softc, txq->ift_id, &txq->ift_cidx_processed, true)) == 0)
+	if ((credits = ctx->isc_txd_credits_update(ctx->ifc_softc, txq->ift_id, txq->ift_cidx_processed, true)) == 0)
 		return (0);
 
 	txq->ift_processed += credits;
-	if (!(ctx->ifc_sctx->isc_flags & IFLIB_HAS_TXCQ)) {
-		txq->ift_cidx_processed += credits;
-		if (txq->ift_cidx_processed >= txq->ift_size)
-			txq->ift_cidx_processed -= txq->ift_size;
-	}
+	txq->ift_cidx_processed += credits;
+
+	if (txq->ift_cidx_processed >= txq->ift_size)
+		txq->ift_cidx_processed -= txq->ift_size;
 	return (credits);
 }
 
