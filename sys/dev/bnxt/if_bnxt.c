@@ -894,15 +894,12 @@ bnxt_init(if_ctx_t ctx)
 		BNXT_TX_DB(&softc->tx_rings[i], 0);
 	}
 
-	ifp->if_drv_flags |= IFF_DRV_RUNNING;
-
 	bnxt_do_enable_intr(&softc->def_cp_ring);
 	return;
 
 fail:
 	bnxt_hwrm_func_reset(softc);
 	bnxt_clear_ids(softc);
-	ifp->if_drv_flags &= ~IFF_DRV_RUNNING;
 	return;
 }
 
