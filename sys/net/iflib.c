@@ -182,8 +182,8 @@ struct iflib_ctx {
 	uint16_t ifc_sysctl_nrxqs;
 	uint16_t ifc_sysctl_qs_eq_override;
 
-	uint16_t ifc_sysctl_ntxds;
-	uint16_t ifc_sysctl_nrxds;
+	uint16_t ifc_sysctl_ntxds[8];
+	uint16_t ifc_sysctl_nrxds[8];
 	struct if_txrx ifc_txrx;
 #define isc_txd_encap  ifc_txrx.ift_txd_encap
 #define isc_txd_flush  ifc_txrx.ift_txd_flush
@@ -3484,17 +3484,16 @@ iflib_device_register(device_t dev, void *sc, if_shared_ctx_t sctx, if_ctx_t *ct
 	if (ctx->ifc_sysctl_nrxqs != 0)
 		scctx->isc_nrxqsets = ctx->ifc_sysctl_nrxqs;
 
-	/* XXX change sysctl for per-queue sizes */
 	for (i = 0; i < sctx->isc_ntxqs; i++) {
-		if (ctx->ifc_sysctl_ntxds != 0)
-			scctx->isc_ntxd[i] = ctx->ifc_sysctl_ntxds;
+		if (ctx->ifc_sysctl_ntxds[i] != 0)
+			scctx->isc_ntxd[i] = ctx->ifc_sysctl_ntxds[i];
 		else
 			scctx->isc_ntxd[i] = sctx->isc_ntxd_default[i];
 	}
 
 	for (i = 0; i < sctx->isc_nrxqs; i++) {
-		if (ctx->ifc_sysctl_nrxds != 0)
-			scctx->isc_nrxd[i] = ctx->ifc_sysctl_nrxds;
+		if (ctx->ifc_sysctl_nrxds[i] != 0)
+			scctx->isc_nrxd[i] = ctx->ifc_sysctl_nrxds[i];
 		else
 			scctx->isc_nrxd[i] = sctx->isc_nrxd_default[i];
 	}
@@ -3552,7 +3551,7 @@ iflib_device_register(device_t dev, void *sc, if_shared_ctx_t sctx, if_ctx_t *ct
 
 	/* XXX change for per-queue sizes */
 	device_printf(dev, "using %d tx descriptors and %d rx descriptors\n",
-		      scctx->isc_ntxd[main_rxq], scctx->isc_nrxd[main_rxq]);
+		      scctx->isc_ntxd[main_txq], scctx->isc_nrxd[main_rxq]);
 	for (i = 0; i < sctx->isc_nrxqs; i++) {
 		if (!powerof2(scctx->isc_nrxd[i])) {
 			/* round down instead? */
@@ -4761,6 +4760,59 @@ mp_ring_state_handler(SYSCTL_HANDLER_ARGS)
         return(rc);
 }
 
+enum iflib_ndesc_handler {
+	IFLIB_NTXD_HANDLER,
+	IFLIB_NRXD_HANDER,
+};
+
+static int
+mp_ndesc_handler(SYSCTL_HANDLER_ARGS)
+{
+	if_ctx_t ctx = (void *)arg1;
+	enum iflib_ndesc_handler type = arg2;
+	char buf[256] = {0};
+	uint16_t *ndesc;
+	char *p, *next;
+	int nqs, rc, i;
+
+	MPASS(type == IFLIB_NTXD_HANDLER || type == IFLIB_NRXD_HANDER);
+
+	nqs = 8;
+	switch(type) {
+	case IFLIB_NTXD_HANDLER:
+		ndesc = ctx->ifc_sysctl_ntxds;
+		if (ctx->ifc_sctx)
+			nqs = ctx->ifc_sctx->isc_ntxqs;
+		break;
+	case IFLIB_NRXD_HANDER:
+		ndesc = ctx->ifc_sysctl_nrxds;
+		if (ctx->ifc_sctx)
+			nqs = ctx->ifc_sctx->isc_nrxqs;
+		break;
+	}
+	if (nqs == 0)
+		nqs = 8;
+
+	for (i=0; i<8; i++) {
+		if (i >= nqs)
+			break;
+		if (i)
+			strcat(buf, ",");
+		sprintf(strchr(buf, 0), "%d", ndesc[i]);
+	}
+
+	rc = sysctl_handle_string(oidp, buf, sizeof(buf), req);
+	if (rc || req->newptr == NULL)
+		return rc;
+
+	for (i = 0, next = buf, p = strsep(&next, " ,"); i < 8 && p;
+	    i++, p = strsep(&next, " ,")) {
+		ndesc[i] = strtoul(p, NULL, 10);
+	}
+
+	return(rc);
+}
+
 #define NAME_BUFLEN 32
 static void
 iflib_add_device_sysctl_pre(if_ctx_t ctx)
@@ -4791,12 +4843,14 @@ iflib_add_device_sysctl_pre(if_ctx_t ctx)
                        "permit #txq != #rxq");
 
 	/* XXX change for per-queue sizes */
-	SYSCTL_ADD_U16(ctx_list, oid_list, OID_AUTO, "override_ntxds",
-		       CTLFLAG_RWTUN, &ctx->ifc_sysctl_ntxds, 0,
-			"# of tx descriptors to use, 0 => use default #");
-	SYSCTL_ADD_U16(ctx_list, oid_list, OID_AUTO, "override_nrxds",
-		       CTLFLAG_RWTUN, &ctx->ifc_sysctl_nrxds, 0,
-			"# of rx descriptors to use, 0 => use default #");
+	SYSCTL_ADD_PROC(ctx_list, oid_list, OID_AUTO, "override_ntxds",
+		       CTLTYPE_STRING|CTLFLAG_RWTUN, ctx, IFLIB_NTXD_HANDLER,
+                       mp_ndesc_handler, "A",
+                       "list of # of tx descriptors to use, 0 = use default #");
+	SYSCTL_ADD_PROC(ctx_list, oid_list, OID_AUTO, "override_nrxds",
+		       CTLTYPE_STRING|CTLFLAG_RWTUN, ctx, IFLIB_NRXD_HANDER,
+                       mp_ndesc_handler, "A",
+                       "list of # of rx descriptors to use, 0 = use default #");
 }
 
 static void
