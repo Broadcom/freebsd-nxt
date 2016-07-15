@@ -1,12 +1,12 @@
 # $FreeBSD$
 
 .PATH:  ${.CURDIR}/../../../dev/e1000
-KMOD    = if_em
+KMOD    = if_em_iflib
 SRCS    = device_if.h bus_if.h pci_if.h opt_ddb.h opt_em.h opt_inet.h \
 	  opt_inet6.h ifdi_if.h
 SRCS    += $(CORE_SRC) $(LEGACY_SRC)
 SRCS	+= $(COMMON_SHARED) $(LEGACY_SHARED) $(PCIE_SHARED)
-CORE_SRC = if_em.c e1000_osdep.c
+CORE_SRC = if_em.c em_txrx.c e1000_osdep.c
 # This is the Legacy, pre-PCIE source, it can be
 # undefined when using modular driver if not needed
 LEGACY_SRC    += if_lem.c
