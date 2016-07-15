@@ -587,14 +587,13 @@ bnxt_attach_pre(if_ctx_t ctx)
 	scctx->isc_tx_tso_size_max = BNXT_TSO_SIZE;
 	scctx->isc_tx_tso_segsize_max = BNXT_TSO_SIZE;
 	scctx->isc_vectors = softc->pf.max_cp_rings;
-#if 0
-	scctx->isc_nrxd[0] = (PAGE_SIZE / sizeof(struct rx_pkt_cmpl)) * 8,
-	scctx->isc_nrxd[1] = PAGE_SIZE / sizeof(struct rx_pkt_cmpl),
-	/* XXX this should be bigger... at least when using jumbo or LRO */
-	scctx->isc_nrxd[2] = PAGE_SIZE / sizeof(struct rx_pkt_cmpl),
-	scctx->isc_ntxd[0] = (PAGE_SIZE / sizeof(struct tx_bd_short)) * 2,
-	scctx->isc_ntxd[1] = PAGE_SIZE / sizeof(struct tx_bd_short),
-#endif
+	if (scctx->isc_nrxd[0] <
+	    ((scctx->isc_nrxd[1] * 4) + scctx->isc_nrxd[2]))
+		device_printf(softc->dev,
+		    "WARNING: nrxd0 should be at least 4 * nrxd1 + nrxd2.  Driver may be unstable\n");
+	if (scctx->isc_ntxd[0] < scctx->isc_ntxd[1] * 2)
+		device_printf(softc->dev,
+		    "WARNING: ntxd0 should be at least 2 * ntxd1.  Driver may be unstable\n");
 	scctx->isc_txqsizes[0] = sizeof(struct cmpl_base) * scctx->isc_ntxd[0];
 	scctx->isc_txqsizes[1] = sizeof(struct bd_base) * scctx->isc_ntxd[1];
 	scctx->isc_rxqsizes[0] = sizeof(struct cmpl_base) * scctx->isc_nrxd[0];
