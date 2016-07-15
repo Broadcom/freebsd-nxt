@@ -53,7 +53,7 @@ igb_init_tx_ring(struct igb_tx_queue *que)
 	struct igb_tx_buf *buf;
 
 	buf = txr->tx_buffers;
-	for (int i = 0; i < scctx->isc_ntxd; i++, buf++) {
+	for (int i = 0; i < scctx->isc_ntxd[0]; i++, buf++) {
 		buf->eop = NULL;
 	}
 }
@@ -254,7 +254,7 @@ igb_isc_txd_encap(void *arg, if_pkt_info_t pi)
 
 	/* Consume the first descriptor */
         igb_tx_ctx_setup(txr, pi, &cmd_type_len, &olinfo_status);
-        if (++i == scctx->isc_ntxd) {
+        if (++i == scctx->isc_ntxd[0]) {
 	  i = 0;
 	}
 	
@@ -276,7 +276,7 @@ igb_isc_txd_encap(void *arg, if_pkt_info_t pi)
 		    cmd_type_len | seglen);
 		txd->read.olinfo_status = htole32(olinfo_status);
 
-		if (++i == scctx->isc_ntxd) {
+		if (++i == scctx->isc_ntxd[0]) {
 			i = 0;
 		}
 	}
@@ -322,7 +322,7 @@ igb_isc_txd_credits_update(void *arg, uint16_t txqid, uint32_t cidx_init, bool c
 
 	buf = &txr->tx_buffers[cidx];
 	txd = &txr->tx_base[cidx];
-	ntxd = scctx->isc_ntxd;
+	ntxd = scctx->isc_ntxd[0];
 	limit = adapter->tx_process_limit; 
 
 	do {
@@ -342,7 +342,7 @@ igb_isc_txd_credits_update(void *arg, uint16_t txqid, uint32_t cidx_init, bool c
 		  ++txd;
 		  ++buf;
 		  /* wrap the ring? */
-		  if (++cidx == scctx->isc_ntxd) {
+		  if (++cidx == scctx->isc_ntxd[0]) {
 		       	cidx = 0;
 			buf = txr->tx_buffers;
 			txd = txr->tx_base;
@@ -362,7 +362,7 @@ igb_isc_txd_credits_update(void *arg, uint16_t txqid, uint32_t cidx_init, bool c
 		buf++;
 	    
 		/* reset with a wrap */
-		if (++cidx == scctx->isc_ntxd) {
+		if (++cidx == scctx->isc_ntxd[0]) {
 			cidx = 0;
 			buf = txr->tx_buffers;
 			txd = txr->tx_base;
@@ -387,7 +387,7 @@ static void igb_isc_rxd_refill(void *arg, uint16_t rxqid, uint8_t flid __unused,
 
 	for (i = 0, next_pidx = pidx; i < count; i++) {
 		rxr->rx_base[next_pidx].read.pkt_addr = htole64(paddrs[i]);
-		if (++next_pidx == scctx->isc_nrxd)
+		if (++next_pidx == scctx->isc_nrxd[0])
 			next_pidx = 0;
 	}
 }
@@ -411,14 +411,14 @@ static int igb_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx)
 	u32                      staterr = 0;
 	int                      cnt, i, iter;
 
-	for (iter = cnt = 0, i = idx; iter < scctx->isc_nrxd;) {
+	for (iter = cnt = 0, i = idx; iter < scctx->isc_nrxd[0];) {
 		rxd = &rxr->rx_base[i];
 		staterr = le32toh(rxd->wb.upper.status_error);	
 		
 		if ((staterr & E1000_RXD_STAT_DD) == 0)
 			break;
 		
-		if (++i == scctx->isc_nrxd) {
+		if (++i == scctx->isc_nrxd[0]) {
 			i = 0;
 		}
 
@@ -495,13 +495,13 @@ igb_isc_rxd_pkt_get(void *arg, if_rxd_info_t ri)
 		ri->iri_frags[i].irf_idx = cidx;
 		ri->iri_frags[i].irf_len = len;
 	
-		if (++cidx == scctx->isc_nrxd)
+		if (++cidx == scctx->isc_nrxd[0])
 			cidx = 0;
 		
 		if (rxr->hdr_split == TRUE) {
 		  ri->iri_frags[i].irf_flid = 1;
 		  ri->iri_frags[i].irf_idx = cidx; 
-		  if (++cidx == scctx->isc_nrxd)
+		  if (++cidx == scctx->isc_nrxd[0])
 		    cidx = 0;
 		} 
 		i++;

@@ -102,7 +102,7 @@ em_tso_setup(struct adapter *adapter, if_pkt_info_t pi, u32 *txd_upper, u32 *txd
 	tx_buffer->eop = -1;
 	txr->tx_tso = TRUE;
 
-	if (++cur == scctx->isc_ntxd) {
+	if (++cur == scctx->isc_ntxd[0]) {
 		cur = 0;
 	}
 	return cur;
@@ -254,7 +254,7 @@ em_transmit_checksum_setup(struct adapter *adapter, if_pkt_info_t pi, u32 *txd_u
 	tx_buffer = &txr->tx_buffers[cur];
 	tx_buffer->eop = -1;
 
-	if (++cur == scctx->isc_ntxd) {
+	if (++cur == scctx->isc_ntxd[0]) {
 		cur = 0;
 	}
 	return cur;
@@ -328,7 +328,7 @@ em_isc_txd_encap(void *arg, if_pkt_info_t pi)
 			ctxd->lower.data = htole32(sc->txd_cmd | txd_lower | seg_len);
 			ctxd->upper.data = htole32(txd_upper);
 
-                        if (++i == scctx->isc_ntxd)
+                        if (++i == scctx->isc_ntxd[0])
 				i = 0;
 
 			/* Now make the sentinel */
@@ -338,14 +338,14 @@ em_isc_txd_encap(void *arg, if_pkt_info_t pi)
 			ctxd->lower.data = htole32(sc->txd_cmd | txd_lower | TSO_WORKAROUND);
 			ctxd->upper.data = htole32(txd_upper);
 			cidx_last = i;
-			if (++i == scctx-> isc_ntxd)
+			if (++i == scctx-> isc_ntxd[0])
 				i = 0;
 		} else {
 			ctxd->buffer_addr = htole64(seg_addr);
 			ctxd->lower.data = htole32(sc->txd_cmd | txd_lower | seg_len);
 			ctxd->upper.data = htole32(txd_upper);
 			cidx_last = i;
-			if (++i == scctx-> isc_ntxd)
+			if (++i == scctx-> isc_ntxd[0])
 				i = 0;
 		}
 		tx_buffer->eop = -1;
@@ -401,7 +401,7 @@ em_isc_txd_credits_update(void *arg, uint16_t txqid, uint32_t cidx_init, bool cl
 	 * first packet, that way we can do the
 	 * simple comparison on the inner while loop.
 	 */
-	if (++last == scctx->isc_ntxd)
+	if (++last == scctx->isc_ntxd[0])
 	     last = 0;
 	done = last;
 
@@ -420,7 +420,7 @@ em_isc_txd_credits_update(void *arg, uint16_t txqid, uint32_t cidx_init, bool cl
 			processed++;
 		  
 			/* wrap the ring ? */
-			if (++cidx == scctx->isc_ntxd) {
+			if (++cidx == scctx->isc_ntxd[0]) {
 				cidx = 0;
 			}
 			buf = &txr->tx_buffers[cidx];
@@ -432,7 +432,7 @@ em_isc_txd_credits_update(void *arg, uint16_t txqid, uint32_t cidx_init, bool cl
 			break;
 		eop_desc = &txr->tx_base[last];
 		/* Get new done point */
-		if (++last == scctx->isc_ntxd)
+		if (++last == scctx->isc_ntxd[0])
 			last = 0;
 		done = last;
 	}
@@ -459,7 +459,7 @@ em_isc_rxd_refill(void *arg, uint16_t rxqid, uint8_t flid __unused,
 		/* DD bits must be cleared */
 		rxd->wb.upper.status_error = 0; 
 	
-		if (++next_pidx == scctx->isc_nrxd)
+		if (++next_pidx == scctx->isc_nrxd[0])
 			next_pidx = 0;
 	}
 }
@@ -487,7 +487,7 @@ em_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx)
 
         device_printf(iflib_get_dev(sc->ctx), "em_isc_rxd_available called\n"); 
 	
-	for (cnt = 0, i = idx; cnt < scctx->isc_nrxd;) {
+	for (cnt = 0, i = idx; cnt < scctx->isc_nrxd[0];) {
 		rxd = &rxr->rx_base[i];
 		staterr = le32toh(rxd->wb.upper.status_error);
                 device_printf(iflib_get_dev(sc->ctx), "Count %d\n", cnt); 
@@ -497,7 +497,7 @@ em_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx)
 			break;
 		}
 		
-		if (++i == scctx->isc_nrxd) {
+		if (++i == scctx->isc_nrxd[0]) {
 			i = 0;
 		}
 
@@ -551,7 +551,7 @@ em_isc_rxd_pkt_get(void *arg, if_rxd_info_t ri)
 		/* Zero out the receive descriptors status. */
 		rxd->wb.upper.status_error &= htole32(~0xFF);
 
-		if (++cidx == scctx->isc_nrxd)
+		if (++cidx == scctx->isc_nrxd[0])
 			cidx = 0;
 		i++;
 	}while (!eop);

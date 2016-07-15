@@ -313,12 +313,12 @@ static struct if_shared_ctx em_sctx_init = {
 	.isc_txrx = &em_txrx,
 	.isc_driver = &em_if_driver,
 
-	.isc_nrxd_min = EM_MIN_RXD,
-	.isc_ntxd_min = EM_MIN_TXD,
-	.isc_nrxd_max = EM_MAX_RXD,
-	.isc_ntxd_max = EM_MAX_TXD,
-	.isc_nrxd_default = EM_DEFAULT_RXD,
-	.isc_ntxd_default = EM_DEFAULT_TXD,
+	.isc_nrxd_min = {EM_MIN_RXD},
+	.isc_ntxd_min = {EM_MIN_TXD},
+	.isc_nrxd_max = {EM_MAX_RXD},
+	.isc_ntxd_max = {EM_MAX_TXD},
+	.isc_nrxd_default = {EM_DEFAULT_RXD},
+	.isc_ntxd_default = {EM_DEFAULT_TXD},
 };
   
 if_shared_ctx_t em_sctx = &em_sctx_init;
