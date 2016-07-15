@@ -336,12 +336,12 @@ static struct if_shared_ctx igb_sctx_init = {
 	.isc_txrx = &igb_txrx,
 	.isc_driver = &igb_if_driver,
 
-	.isc_nrxd_min = IGB_MIN_RXD,
-	.isc_ntxd_min = IGB_MIN_TXD,
-	.isc_nrxd_max = IGB_MAX_RXD,
-	.isc_ntxd_max = IGB_MAX_TXD,
-	.isc_nrxd_default = IGB_DEFAULT_RXD,
-	.isc_ntxd_default = IGB_DEFAULT_TXD,
+	.isc_nrxd_min = {IGB_MIN_RXD},
+	.isc_ntxd_min = {IGB_MIN_TXD},
+	.isc_nrxd_max = {IGB_MAX_RXD},
+	.isc_ntxd_max = {IGB_MAX_TXD},
+	.isc_nrxd_default = {IGB_DEFAULT_RXD},
+	.isc_ntxd_default = {IGB_DEFAULT_TXD},
 };
 
 if_shared_ctx_t igb_sctx = &igb_sctx_init; 
@@ -376,8 +376,8 @@ static int igb_get_regs(SYSCTL_HANDLER_ARGS)
 	struct rx_ring *rxr = &rx_que->rxr;
 	struct tx_ring *txr = &tx_que->txr; 
 	int rc, j;
-	int ntxd = scctx->isc_ntxd;
-	int nrxd = scctx->isc_nrxd; 
+	int ntxd = scctx->isc_ntxd[0];
+	int nrxd = scctx->isc_nrxd[0]; 
 
 	memset(regs_buff, 0, IGB_REGS_LEN * sizeof(u32));
 
@@ -509,7 +509,7 @@ igb_if_tx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs, uint64_t *paddrs, int ntxq
 		que->me = txr->me =  i;
 
 		 /* Allocate transmit buffer memory */
-		 if (!(txr->tx_buffers = (struct igb_tx_buf *) malloc(sizeof(struct igb_tx_buf) * scctx->isc_ntxd, M_DEVBUF, M_NOWAIT | M_ZERO))) {
+		 if (!(txr->tx_buffers = (struct igb_tx_buf *) malloc(sizeof(struct igb_tx_buf) * scctx->isc_ntxd[0], M_DEVBUF, M_NOWAIT | M_ZERO))) {
 	        device_printf(iflib_get_dev(ctx), "failed to allocate tx_buffer memory\n");
 			error = ENOMEM;
 			goto fail; 
@@ -630,10 +630,10 @@ igb_if_attach_pre(if_ctx_t ctx)
 	scctx = adapter->shared = iflib_get_softc_ctx(ctx);
 	adapter->media = iflib_get_media(ctx);
 
-	scctx->isc_txqsizes[0] = roundup2(scctx->isc_ntxd * sizeof(union e1000_adv_tx_desc), IGB_DBA_ALIGN),
-	scctx->isc_rxqsizes[0] = roundup2(scctx->isc_nrxd * sizeof(union e1000_adv_rx_desc), IGB_DBA_ALIGN);
+	scctx->isc_txqsizes[0] = roundup2(scctx->isc_ntxd[0] * sizeof(union e1000_adv_tx_desc), IGB_DBA_ALIGN),
+	scctx->isc_rxqsizes[0] = roundup2(scctx->isc_nrxd[0] * sizeof(union e1000_adv_rx_desc), IGB_DBA_ALIGN);
 
-	adapter->tx_process_limit = scctx->isc_ntxd; 
+	adapter->tx_process_limit = scctx->isc_ntxd[0]; 
 
 	hw = &adapter->hw; 
 	
@@ -2162,8 +2162,8 @@ igb_setup_interface(if_ctx_t ctx)
 #ifdef IGB_LEGACY_TX
 	if_softc_ctx_t scctx = adapter->shared; 
 	ifp->if_start = igb_start;
-	IFQ_SET_MAXLEN(&ifp->if_snd, scctx->isc_ntxd - 1);
-	ifp->if_snd.ifq_drv_maxlen = scctx->isc_ntxd - 1;
+	IFQ_SET_MAXLEN(&ifp->if_snd, scctx->isc_ntxd[0] - 1);
+	ifp->if_snd.ifq_drv_maxlen = scctx->isc_ntxd[0] - 1;
 	IFQ_SET_READY(&ifp->if_snd);
 #endif
 
@@ -2255,7 +2255,7 @@ igb_initialize_transmit_units(if_ctx_t ctx)
 		txdctl = tctl = 0;
 
 		E1000_WRITE_REG(hw, E1000_TDLEN(i),
-		    scctx->isc_ntxd * sizeof(struct e1000_tx_desc));
+		    scctx->isc_ntxd[0] * sizeof(struct e1000_tx_desc));
 		E1000_WRITE_REG(hw, E1000_TDBAH(i),
 		    (uint32_t)(bus_addr >> 32));
 		E1000_WRITE_REG(hw, E1000_TDBAL(i),
@@ -2473,7 +2473,7 @@ igb_initialize_receive_units(if_ctx_t ctx)
 		rxr->hdr_split = igb_header_split; 
 
 		E1000_WRITE_REG(hw, E1000_RDLEN(i),
-		   scctx->isc_nrxd  * sizeof(struct e1000_rx_desc));
+		   scctx->isc_nrxd[0] * sizeof(struct e1000_rx_desc));
 		E1000_WRITE_REG(hw, E1000_RDBAH(i),
 		    (uint32_t)(bus_addr >> 32));
 		E1000_WRITE_REG(hw, E1000_RDBAL(i),
