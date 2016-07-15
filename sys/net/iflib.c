@@ -3490,6 +3490,9 @@ iflib_device_register(device_t dev, void *sc, if_shared_ctx_t sctx, if_ctx_t *ct
 			scctx->isc_ntxd[i] = ctx->ifc_sysctl_ntxds;
 		else
 			scctx->isc_ntxd[i] = sctx->isc_ntxd_default[i];
+	}
+
+	for (i = 0; i < sctx->isc_nrxqs; i++) {
 		if (ctx->ifc_sysctl_nrxds != 0)
 			scctx->isc_nrxd[i] = ctx->ifc_sysctl_nrxds;
 		else
