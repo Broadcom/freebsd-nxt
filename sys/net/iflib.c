@@ -3480,41 +3480,41 @@ iflib_device_register(device_t dev, void *sc, if_shared_ctx_t sctx, if_ctx_t *ct
 	if (ctx->ifc_sysctl_nrxqs != 0)
 		scctx->isc_nrxqsets = ctx->ifc_sysctl_nrxqs;
 
-	/* XXX change for per-queue sizes */
+	/* XXX change sysctl for per-queue sizes */
 	for (i = 0; i < sctx->isc_ntxqs; i++) {
 		if (ctx->ifc_sysctl_ntxds != 0)
 			scctx->isc_ntxd[i] = ctx->ifc_sysctl_ntxds;
 		else
-			scctx->isc_ntxd[i] = sctx->isc_ntxd_default;
+			scctx->isc_ntxd[i] = sctx->isc_ntxd_default[i];
 		if (ctx->ifc_sysctl_nrxds != 0)
 			scctx->isc_nrxd[i] = ctx->ifc_sysctl_nrxds;
 		else
-			scctx->isc_nrxd[i] = sctx->isc_nrxd_default;
+			scctx->isc_nrxd[i] = sctx->isc_nrxd_default[i];
 	}
 
 	for (i = 0; i < sctx->isc_nrxqs; i++) {
-		if (scctx->isc_nrxd[i] < sctx->isc_nrxd_min) {
-			device_printf(dev, "nrxd: %d less than nrxd_min %d - resetting to min\n",
-				      scctx->isc_nrxd[i], sctx->isc_nrxd_min);
-			scctx->isc_nrxd[i] = sctx->isc_nrxd_min;
+		if (scctx->isc_nrxd[i] < sctx->isc_nrxd_min[i]) {
+			device_printf(dev, "nrxd%d: %d less than nrxd_min %d - resetting to min\n",
+				      i, scctx->isc_nrxd[i], sctx->isc_nrxd_min[i]);
+			scctx->isc_nrxd[i] = sctx->isc_nrxd_min[i];
 		}
-		if (scctx->isc_nrxd[i] > sctx->isc_nrxd_max) {
-			device_printf(dev, "nrxd: %d greater than nrxd_max %d - resetting to max\n",
-				      scctx->isc_nrxd[i], sctx->isc_nrxd_max);
-			scctx->isc_nrxd[i] = sctx->isc_nrxd_max;
+		if (scctx->isc_nrxd[i] > sctx->isc_nrxd_max[i]) {
+			device_printf(dev, "nrxd%d: %d greater than nrxd_max %d - resetting to max\n",
+				      i, scctx->isc_nrxd[i], sctx->isc_nrxd_max[i]);
+			scctx->isc_nrxd[i] = sctx->isc_nrxd_max[i];
 		}
 	}
 
 	for (i = 0; i < sctx->isc_ntxqs; i++) {
-		if (scctx->isc_ntxd[i] < sctx->isc_ntxd_min) {
-			device_printf(dev, "ntxd: %d less than ntxd_min %d - resetting to min\n",
-				      scctx->isc_ntxd[i], sctx->isc_ntxd_min);
-			scctx->isc_ntxd[i] = sctx->isc_ntxd_min;
+		if (scctx->isc_ntxd[i] < sctx->isc_ntxd_min[i]) {
+			device_printf(dev, "ntxd%d: %d less than ntxd_min %d - resetting to min\n",
+				      i, scctx->isc_ntxd[i], sctx->isc_ntxd_min[i]);
+			scctx->isc_ntxd[i] = sctx->isc_ntxd_min[i];
 		}
-		if (scctx->isc_ntxd[i] > sctx->isc_ntxd_max) {
-			device_printf(dev, "ntxd: %d greater than ntxd_max %d - resetting to max\n",
-				      scctx->isc_ntxd[i], sctx->isc_ntxd_max);
-			scctx->isc_ntxd[i] = sctx->isc_ntxd_max;
+		if (scctx->isc_ntxd[i] > sctx->isc_ntxd_max[i]) {
+			device_printf(dev, "ntxd%d: %d greater than ntxd_max %d - resetting to max\n",
+				      i, scctx->isc_ntxd[i], sctx->isc_ntxd_max[i]);
+			scctx->isc_ntxd[i] = sctx->isc_ntxd_max[i];
 		}
 	}
 
@@ -3890,12 +3890,12 @@ _iflib_assert(if_shared_ctx_t sctx)
 	MPASS(sctx->isc_txrx->ift_rxd_refill);
 	MPASS(sctx->isc_txrx->ift_rxd_flush);
 
-	MPASS(sctx->isc_nrxd_min);
-	MPASS(sctx->isc_nrxd_max);
-	MPASS(sctx->isc_nrxd_default);
-	MPASS(sctx->isc_ntxd_min);
-	MPASS(sctx->isc_ntxd_max);
-	MPASS(sctx->isc_ntxd_default);
+	MPASS(sctx->isc_nrxd_min[0]);
+	MPASS(sctx->isc_nrxd_max[0]);
+	MPASS(sctx->isc_nrxd_default[0]);
+	MPASS(sctx->isc_ntxd_min[0]);
+	MPASS(sctx->isc_ntxd_max[0]);
+	MPASS(sctx->isc_ntxd_default[0]);
 }
 
 static int

@@ -222,12 +222,12 @@ struct if_shared_ctx {
 /* optional function to transform the read values to match the table*/
 	void (*isc_parse_devinfo) (uint16_t *device_id, uint16_t *subvendor_id,
 				   uint16_t *subdevice_id, uint16_t *rev_id);
-	int isc_nrxd_min;
-	int isc_nrxd_default;
-	int isc_nrxd_max;
-	int isc_ntxd_min;
-	int isc_ntxd_default;
-	int isc_ntxd_max;
+	int isc_nrxd_min[8];
+	int isc_nrxd_default[8];
+	int isc_nrxd_max[8];
+	int isc_ntxd_min[8];
+	int isc_ntxd_default[8];
+	int isc_ntxd_max[8];
 };
 
 typedef struct iflib_dma_info {

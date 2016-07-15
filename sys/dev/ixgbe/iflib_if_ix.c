@@ -441,12 +441,12 @@ static struct if_shared_ctx ixgbe_sctx_init = {
 	.isc_txrx = &ixgbe_txrx,
 	.isc_driver = &ixgbe_if_driver,
 
-	.isc_nrxd_min = MIN_RXD,
-	.isc_ntxd_min = MIN_TXD,
-	.isc_nrxd_max = MAX_RXD,
-	.isc_ntxd_max = MAX_TXD,
-	.isc_nrxd_default = DEFAULT_RXD,
-	.isc_ntxd_default = DEFAULT_TXD,
+	.isc_nrxd_min = {MIN_RXD},
+	.isc_ntxd_min = {MIN_TXD},
+	.isc_nrxd_max = {MAX_RXD},
+	.isc_ntxd_max = {MAX_TXD},
+	.isc_nrxd_default = {DEFAULT_RXD},
+	.isc_ntxd_default = {DEFAULT_TXD},
 };
 
 if_shared_ctx_t ixgbe_sctx = &ixgbe_sctx_init;
