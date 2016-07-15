@@ -1861,7 +1861,11 @@ iflib_init_locked(if_ctx_t ctx)
 	for (i = 0, rxq = ctx->ifc_rxqs; i < sctx->isc_nrxqsets; i++, rxq++) {
 		iflib_netmap_rxq_init(ctx, rxq);
 	}
+#ifdef INVARIANTS
+	i = if_getdrvflags(ifp);
+#endif
 	IFDI_INIT(ctx);
+	MPASS(if_getdrvflags(ifp) == i);
 	for (i = 0, rxq = ctx->ifc_rxqs; i < sctx->isc_nrxqsets; i++, rxq++) {
 		for (j = 0, fl = rxq->ifr_fl; j < rxq->ifr_nfl; j++, fl++) {
 			if (iflib_fl_setup(fl)) {
