@@ -3524,8 +3524,11 @@ iflib_device_register(device_t dev, void *sc, if_shared_ctx_t sctx, if_ctx_t *ct
 		device_printf(dev, "IFDI_ATTACH_PRE failed %d\n", err);
 		return (err);
 	}
-	scctx->isc_ntxqsets = max(1, min(scctx->isc_ntxqsets, scctx->isc_ntxqsets_max));
-	scctx->isc_nrxqsets = max(1, min(scctx->isc_nrxqsets, scctx->isc_nrxqsets_max));
+	if (scctx->isc_ntxqsets_max)
+		scctx->isc_ntxqsets = min(scctx->isc_ntxqsets, scctx->isc_ntxqsets_max);
+	if (scctx->isc_nrxqsets_max)
+		scctx->isc_nrxqsets = min(scctx->isc_nrxqsets, scctx->isc_nrxqsets_max);
+
 #ifdef ACPI_DMAR
 	if (dmar_get_dma_tag(device_get_parent(dev), dev) != NULL)
 		ctx->ifc_flags |= IFC_DMAR;
@@ -4707,6 +4710,7 @@ iflib_msix_init(if_ctx_t ctx)
 		scctx->isc_nrxqsets = rx_queues;
 		scctx->isc_ntxqsets = tx_queues;
 		scctx->isc_intr = IFLIB_INTR_MSIX;
+
 		return (vectors);
 	} else {
 		device_printf(dev, "failed to allocate %d msix vectors, err: %d - using MSI\n", vectors, err);
