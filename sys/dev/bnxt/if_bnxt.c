@@ -228,12 +228,12 @@ static struct if_shared_ctx bnxt_sctx_init = {
 	.isc_nrxqs = 3,
 	.isc_nrxd_min = {16, 16, 16},
 	.isc_nrxd_default = {PAGE_SIZE / sizeof(struct cmpl_base) * 8,
-	    PAGE_SIZE / sizeof(struct bd_base),
-	    PAGE_SIZE / sizeof(struct bd_base)},
+	    PAGE_SIZE / sizeof(struct rx_prod_pkt_bd),
+	    PAGE_SIZE / sizeof(struct rx_prod_pkt_bd)},
 	.isc_nrxd_max = {INT32_MAX, INT32_MAX, INT32_MAX},
 	.isc_ntxd_min = {16, 16, 16},
 	.isc_ntxd_default = {PAGE_SIZE / sizeof(struct cmpl_base) * 2,
-	    PAGE_SIZE / sizeof(struct bd_base)},
+	    PAGE_SIZE / sizeof(struct tx_bd_short)},
 	.isc_ntxd_max = {INT32_MAX, INT32_MAX, INT32_MAX},
 
 	.isc_admin_intrcnt = 1,
@@ -591,10 +591,12 @@ bnxt_attach_pre(if_ctx_t ctx)
 	if (scctx->isc_nrxd[0] <
 	    ((scctx->isc_nrxd[1] * 4) + scctx->isc_nrxd[2]))
 		device_printf(softc->dev,
-		    "WARNING: nrxd0 should be at least 4 * nrxd1 + nrxd2.  Driver may be unstable\n");
+		    "WARNING: nrxd0 (%d) should be at least 4 * nrxd1 (%d) + nrxd2 (%d).  Driver may be unstable\n",
+		    scctx->isc_nrxd[0], scctx->isc_nrxd[1], scctx->isc_nrxd[2]);
 	if (scctx->isc_ntxd[0] < scctx->isc_ntxd[1] * 2)
 		device_printf(softc->dev,
-		    "WARNING: ntxd0 should be at least 2 * ntxd1.  Driver may be unstable\n");
+		    "WARNING: ntxd0 (%d) should be at least 2 * ntxd1 (%d).  Driver may be unstable\n",
+		    scctx->isc_ntxd[0], scctx->isc_ntxd[1]);
 	scctx->isc_txqsizes[0] = sizeof(struct cmpl_base) * scctx->isc_ntxd[0];
 	scctx->isc_txqsizes[1] = sizeof(struct bd_base) * scctx->isc_ntxd[1];
 	scctx->isc_rxqsizes[0] = sizeof(struct cmpl_base) * scctx->isc_nrxd[0];
