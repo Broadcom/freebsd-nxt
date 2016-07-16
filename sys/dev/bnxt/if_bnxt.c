@@ -598,10 +598,13 @@ bnxt_attach_pre(if_ctx_t ctx)
 		    "WARNING: ntxd0 (%d) should be at least 2 * ntxd1 (%d).  Driver may be unstable\n",
 		    scctx->isc_ntxd[0], scctx->isc_ntxd[1]);
 	scctx->isc_txqsizes[0] = sizeof(struct cmpl_base) * scctx->isc_ntxd[0];
-	scctx->isc_txqsizes[1] = sizeof(struct bd_base) * scctx->isc_ntxd[1];
+	scctx->isc_txqsizes[1] = sizeof(struct tx_bd_short) *
+	    scctx->isc_ntxd[1];
 	scctx->isc_rxqsizes[0] = sizeof(struct cmpl_base) * scctx->isc_nrxd[0];
-	scctx->isc_rxqsizes[1] = sizeof(struct bd_base) * scctx->isc_nrxd[1];
-	scctx->isc_rxqsizes[2] = sizeof(struct bd_base) * scctx->isc_nrxd[2];
+	scctx->isc_rxqsizes[1] = sizeof(struct rx_prod_pkt_bd) *
+	    scctx->isc_nrxd[1];
+	scctx->isc_rxqsizes[2] = sizeof(struct rx_prod_pkt_bd) *
+	    scctx->isc_nrxd[2];
 	scctx->isc_max_rxqsets = min(pci_msix_count(softc->dev)-1,
 	    softc->pf.max_cp_rings - 1);
 	scctx->isc_max_rxqsets = min(scctx->isc_max_rxqsets,
