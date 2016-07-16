@@ -159,7 +159,8 @@ typedef struct if_txrx {
 	void (*ift_txd_flush) (void *, uint16_t, uint32_t);
 	int (*ift_txd_credits_update) (void *, uint16_t, uint32_t, bool);
 
-	int (*ift_rxd_available) (void *, uint16_t qsidx, uint32_t pidx);
+	int (*ift_rxd_available) (void *, uint16_t qsidx, uint32_t pidx,
+	    int budget);
 	int (*ift_rxd_pkt_get) (void *, if_rxd_info_t ri);
 	void (*ift_rxd_refill) (void * , uint16_t qsidx, uint8_t flidx, uint32_t pidx,
 							uint64_t *paddrs, caddr_t *vaddrs, uint16_t count, uint16_t buf_size);

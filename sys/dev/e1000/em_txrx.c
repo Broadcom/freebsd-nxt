@@ -19,7 +19,8 @@ static int em_isc_txd_credits_update(void *arg, uint16_t txqid, uint32_t cidx_in
 static void em_isc_rxd_refill(void *arg, uint16_t rxqid, uint8_t flid __unused,
 			      uint32_t pidx, uint64_t *paddrs, caddr_t *vaddrs __unused, uint16_t count, uint16_t buflen __unused);
 static void em_isc_rxd_flush(void *arg, uint16_t rxqid, uint8_t flid __unused, uint32_t pidx);
-static int em_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx);
+static int em_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx,
+				int budget);
 static int em_isc_rxd_pkt_get(void *arg, if_rxd_info_t ri);
 static void em_receive_checksum(uint32_t status, if_rxd_info_t ri);
 
@@ -475,7 +476,7 @@ em_isc_rxd_flush(void *arg, uint16_t rxqid, uint8_t flid __unused, uint32_t pidx
 }
 
 static int
-em_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx)
+em_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx, int budget)
 {
        	struct adapter *sc         = arg;
 	if_softc_ctx_t scctx = sc->shared;
@@ -487,7 +488,7 @@ em_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx)
 
         device_printf(iflib_get_dev(sc->ctx), "em_isc_rxd_available called\n"); 
 	
-	for (cnt = 0, i = idx; cnt < scctx->isc_nrxd[0];) {
+	for (cnt = 0, i = idx; cnt < scctx->isc_nrxd[0] && cnt < budget;) {
 		rxd = &rxr->rx_base[i];
 		staterr = le32toh(rxd->wb.upper.status_error);
                 device_printf(iflib_get_dev(sc->ctx), "Count %d\n", cnt); 

@@ -49,6 +49,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/sysctl.h>
 #include <sys/syslog.h>
 #include <sys/taskqueue.h>
+#include <sys/limits.h>
 
 
 #include <net/if.h>
@@ -608,7 +609,7 @@ static void iflib_tx_structures_free(if_ctx_t ctx);
 static void iflib_rx_structures_free(if_ctx_t ctx);
 static int iflib_queues_alloc(if_ctx_t ctx);
 static int iflib_tx_credits_update(if_ctx_t ctx, iflib_txq_t txq);
-static int iflib_rxd_avail(if_ctx_t ctx, iflib_rxq_t rxq, int cidx);
+static int iflib_rxd_avail(if_ctx_t ctx, iflib_rxq_t rxq, int cidx, int budget);
 static int iflib_qset_structures_setup(if_ctx_t ctx);
 static int iflib_msix_init(if_ctx_t ctx);
 static int iflib_legacy_setup(if_ctx_t ctx, driver_filter_t filter, void *filterarg, int *rid, char *str);
@@ -879,7 +880,7 @@ iflib_netmap_rxsync(struct netmap_kring *kring, int flags)
 		for (fl = rxq->ifr_fl, i = 0; i < rxq->ifr_nfl; i++, fl++) {
 			nic_i = fl->ifl_cidx;
 			nm_i = netmap_idx_n2k(kring, nic_i);
-			avail = ctx->isc_rxd_available(ctx->ifc_softc, kring->ring_id, nic_i);
+			avail = ctx->isc_rxd_available(ctx->ifc_softc, kring->ring_id, nic_i, INT_MAX);
 			for (n = 0; avail > 0; n++, avail--) {
 				error = ctx->isc_rxd_pkt_get(ctx->ifc_softc, &ri);
 				if (error)
@@ -2108,7 +2109,7 @@ iflib_rxeof(iflib_rxq_t rxq, int budget)
 		cidxp = &rxq->ifr_cq_cidx;
 	else
 		cidxp = &rxq->ifr_fl[0].ifl_cidx;
-	if ((avail = iflib_rxd_avail(ctx, rxq, *cidxp)) == 0) {
+	if ((avail = iflib_rxd_avail(ctx, rxq, *cidxp, budget)) == 0) {
 		for (i = 0, fl = &rxq->ifr_fl[0]; i < sctx->isc_nfl; i++, fl++)
 			__iflib_fl_refill_lt(ctx, fl, budget + 8);
 		DBG_COUNTER_INC(rx_unavail);
@@ -2149,7 +2150,7 @@ iflib_rxeof(iflib_rxq_t rxq, int budget)
 		/* will advance the cidx on the corresponding free lists */
 		m = iflib_rxd_pkt_get(rxq, &ri);
 		if (avail == 0 && budget_left)
-			avail = iflib_rxd_avail(ctx, rxq, *cidxp);
+			avail = iflib_rxd_avail(ctx, rxq, *cidxp, budget_left);
 
 		if (__predict_false(m == NULL)) {
 			DBG_COUNTER_INC(rx_mbuf_null);
@@ -2192,7 +2193,9 @@ iflib_rxeof(iflib_rxq_t rxq, int budget)
 #if defined(INET6) || defined(INET)
 	tcp_lro_flush_all(&rxq->ifr_lc);
 #endif
-	return (iflib_rxd_avail(ctx, rxq, *cidxp));
+	if (avail)
+		return true;
+	return (iflib_rxd_avail(ctx, rxq, *cidxp, 1));
 }
 
 #define M_CSUM_FLAGS(m) ((m)->m_pkthdr.csum_flags)
@@ -4559,10 +4562,11 @@ iflib_tx_credits_update(if_ctx_t ctx, iflib_txq_t txq)
 }
 
 static int
-iflib_rxd_avail(if_ctx_t ctx, iflib_rxq_t rxq, int cidx)
+iflib_rxd_avail(if_ctx_t ctx, iflib_rxq_t rxq, int cidx, int budget)
 {
 
-	return (ctx->isc_rxd_available(ctx->ifc_softc, rxq->ifr_id, cidx));
+	return (ctx->isc_rxd_available(ctx->ifc_softc, rxq->ifr_id, cidx,
+	    budget));
 }
 
 void

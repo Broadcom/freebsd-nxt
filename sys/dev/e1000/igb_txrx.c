@@ -18,7 +18,8 @@ static int igb_isc_txd_credits_update(void *arg, uint16_t txqid, uint32_t cidx, 
 static void igb_isc_rxd_refill(void *arg, uint16_t rxqid, uint8_t flid __unused,
 			       uint32_t pidx, uint64_t *paddrs, caddr_t *vaddrs __unused, uint16_t count, uint16_t buf_len __unused);
 static void igb_isc_rxd_flush(void *arg, uint16_t rxqid, uint8_t flid __unused, uint32_t pidx);
-static int igb_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx);
+static int igb_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx,
+				 int budget);
 static int igb_isc_rxd_pkt_get(void *arg, if_rxd_info_t ri);
 
 static int igb_tx_ctx_setup(struct tx_ring *txr, if_pkt_info_t pi, u32 *cmd_type_len, u32 *olinfo_status);
@@ -401,7 +402,7 @@ static void igb_isc_rxd_flush(void *arg, uint16_t rxqid, uint8_t flid __unused, 
          E1000_WRITE_REG(&sc->hw, E1000_RDT(rxr->me), pidx);
 }
 
-static int igb_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx)
+static int igb_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx, int budget)
 {
 	struct adapter *sc           = arg;
 	if_softc_ctx_t scctx         = sc->shared; 
@@ -411,7 +412,7 @@ static int igb_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx)
 	u32                      staterr = 0;
 	int                      cnt, i, iter;
 
-	for (iter = cnt = 0, i = idx; iter < scctx->isc_nrxd[0];) {
+	for (iter = cnt = 0, i = idx; iter < scctx->isc_nrxd[0] && iter < budget;) {
 		rxd = &rxr->rx_base[i];
 		staterr = le32toh(rxd->wb.upper.status_error);	
 		

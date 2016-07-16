@@ -56,7 +56,8 @@ static int ixgbe_isc_txd_credits_update(void *arg, uint16_t txqid, uint32_t cidx
 static void ixgbe_isc_rxd_refill(void *arg, uint16_t rxqid, uint8_t flid __unused,
 				   uint32_t pidx, uint64_t *paddrs, caddr_t *vaddrs __unused, uint16_t count, uint16_t buf_len);
 static void ixgbe_isc_rxd_flush(void *arg, uint16_t rxqid, uint8_t flid __unused, uint32_t pidx);
-static int ixgbe_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx);
+static int ixgbe_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx,
+				   int budget);
 static int ixgbe_isc_rxd_pkt_get(void *arg, if_rxd_info_t ri);
 
 static void ixgbe_rx_checksum(u32 staterr, if_rxd_info_t ri, u32 ptype);
@@ -351,7 +352,7 @@ ixgbe_isc_rxd_flush(void *arg, uint16_t rxqid, uint8_t flid __unused, uint32_t p
 }
 
 static int
-ixgbe_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx)
+ixgbe_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx, int budget)
 {
 	struct adapter *sc       = arg;
 	struct ix_rx_queue *que     = &sc->rx_queues[rxqid];
@@ -361,7 +362,7 @@ ixgbe_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx)
 	int                      cnt, i, nrxd;
 
 	nrxd = sc->shared->isc_nrxd[0];
-	for (cnt = 0, i = idx; cnt < nrxd-1;) {
+	for (cnt = 0, i = idx; cnt < nrxd-1 && cnt < budget;) {
 		rxd = &rxr->rx_base[i];
 		staterr = le32toh(rxd->wb.upper.status_error);
 

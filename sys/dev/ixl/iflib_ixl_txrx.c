@@ -60,7 +60,8 @@ static int ixl_isc_txd_credits_update(void *arg, uint16_t qid, uint32_t cidx, bo
 static void ixl_isc_rxd_refill(void *arg, uint16_t rxqid, uint8_t flid __unused,
 				   uint32_t pidx, uint64_t *paddrs, caddr_t *vaddrs __unused, uint16_t count, uint16_t buf_len);
 static void ixl_isc_rxd_flush(void *arg, uint16_t rxqid, uint8_t flid __unused, uint32_t pidx);
-static int ixl_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx);
+static int ixl_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx,
+				 int budget);
 static int ixl_isc_rxd_pkt_get(void *arg, if_rxd_info_t ri);
 
 extern int ixl_intr(void *arg);
@@ -383,7 +384,7 @@ ixl_isc_rxd_flush(void * arg, uint16_t rxqid, uint8_t flid __unused, uint32_t pi
 }
 
 static int
-ixl_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx)
+ixl_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx, int budget)
 {
 	struct ixl_vsi *vsi = arg;
 	struct rx_ring *rxr = &vsi->rx_queues[rxqid].rxr;
@@ -393,7 +394,7 @@ ixl_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx)
 	int cnt, i, mask;
 
 	mask = vsi->shared->isc_nrxd-1;
-	for (cnt = 0, i = idx; cnt < vsi->shared->isc_nrxd;) {
+	for (cnt = 0, i = idx; cnt < vsi->shared->isc_nrxd && cnt < budget;) {
 		cur = &rxr->rx_base[i];
 		qword = le64toh(cur->wb.qword1.status_error_len);
 		status = (qword & I40E_RXD_QW1_STATUS_MASK)

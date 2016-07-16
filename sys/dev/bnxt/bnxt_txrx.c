@@ -58,7 +58,8 @@ static void bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
     uint16_t buf_size);
 static void bnxt_isc_rxd_flush(void *sc, uint16_t rxqid, uint8_t flid,
     uint32_t pidx);
-static int bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx);
+static int bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx,
+    int budget);
 static int bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri);
 
 static int bnxt_intr(void *sc);
@@ -214,6 +215,13 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 				device_printf(softc->dev,
 				    "TX completion error %u\n", err);
 			avail += le32toh(cmpl[cons].opaque) >> 24;
+			/*
+			 * If we're not clearing, iflib only cares if there's
+			 * at least one buffer.  Don't scan the whole ring in
+			 * this case.
+			 */
+			if (!clear)
+				break;
 			break;
 		default:
 			if (type & 1) {
@@ -298,7 +306,7 @@ bnxt_isc_rxd_flush(void *sc, uint16_t rxqid, uint8_t flid,
 }
 
 static int
-bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx)
+bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx, int budget)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_cp_ring *cpr = &softc->rx_cp_rings[rxqid];
@@ -395,6 +403,8 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx)
 			}
 			break;
 		}
+		if (avail >= budget)
+			break;
 	}
 cmpl_invalid:
 
