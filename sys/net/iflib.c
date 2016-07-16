@@ -2421,13 +2421,13 @@ collapse_pkthdr(struct mbuf *m0)
 
 /*
  * If dodgy hardware rejects the scatter gather chain we've handed it
- * we'll need to rebuild the mbuf chain before we can call m_defrag
+ * we'll need to remove the mbuf chain from ifsg_m[] before we can add the
+ * m_defrag'd mbufs
  */
 static __noinline struct mbuf *
-iflib_rebuild_mbuf(iflib_txq_t txq)
+iflib_remove_mbuf(iflib_txq_t txq)
 {
-
-	int ntxd, mhlen, len, i, pidx;
+	int ntxd, i, pidx;
 	struct mbuf *m, *mh, **ifsd_m;
 	if_softc_ctx_t		scctx;
 
@@ -2440,18 +2440,14 @@ iflib_rebuild_mbuf(iflib_txq_t txq)
 #if MEMORY_LOGGING
 	txq->ift_dequeued++;
 #endif
-	len = m->m_len;
-	mhlen = m->m_pkthdr.len;
 	i = 1;
 
-	while (len < mhlen && (m->m_next == NULL)) {
-		m->m_next = ifsd_m[(pidx + i) & (ntxd-1)];
+	while (m) {
 		ifsd_m[(pidx + i) & (ntxd -1)] = NULL;
 #if MEMORY_LOGGING
 		txq->ift_dequeued++;
 #endif
 		m = m->m_next;
-		len += m->m_len;
 		i++;
 	}
 	return (mh);
@@ -2553,7 +2549,7 @@ iflib_busdma_load_mbuf_sg(iflib_txq_t txq, bus_dma_tag_t tag, bus_dmamap_t map,
 	}
 	return (0);
 err:
-	*m0 = iflib_rebuild_mbuf(txq);
+	*m0 = iflib_remove_mbuf(txq);
 	return (EFBIG);
 }
 
@@ -2697,7 +2693,7 @@ defrag:
 		txq->ift_pidx = pi.ipi_new_pidx;
 		txq->ift_npending += pi.ipi_ndescs;
 	} else if (__predict_false(err == EFBIG && remap < 2)) {
-		*m_headp = m_head = iflib_rebuild_mbuf(txq);
+		*m_headp = m_head = iflib_remove_mbuf(txq);
 		remap = 1;
 		txq->ift_txd_encap_efbig++;
 		goto defrag;
