@@ -412,15 +412,10 @@ bnxt_hwrm_set_link_common(struct bnxt_softc *softc,
 {
 	uint8_t autoneg = softc->link_info.autoneg;
 	uint16_t fw_link_speed = softc->link_info.req_link_speed;
-	uint32_t advertising = softc->link_info.advertising;
 
 	if (autoneg & BNXT_AUTONEG_SPEED) {
 		req->auto_mode |=
-		    HWRM_PORT_PHY_CFG_INPUT_AUTO_MODE_SPEED_MASK;
-
-		req->enables |= htole32(
-		    HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_LINK_SPEED_MASK);
-		req->auto_link_speed_mask = htole16(advertising);
+		    HWRM_PORT_PHY_CFG_INPUT_AUTO_MODE_ALL_SPEEDS;
 
 		req->enables |=
 		    htole32(HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_MODE);
