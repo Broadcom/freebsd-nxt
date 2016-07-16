@@ -1,0 +1,171 @@
+.\" Copyright (c) 2016 Broadcom, All Rights Reserved.
+.\" The term Broadcom refers to Broadcom Limited and/or its subsidiaries
+.\"
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\"
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\"
+.\" THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS'
+.\" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+.\" IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+.\" ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
+.\" BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+.\" CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+.\" SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+.\" INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+.\" CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+.\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+.\" THE POSSIBILITY OF SUCH DAMAGE.
+.\"
+.\" $FreeBSD$
+.\"
+.Dd May 12, 2016
+.Dt BNXT 4
+.Os
+.Sh NAME
+.Nm bnxt
+.Nd "Broadcom NetXtreme-C/E 10/25/40/50 Gigabit Ethernet driver"
+.Sh SYNOPSIS
+To compile this driver into the kernel,
+place the following lines in your
+kernel configuration file:
+.Bd -ragged -offset indent
+.Cd "device bnxt"
+.Ed
+.Pp
+Alternatively, to load the driver as a
+module at boot time, place the following line in
+.Xr loader.conf 5 :
+.Bd -literal -offset indent
+if_bnxt_load="YES"
+.Ed
+.Sh DESCRIPTION
+The
+.Nm
+driver provides support for various NICs based on the Broadcom BCM57301/2/4,
+and BCM57402/4/6 Ethernet controller chips.
+.Pp
+For more information on configuring this device, see
+.Xr ifconfig 8 .
+.Sh HARDWARE
+The
+.Nm
+driver provides support for various NICs based on the Broadcom NetXtreme-C
+family of Gigabit Ethernet controller chips, including the
+following:
+.Pp
+.Bl -bullet -compact
+.It
+Broadcom BCM57301 NetXtreme-C Single-port 10Gb Ethernet
+.It
+Broadcom BCM57302 NetXtreme-C Dual-port 10Gb/25Gb Ethernet
+.It
+Broadcom BCM57304 NetXtreme-C Dual-port 10Gb/25Gb/40Gb/50Gb Ethernet
+.It
+Broadcom BCM57402 NetXtreme-E Dual-port 10Gb Ethernet
+.It
+Broadcom BCM57404 NetXtreme-E Dual-port 10Gb/25Gb Ethernet
+.It
+Broadcom BCM57406 NetXtreme-E Dual-port 10GBase-T Ethernet
+.El
+.Sh LOADER TUNABLES
+The following tunables can be set at the
+.Xr loader 8
+prompt before booting the kernel, or stored in
+.Xr loader.conf 5 .
+.Bl -tag -width indent
+.It Va hw.bnxt.bnxt_use_msix_irq
+Use MSI-X interrupts.  If disabled, legacy interrupts will be used.
+Enabled by default.
+.El
+.Sh SYSCTL VARIABLES
+The following variables are available as both
+.Xr sysctl 8
+variables and
+.Xr loader 8
+variables:
+.Bl -tag -width indent
+.It Va hw.bnxt.shared_cpl
+Combined TX/RX completion ring.
+Disabled by default.
+.It Va hw.bnxt.num_tx
+Number of TX rings.
+Defaults to 4.
+.It Va hw.bnxt.num_rx
+Number of RX rings.
+Defaults to 4.
+.It Va hw.bnxt.tx_ring_size
+Number of descriptors per TX ring.  Must be a power of two.
+Defaults to 1024.
+.It Va hw.bnxt.rx_ring_size
+Number of descriptors per RX ring.  Must be a power of two.
+Defaults to 1024.
+.It Va hw.bnxt.rx_coal_ticks
+RX Coalesce Microseconds.
+Defaults to 4.
+.It Va hw.bnxt.rx_coal_bufs
+RX Coalesce Buffers
+Defaults to 20.
+.It Va hw.bnxt.rx_coal_ticks_irq
+RX Coalesce per Interrupt.
+Defaults to 1.
+.It Va hw.bnxt.rx_coal_bufs_irq
+RX Coalesce Buffers per Interrupt.
+Defaults to 2.
+.It Va hw.bnxt.tx_coal_ticks
+TX Max Coalesce Microseconds.
+Defaults to 25.
+.It Va hw.bnxt.tx_coal_bufs
+TX Coalesce Buffers
+Defaults to 30.
+.It Va hw.bnxt.tx_coal_ticks_irq
+TX Coalesce per Interrupt.
+Defaults to 2.
+.It Va hw.bnxt.tx_coal_bufs_irq
+TX Coalesce Buffers per Interrupt.
+Defaults to 2.
+.El
+.Pp
+The following variables are available only as
+.Xr sysctl 8
+variables:
+.Bl -tag -width indent
+.It Va dev.bnxt.X.cprY.*
+Various per-ring statistics.
+TODO: Document them.
+.El
+.Sh DIAGNOSTICS
+.Bl -diag
+.It "bnxt%d: Resp cmpl intr err msg: 0x%x"
+Device firmware rejected a command from the driver.
+.It "bnxt%d: Timeout sending hwrm msg: (timeout: %d) msg {0x%x 0x%x} len:%d\n"
+Device firmware unresponsive.  Device likely needs to be reset.
+.It "bnxt%d: Timeout sending hwrm msg: (timeout: %d) msg {0x%x 0x%x} len:%d v: %d\n"
+Partial firmware response timed out.  Device may need to be reset.
+.El
+.Sh SEE ALSO
+.Xr altq 4 ,
+.Xr arp 4 ,
+.Xr netintro 4 ,
+.Xr ng_ether 4 ,
+.Xr polling 4 ,
+.Xr vlan 4 ,
+.Xr ifconfig 8
+.Sh HISTORY
+The
+.Nm
+device driver first appeared in
+.Fx 11.0 .
+.Sh AUTHORS
+The
+.Nm
+driver was written by
+.An Jack Vogel Aq Mt jfvogel@gmail.com .
+and is currently mailtained by
+.An Stephen Hurd Aq Mt stephen.hurd@broadcom.com .
