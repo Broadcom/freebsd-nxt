@@ -200,10 +200,10 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 		last_cons = cons;
 		last_v_bit = v_bit;
 		NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
-		__builtin_prefetch(&cmpl[RING_NEXT(&cpr->ring, cons)]);
+		CMPL_PREFETCH_NEXT(cpr, cons);
 
 		if (!CMP_VALID(&cmpl[cons], v_bit))
-			goto cmpl_invalid;
+			goto done;
 
 		type = cmpl[cons].flags_type & TX_CMPL_TYPE_MASK;
 		switch (type) {
@@ -221,20 +221,20 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 			 * this case.
 			 */
 			if (!clear)
-				break;
+				goto done;
 			break;
 		default:
 			if (type & 1) {
 				NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
 				if (!CMP_VALID(&cmpl[cons], v_bit))
-					goto cmpl_invalid;
+					goto done;
 			}
 			device_printf(softc->dev,
 			    "Unhandled TX completion type %u\n", type);
 			break;
 		}
 	}
-cmpl_invalid:
+done:
 
 	if (clear && avail) {
 		cpr->cons = last_cons;
@@ -324,7 +324,7 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx, int budget)
 
 	for (;;) {
 		NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
-		__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring, cons)]);
+		CMPL_PREFETCH_NEXT(cpr, cons);
 
 		if (!CMP_VALID(&cmp[cons], v_bit))
 			goto cmpl_invalid;
@@ -336,7 +336,7 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx, int budget)
 			ags = (rcp->agg_bufs_v1 & RX_PKT_CMPL_AGG_BUFS_MASK) >>
 			    RX_PKT_CMPL_AGG_BUFS_SFT;
 			NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
-			__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring, cons)]);
+			CMPL_PREFETCH_NEXT(cpr, cons);
 
 			if (!CMP_VALID(&cmp[cons], v_bit))
 				goto cmpl_invalid;
@@ -344,8 +344,7 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx, int budget)
 			/* Now account for all the AG completions */
 			for (i=0; i<ags; i++) {
 				NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
-				__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring,
-				    cons)]);
+				CMPL_PREFETCH_NEXT(cpr, cons);
 				if (!CMP_VALID(&cmp[cons], v_bit))
 					goto cmpl_invalid;
 			}
@@ -357,15 +356,14 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx, int budget)
 			    RX_TPA_END_CMPL_AGG_BUFS_MASK) >>
 			    RX_TPA_END_CMPL_AGG_BUFS_SFT;
 			NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
-			__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring, cons)]);
+			CMPL_PREFETCH_NEXT(cpr, cons);
 
 			if (!CMP_VALID(&cmp[cons], v_bit))
 				goto cmpl_invalid;
 			/* Now account for all the AG completions */
 			for (i=0; i<ags; i++) {
 				NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
-				__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring,
-				    cons)]);
+				CMPL_PREFETCH_NEXT(cpr, cons);
 				if (!CMP_VALID(&cmp[cons], v_bit))
 					goto cmpl_invalid;
 			}
@@ -378,7 +376,7 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx, int budget)
 			    RX_TPA_START_CMPL_AGG_ID_SFT;
 			softc->tpa_start[agg_id].low = *rtpa;
 			NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
-			__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring, cons)]);
+			CMPL_PREFETCH_NEXT(cpr, cons);
 
 			if (!CMP_VALID(&cmp[cons], v_bit))
 				goto cmpl_invalid;
@@ -395,8 +393,7 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx, int budget)
 			/* Odd completion types use two completions */
 			if (type & 1) {
 				NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
-				__builtin_prefetch(
-				    &cmp[RING_NEXT(&cpr->ring, cons)]);
+				CMPL_PREFETCH_NEXT(cpr, cons);
 
 				if (!CMP_VALID(&cmp[cons], v_bit))
 					goto cmpl_invalid;
@@ -591,7 +588,7 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 	for (;;) {
 		NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
 		ri->iri_cidx = RING_NEXT(&cpr->ring, ri->iri_cidx);
-		__builtin_prefetch(&cpr[RING_NEXT(&cpr->ring, cpr->cons)]);
+		CMPL_PREFETCH_NEXT(cpr, cpr->cons);
 		cmp = &((struct cmpl_base *)cpr->ring.vaddr)[cpr->cons];
 
 		flags_type = le16toh(cmp->type);
@@ -605,8 +602,7 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 		case CMPL_BASE_TYPE_RX_TPA_START:
 			NEXT_CP_CONS_V(&cpr->ring, cpr->cons, cpr->v_bit);
 			ri->iri_cidx = RING_NEXT(&cpr->ring, ri->iri_cidx);
-			__builtin_prefetch(&cmp[RING_NEXT(&cpr->ring,
-			    cpr->cons)]);
+			CMPL_PREFETCH_NEXT(cpr, cpr->cons);
 			break;
 		default:
 			device_printf(softc->dev,
@@ -617,8 +613,7 @@ bnxt_isc_rxd_pkt_get(void *sc, if_rxd_info_t ri)
 				    cpr->v_bit);
 				ri->iri_cidx = RING_NEXT(&cpr->ring,
 				    ri->iri_cidx);
-				__builtin_prefetch(
-				    &cmp[RING_NEXT(&cpr->ring, cpr->cons)]);
+				CMPL_PREFETCH_NEXT(cpr, cpr->cons);
 			}
 			break;
 		}

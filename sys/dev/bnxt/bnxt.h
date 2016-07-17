@@ -66,12 +66,19 @@ __FBSDID("$FreeBSD$");
 /* Completion related defines */
 #define CMP_VALID(cmp, v_bit) \
 	((!!(((struct cmpl_base *)(cmp))->info3_v & htole32(CMPL_BASE_V))) == !!(v_bit) )
-#define NEXT_CP_CONS_V(ring, cons, v_bit) \
-	if (__predict_false(++(cons) == (ring)->ring_size)) \
-		((cons) = 0, (v_bit) = !v_bit)
+
+#define NEXT_CP_CONS_V(ring, cons, v_bit) do {				    \
+	if (__predict_false(++(cons) == (ring)->ring_size))		    \
+		((cons) = 0, (v_bit) = !v_bit);				    \
+} while (0)
 
 #define RING_NEXT(ring, idx) (__predict_false(idx + 1 == (ring)->ring_size) ? \
 								0 : idx + 1)
+
+#define CMPL_PREFETCH_NEXT(cpr, idx)					    \
+	__builtin_prefetch(&((struct cmpl_base *)(cpr)->ring.vaddr)[((idx) +\
+	    (CACHE_LINE_SIZE / sizeof(struct cmpl_base))) &		    \
+	    ((cpr)->ring.ring_size - 1)])
 
 /*
  * If we update the index, a write barrier is needed after the write to ensure
