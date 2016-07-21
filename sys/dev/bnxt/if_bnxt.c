@@ -687,9 +687,6 @@ bnxt_attach_post(if_ctx_t ctx)
 	    /* These likely get lost... */
 	    IFCAP_VLAN_HWCSUM | IFCAP_JUMBO_MTU;
 
-	/* Disable LRO until iflib allows using mbufs out of order */
-	capabilities &= ~IFCAP_LRO;
-
 	if_setcapabilities(ifp, capabilities);
 
 	enabling = capabilities;
@@ -743,7 +740,6 @@ static void
 bnxt_init(if_ctx_t ctx)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
-	struct ifnet *ifp = iflib_get_ifp(ctx);
 	int i, j;
 	int rc;
 
@@ -861,12 +857,14 @@ bnxt_init(if_ctx_t ctx)
 	if (rc)
 		goto fail;
 
+#ifdef notyet
 	/* Enable LRO/TPA/GRO */
 	rc = bnxt_hwrm_vnic_tpa_cfg(softc, &softc->vnic_info,
-	    (if_getcapenable(ifp) & IFCAP_LRO) ?
+	    (if_getcapenable(iflib_get_ifp(ctx)) & IFCAP_LRO) ?
 	    HWRM_VNIC_TPA_CFG_INPUT_FLAGS_TPA : 0);
 	if (rc)
 		goto fail;
+#endif
 
 	for (i = 0; i < softc->ntxqsets; i++) {
 		/* Allocate the statistics context */
