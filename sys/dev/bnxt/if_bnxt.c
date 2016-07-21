@@ -824,7 +824,7 @@ bnxt_init(if_ctx_t ctx)
 		if (rc)
 			goto fail;
 
-		/* Allocation the completion ring */
+		/* Allocate the completion ring */
 		softc->rx_cp_rings[i].cons = UINT32_MAX;
 		softc->rx_cp_rings[i].v_bit = 1;
 		softc->rx_cp_rings[i].last_idx = UINT32_MAX;
