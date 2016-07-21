@@ -241,11 +241,8 @@ struct bnxt_cos_queue {
 	uint8_t	profile;
 };
 
-struct bnxt_pf_info {
-#define BNXT_FIRST_PF_FID	1
-#define BNXT_FIRST_VF_FID	128
+struct bnxt_func_info {
 	uint32_t	fw_fid;
-	uint8_t		port_id;
 	uint8_t		mac_addr[ETHER_ADDR_LEN];
 	uint16_t	max_rsscos_ctxs;
 	uint16_t	max_cp_rings;
@@ -256,6 +253,12 @@ struct bnxt_pf_info {
 	uint16_t	max_l2_ctxs;
 	uint16_t	max_vnics;
 	uint16_t	max_stat_ctxs;
+};
+
+struct bnxt_pf_info {
+#define BNXT_FIRST_PF_FID	1
+#define BNXT_FIRST_VF_FID	128
+	uint8_t		port_id;
 	uint32_t	first_vf_id;
 	uint16_t	active_vfs;
 	uint16_t	max_vfs;
@@ -410,6 +413,7 @@ struct bnxt_softc {
 	uint32_t		flags;
 	uint32_t		total_msix;
 
+	struct bnxt_func_info	func;
 	struct bnxt_pf_info	pf;
 	struct bnxt_vf_info	vf;
 

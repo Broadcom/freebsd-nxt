@@ -551,6 +551,10 @@ bnxt_attach_pre(if_ctx_t ctx)
 	case BCM57406_NPAR:
 		softc->flags |= BNXT_FLAG_NPAR;
 		break;
+	case BCM57304_VF:
+	case BCM57404_VF:
+		softc->flags |= BNXT_FLAG_VF;
+		break;
 	}
 
 	pci_enable_busmaster(softc->dev);
@@ -602,7 +606,7 @@ bnxt_attach_pre(if_ctx_t ctx)
 	rc = bnxt_hwrm_func_qcaps(softc);
 	if (rc)
 		goto failed;
-	iflib_set_mac(ctx, softc->pf.mac_addr);
+	iflib_set_mac(ctx, softc->func.mac_addr);
 
 	/* Get the queue config */
 	rc = bnxt_hwrm_queue_qportcfg(softc);
@@ -622,7 +626,7 @@ bnxt_attach_pre(if_ctx_t ctx)
 	scctx->isc_tx_tso_segments_max = 31;
 	scctx->isc_tx_tso_size_max = BNXT_TSO_SIZE;
 	scctx->isc_tx_tso_segsize_max = BNXT_TSO_SIZE;
-	scctx->isc_vectors = softc->pf.max_cp_rings;
+	scctx->isc_vectors = softc->func.max_cp_rings;
 	if (scctx->isc_nrxd[0] <
 	    ((scctx->isc_nrxd[1] * 4) + scctx->isc_nrxd[2]))
 		device_printf(softc->dev,
@@ -641,11 +645,11 @@ bnxt_attach_pre(if_ctx_t ctx)
 	scctx->isc_rxqsizes[2] = sizeof(struct rx_prod_pkt_bd) *
 	    scctx->isc_nrxd[2];
 	scctx->isc_max_rxqsets = min(pci_msix_count(softc->dev)-1,
-	    softc->pf.max_cp_rings - 1);
+	    softc->func.max_cp_rings - 1);
 	scctx->isc_max_rxqsets = min(scctx->isc_max_rxqsets,
-	    softc->pf.max_rx_rings);
-	scctx->isc_max_txqsets = min(softc->pf.max_rx_rings,
-	    softc->pf.max_cp_rings - scctx->isc_max_rxqsets - 1);
+	    softc->func.max_rx_rings);
+	scctx->isc_max_txqsets = min(softc->func.max_rx_rings,
+	    softc->func.max_cp_rings - scctx->isc_max_rxqsets - 1);
 	scctx->isc_rss_table_size = HW_HASH_INDEX_SIZE;
 	scctx->isc_rss_table_mask = scctx->isc_rss_table_size - 1;
 

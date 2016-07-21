@@ -361,6 +361,7 @@ bnxt_hwrm_func_qcaps(struct bnxt_softc *softc)
 	struct hwrm_func_qcaps_input req = {0};
 	struct hwrm_func_qcaps_output *resp =
 	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	struct bnxt_func_info *func = &softc->func;
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_FUNC_QCAPS, -1, -1);
 	req.fid = htole16(0xffff);
@@ -370,22 +371,22 @@ bnxt_hwrm_func_qcaps(struct bnxt_softc *softc)
 	if (rc)
 		goto fail;
 
+	func->fw_fid = le16toh(resp->fid);
+	memcpy(func->mac_addr, resp->mac_address, ETHER_ADDR_LEN);
+	func->max_rsscos_ctxs = le16toh(resp->max_rsscos_ctx);
+	func->max_cp_rings = le16toh(resp->max_cmpl_rings);
+	func->max_tx_rings = le16toh(resp->max_tx_rings);
+	func->max_rx_rings = le16toh(resp->max_rx_rings);
+	func->max_hw_ring_grps = le32toh(resp->max_hw_ring_grps);
+	if (!func->max_hw_ring_grps)
+		func->max_hw_ring_grps = func->max_tx_rings;
+	func->max_l2_ctxs = le16toh(resp->max_l2_ctxs);
+	func->max_vnics = le16toh(resp->max_vnics);
+	func->max_stat_ctxs = le16toh(resp->max_stat_ctx);
 	if (BNXT_PF(softc)) {
 		struct bnxt_pf_info *pf = &softc->pf;
 
-		pf->fw_fid = le16toh(resp->fid);
 		pf->port_id = le16toh(resp->port_id);
-		memcpy(pf->mac_addr, resp->mac_address, ETHER_ADDR_LEN);
-		pf->max_rsscos_ctxs = le16toh(resp->max_rsscos_ctx);
-		pf->max_cp_rings = le16toh(resp->max_cmpl_rings);
-		pf->max_tx_rings = le16toh(resp->max_tx_rings);
-		pf->max_rx_rings = le16toh(resp->max_rx_rings);
-		pf->max_hw_ring_grps = le32toh(resp->max_hw_ring_grps);
-		if (!pf->max_hw_ring_grps)
-			pf->max_hw_ring_grps = pf->max_tx_rings;
-		pf->max_l2_ctxs = le16toh(resp->max_l2_ctxs);
-		pf->max_vnics = le16toh(resp->max_vnics);
-		pf->max_stat_ctxs = le16toh(resp->max_stat_ctx);
 		pf->first_vf_id = le16toh(resp->first_vf_id);
 		pf->max_vfs = le16toh(resp->max_vfs);
 		pf->max_encap_records = le32toh(resp->max_encap_records);
@@ -394,22 +395,9 @@ bnxt_hwrm_func_qcaps(struct bnxt_softc *softc)
 		pf->max_tx_wm_flows = le32toh(resp->max_tx_wm_flows);
 		pf->max_rx_em_flows = le32toh(resp->max_rx_em_flows);
 		pf->max_rx_wm_flows = le32toh(resp->max_rx_wm_flows);
-	} else {
-		struct bnxt_vf_info *vf = &softc->vf;
-
-		vf->fw_fid = le16toh(resp->fid);
-		memcpy(vf->mac_addr, resp->mac_address, ETHER_ADDR_LEN);
-		if (!_is_valid_ether_addr(vf->mac_addr))
-			get_random_ether_addr(vf->mac_addr);
-
-		vf->max_rsscos_ctxs = le16toh(resp->max_rsscos_ctx);
-		vf->max_cp_rings = le16toh(resp->max_cmpl_rings);
-		vf->max_tx_rings = le16toh(resp->max_tx_rings);
-		vf->max_rx_rings = le16toh(resp->max_rx_rings);
-		vf->max_l2_ctxs = le16toh(resp->max_l2_ctxs);
-		vf->max_vnics = le16toh(resp->max_vnics);
-		vf->max_stat_ctxs = le16toh(resp->max_stat_ctx);
 	}
+	if (!_is_valid_ether_addr(func->mac_addr))
+		get_random_ether_addr(func->mac_addr);
 
 fail:
 	BNXT_HWRM_UNLOCK(softc);
@@ -901,24 +889,6 @@ bnxt_hwrm_stat_ctx_free(struct bnxt_softc *softc, struct bnxt_cp_ring *cpr)
 }
 
 int
-bnxt_hwrm_port_qstats(struct bnxt_softc *softc)
-{
-	struct bnxt_pf_info *pf = &softc->pf;
-	struct hwrm_port_qstats_input req = {0};
-	struct hwrm_port_qstats_output *resp;
-
-	resp = (void *)softc->hwrm_cmd_resp.idi_vaddr;
-	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_PORT_QSTATS, -1, -1);
-
-	req.port_id = pf->port_id;
-	req.tx_stat_host_addr = htole64(softc->hw_tx_port_stats.idi_paddr);
-	req.rx_stat_host_addr = htole64(softc->hw_rx_port_stats.idi_paddr);
-
-	return hwrm_send_message(softc, &req, sizeof(req));
-}
-
-
-int
 bnxt_hwrm_cfa_l2_set_rx_mask(struct bnxt_softc *softc,
     struct bnxt_vnic_info *vnic)
 {
@@ -984,7 +954,7 @@ bnxt_hwrm_set_filter(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
 	    | HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_DST_ID;
 	req.enables = htole32(enables);
 	req.dst_id = htole16(vnic->id);
-	memcpy(req.l2_addr, softc->pf.mac_addr, ETHER_ADDR_LEN);
+	memcpy(req.l2_addr, softc->func.mac_addr, ETHER_ADDR_LEN);
 	memset(&req.l2_addr_mask, 0xff, sizeof(req.l2_addr_mask));
 
 	BNXT_HWRM_LOCK(softc);
