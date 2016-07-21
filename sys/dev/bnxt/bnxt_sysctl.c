@@ -34,8 +34,10 @@ __FBSDID("$FreeBSD$");
 #include <sys/sysctl.h>
 
 #include "bnxt.h"
+#include "bnxt_hwrm.h"
 #include "bnxt_sysctl.h"
 
+static int bnxt_vlan_only_sysctl(SYSCTL_HANDLER_ARGS);
 /*
  * We want to create:
  * dev.bnxt.0.hwstats.txq0
@@ -79,23 +81,33 @@ bnxt_init_sysctl_ctx(struct bnxt_softc *softc)
 int
 bnxt_free_sysctl_ctx(struct bnxt_softc *softc)
 {
-	int rc;
+	int orc;
+	int rc = 0;
 
 	if (softc->hw_stats_oid != NULL) {
-		rc = sysctl_ctx_free(&softc->hw_stats);
-		if (rc)
-			return rc;
-
-		softc->hw_stats_oid = NULL;
+		orc = sysctl_ctx_free(&softc->hw_stats);
+		if (orc)
+			rc = orc;
+		else
+			softc->hw_stats_oid = NULL;
 	}
 	if (softc->ver_info->ver_oid != NULL) {
-		rc = sysctl_ctx_free(&softc->ver_info->ver_ctx);
-		if (rc)
-			return rc;
-
-		softc->ver_info->ver_oid = NULL;
+		orc = sysctl_ctx_free(&softc->ver_info->ver_ctx);
+		if (orc)
+			rc = orc;
+		else
+			softc->ver_info->ver_oid = NULL;
 	}
-	return 0;
+	if (softc->vnic_info.vlan_only_oid != NULL) {
+		orc = sysctl_remove_oid(softc->vnic_info.vlan_only_oid, 1, 0);
+
+		if (orc)
+			rc = orc;
+		else
+			softc->vnic_info.vlan_only_oid = NULL;
+	}
+
+	return rc;
 }
 
 int
@@ -267,6 +279,47 @@ bnxt_create_ver_sysctls(struct bnxt_ver_info *vi)
 	    "chip_type", CTLFLAG_RD, vi->chip_type > MAX_CHIP_TYPE ?
 	    bnxt_chip_type[MAX_CHIP_TYPE] : bnxt_chip_type[vi->chip_type], 0,
 	    "RoCE firmware name");
+
+	return 0;
+}
+
+static int
+bnxt_vlan_only_sysctl(SYSCTL_HANDLER_ARGS) {
+	struct bnxt_softc *softc = arg1;
+	int rc;
+	int val;
+
+	if (softc == NULL)
+		return EBUSY;
+
+	val = softc->vnic_info.vlan_only;
+	rc = sysctl_handle_int(oidp, &val, 0, req);
+	if (rc || !req->newptr)
+		return rc;
+
+	if (val)
+		val = 1;
+
+	if (val != softc->vnic_info.vlan_only) {
+		softc->vnic_info.vlan_only = val;
+		rc = bnxt_hwrm_cfa_l2_set_rx_mask(softc, &softc->vnic_info);
+	}
+
+	return rc;
+}
+
+int
+bnxt_create_config_sysctls(struct bnxt_softc *softc)
+{
+	struct sysctl_ctx_list *ctx = device_get_sysctl_ctx(softc->dev);
+	struct sysctl_oid_list *children;
+
+	children = SYSCTL_CHILDREN(device_get_sysctl_tree(softc->dev));;
+
+	softc->vnic_info.vlan_only_oid = SYSCTL_ADD_PROC(ctx, children,
+	    OID_AUTO, "vlan_only", CTLTYPE_INT|CTLFLAG_RWTUN, softc, 0,
+	    bnxt_vlan_only_sysctl, "I",
+	    "require vlan tag on received packets when vlan is enabled");
 
 	return 0;
 }

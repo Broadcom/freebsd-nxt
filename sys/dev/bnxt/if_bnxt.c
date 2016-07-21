@@ -228,9 +228,6 @@ static struct if_shared_ctx bnxt_sctx_init = {
 	.isc_nfl = 2,				// Number of Free Lists
 	.isc_flags = IFLIB_HAS_RXCQ | IFLIB_HAS_TXCQ,
 	.isc_q_align = PAGE_SIZE,
-
-	/* We really don't have a maximum here */
-	// TODO: Play around with these...
 	.isc_tx_maxsize = BNXT_TSO_SIZE,
 	.isc_tx_maxsegsize = BNXT_TSO_SIZE,
 	.isc_rx_maxsize = BNXT_TSO_SIZE,
@@ -477,9 +474,7 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 	softc->vnic_info.def_ring_grp = (uint16_t)HWRM_NA_SIGNATURE;
 	softc->vnic_info.cos_rule = (uint16_t)HWRM_NA_SIGNATURE;
 	softc->vnic_info.lb_rule = (uint16_t)HWRM_NA_SIGNATURE;
-	/* TODO: Add a sysctl to select between vlan_novlan and vlanonly */
-	softc->vnic_info.rx_mask = HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_BCAST |
-	    HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_VLAN_NONVLAN;
+	softc->vnic_info.rx_mask = HWRM_CFA_L2_SET_RX_MASK_INPUT_MASK_BCAST;
 	softc->vnic_info.mc_list_count = 0;
 	softc->vnic_info.flags = BNXT_VNIC_FLAG_DEFAULT;
 	rc = iflib_dma_alloc(ctx, BNXT_MAX_MC_ADDRS * ETHER_ADDR_LEN,
@@ -704,6 +699,8 @@ bnxt_attach_post(if_ctx_t ctx)
 	if_t ifp = iflib_get_ifp(ctx);
 	int capabilities, enabling;
 	int rc;
+
+	bnxt_create_config_sysctls(softc);
 
 	/* Update link state etc... */
 	rc = bnxt_probe_phy(softc);
