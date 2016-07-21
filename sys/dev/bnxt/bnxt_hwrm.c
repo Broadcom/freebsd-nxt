@@ -439,19 +439,23 @@ bnxt_hwrm_set_pause_common(struct bnxt_softc *softc,
 		if (softc->flags & BNXT_FLAG_HWRM_120)
 			req->auto_pause =
 			    HWRM_PORT_PHY_CFG_INPUT_AUTO_PAUSE_AUTONEG_PAUSE;
-		if (softc->link_info.req_flow_ctrl & BNXT_LINK_PAUSE_RX)
+		if (softc->link_info.req_flow_ctrl &
+		    HWRM_PORT_PHY_QCFG_OUTPUT_PAUSE_RX)
 			req->auto_pause |=
 			    HWRM_PORT_PHY_CFG_INPUT_AUTO_PAUSE_RX;
-		if (softc->link_info.req_flow_ctrl & BNXT_LINK_PAUSE_TX)
+		if (softc->link_info.req_flow_ctrl &
+		    HWRM_PORT_PHY_QCFG_OUTPUT_PAUSE_TX)
 			req->auto_pause |=
 			    HWRM_PORT_PHY_CFG_INPUT_AUTO_PAUSE_RX;
 		req->enables |=
 		    htole32(HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_PAUSE);
 	} else {
-		if (softc->link_info.req_flow_ctrl & BNXT_LINK_PAUSE_RX)
+		if (softc->link_info.req_flow_ctrl &
+		    HWRM_PORT_PHY_QCFG_OUTPUT_PAUSE_RX)
 			req->force_pause |=
 			    HWRM_PORT_PHY_CFG_INPUT_FORCE_PAUSE_RX;
-		if (softc->link_info.req_flow_ctrl & BNXT_LINK_PAUSE_TX)
+		if (softc->link_info.req_flow_ctrl &
+		    HWRM_PORT_PHY_QCFG_OUTPUT_PAUSE_TX)
 			req->force_pause |=
 			    HWRM_PORT_PHY_CFG_INPUT_FORCE_PAUSE_TX;
 		req->enables |=
