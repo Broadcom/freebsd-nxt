@@ -265,9 +265,30 @@ bnxt_hwrm_ver_get(struct bnxt_softc *softc)
 	    (resp->hwrm_intf_maj > 1))
 		softc->flags |= BNXT_FLAG_HWRM_120;
 
-	snprintf(softc->fw_ver_str, BC_HWRM_STR_LEN, "bc %d.%d.%d rm %d.%d.%d",
-		resp->hwrm_fw_maj, resp->hwrm_fw_min, resp->hwrm_fw_bld,
-		resp->hwrm_intf_maj, resp->hwrm_intf_min, resp->hwrm_intf_upd);
+	snprintf(softc->ver_info->hwrm_if_ver, BNXT_VERSTR_SIZE, "%d.%d.%d",
+	    resp->hwrm_intf_maj, resp->hwrm_intf_min, resp->hwrm_intf_upd);
+	snprintf(softc->ver_info->hwrm_fw_ver, BNXT_VERSTR_SIZE, "%d.%d.%d",
+	    resp->hwrm_fw_maj, resp->hwrm_fw_min, resp->hwrm_fw_bld);
+	snprintf(softc->ver_info->mgmt_fw_ver, BNXT_VERSTR_SIZE, "%d.%d.%d",
+	    resp->mgmt_fw_maj, resp->mgmt_fw_min, resp->mgmt_fw_bld);
+	snprintf(softc->ver_info->netctrl_fw_ver, BNXT_VERSTR_SIZE, "%d.%d.%d",
+	    resp->netctrl_fw_maj, resp->netctrl_fw_min,
+	    resp->netctrl_fw_bld);
+	snprintf(softc->ver_info->roce_fw_ver, BNXT_VERSTR_SIZE, "%d.%d.%d",
+	    resp->roce_fw_maj, resp->roce_fw_min, resp->roce_fw_bld);
+	strlcpy(softc->ver_info->hwrm_fw_name, resp->hwrm_fw_name,
+	    BNXT_NAME_SIZE);
+	strlcpy(softc->ver_info->mgmt_fw_name, resp->mgmt_fw_name,
+	    BNXT_NAME_SIZE);
+	strlcpy(softc->ver_info->netctrl_fw_name, resp->netctrl_fw_name,
+	    BNXT_NAME_SIZE);
+	strlcpy(softc->ver_info->roce_fw_name, resp->roce_fw_name,
+	    BNXT_NAME_SIZE);
+	softc->ver_info->chip_num = le16toh(resp->chip_num);
+	softc->ver_info->chip_rev = resp->chip_rev;
+	softc->ver_info->chip_metal = resp->chip_metal;
+	softc->ver_info->chip_bond_id = resp->chip_bond_id;
+	softc->ver_info->chip_type = resp->chip_platform_type;
 
 	if (resp->max_req_win_len)
 		softc->hwrm_max_req_len = le16toh(resp->max_req_win_len);

@@ -568,10 +568,23 @@ bnxt_attach_pre(if_ctx_t ctx)
 	softc->tpa_start = malloc(sizeof(struct bnxt_full_tpa_start) *
 	    (RX_TPA_START_CMPL_AGG_ID_MASK >> RX_TPA_START_CMPL_AGG_ID_SFT),
 	    M_DEVBUF, M_NOWAIT | M_ZERO);
-	if (softc->tpa_start == NULL)
+	if (softc->tpa_start == NULL) {
+		rc = ENOMEM;
+		device_printf(softc->dev,
+		    "Unable to allocate space for TPA\n");
 		goto tpa_failed;
+	}
 
 	/* Get firmware version and compare with driver */
+	softc->ver_info = malloc(sizeof(struct bnxt_ver_info),
+	    M_DEVBUF, M_NOWAIT | M_ZERO);
+	if (softc->ver_info == NULL) {
+		rc = ENOMEM;
+		device_printf(softc->dev,
+		    "Unable to allocate space for version info\n");
+		goto ver_alloc_fail;
+	}
+
 	rc = bnxt_hwrm_ver_get(softc);
 	if (rc) {
 		device_printf(softc->dev, "attach: hwrm ver get failed\n");
@@ -668,6 +681,8 @@ bnxt_attach_pre(if_ctx_t ctx)
 failed:
 	bnxt_hwrm_func_drv_unrgtr(softc, false);
 ver_fail:
+	free(softc->ver_info, M_DEVBUF);
+ver_alloc_fail:
 	free(softc->tpa_start, M_DEVBUF);
 tpa_failed:
 	bnxt_free_hwrm_dma_mem(softc);
@@ -692,6 +707,7 @@ bnxt_attach_post(if_ctx_t ctx)
 		goto failed;
 
 	/* Needs to be done after probing the phy */
+	bnxt_create_ver_sysctls(softc->ver_info);
 	bnxt_add_media_types(softc);
 	ifmedia_set(softc->media, IFM_ETHER | IFM_AUTO);
 
@@ -749,6 +765,7 @@ bnxt_detach(if_ctx_t ctx)
 		free(tag, M_DEVBUF);
 	iflib_dma_free(&softc->def_cp_ring_mem);
 	free(softc->tpa_start, M_DEVBUF);
+	free(softc->ver_info, M_DEVBUF);
 
 	/* hwrm is cleaned up in queues_free() since it's called later */
 	pci_disable_busmaster(softc->dev);
@@ -1438,7 +1455,6 @@ static int
 bnxt_probe_phy(struct bnxt_softc *softc)
 {
 	struct bnxt_link_info *link_info = &softc->link_info;
-	char phy_ver[PHY_VER_STR_LEN];
 	int rc = 0;
 
 	rc = bnxt_update_link(softc, false);
@@ -1470,11 +1486,6 @@ bnxt_probe_phy(struct bnxt_softc *softc)
 	else
 		link_info->req_link_speed = link_info->force_link_speed;
 	link_info->advertising = link_info->auto_link_speeds;
-	snprintf(phy_ver, PHY_VER_STR_LEN, " ph %d.%d.%d",
-		 link_info->phy_ver[0],
-		 link_info->phy_ver[1],
-		 link_info->phy_ver[2]);
-	strcat(softc->fw_ver_str, phy_ver);
 	return (rc);
 }
 
@@ -1698,6 +1709,14 @@ bnxt_update_link(struct bnxt_softc *softc, bool chng_link_state)
 	link_info->phy_ver[0] = resp->phy_maj;
 	link_info->phy_ver[1] = resp->phy_min;
 	link_info->phy_ver[2] = resp->phy_bld;
+	snprintf(softc->ver_info->phy_ver, sizeof(softc->ver_info->phy_ver),
+	    "%d.%d.%d", link_info->phy_ver[0], link_info->phy_ver[1],
+	    link_info->phy_ver[2]);
+	strlcpy(softc->ver_info->phy_vendor, resp->phy_vendor_name,
+	    BNXT_NAME_SIZE);
+	strlcpy(softc->ver_info->phy_partnumber, resp->phy_vendor_partnumber,
+	    BNXT_NAME_SIZE);
+	link_info->media_type = resp->media_type;
 	link_info->media_type = resp->media_type;
 	link_info->transceiver = resp->xcvr_pkg_type;
 	link_info->phy_addr = resp->eee_config_phy_addr &

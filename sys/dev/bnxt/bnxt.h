@@ -368,6 +368,34 @@ struct bnxt_full_tpa_start {
 	struct rx_tpa_start_cmpl_hi high;
 };
 
+/* All the version information for the part */
+#define BNXT_VERSTR_SIZE	(3*3+2+1)	/* ie: "255.255.255\0" */
+#define BNXT_NAME_SIZE		17
+struct bnxt_ver_info {
+	char		hwrm_if_ver[BNXT_VERSTR_SIZE];
+	char		hwrm_fw_ver[BNXT_VERSTR_SIZE];
+	char		mgmt_fw_ver[BNXT_VERSTR_SIZE];
+	char		netctrl_fw_ver[BNXT_VERSTR_SIZE];
+	char		roce_fw_ver[BNXT_VERSTR_SIZE];
+	char		phy_ver[BNXT_VERSTR_SIZE];
+
+	char		hwrm_fw_name[BNXT_NAME_SIZE];
+	char		mgmt_fw_name[BNXT_NAME_SIZE];
+	char		netctrl_fw_name[BNXT_NAME_SIZE];
+	char		roce_fw_name[BNXT_NAME_SIZE];
+	char		phy_vendor[BNXT_NAME_SIZE];
+	char		phy_partnumber[BNXT_NAME_SIZE];
+
+	uint16_t	chip_num;
+	uint8_t		chip_rev;
+	uint8_t		chip_metal;
+	uint8_t		chip_bond_id;
+	uint8_t		chip_type;
+
+	struct sysctl_ctx_list	ver_ctx;
+	struct sysctl_oid	*ver_oid;
+};
+
 struct bnxt_softc {
 	device_t	dev;
 	if_ctx_t	ctx;
@@ -378,10 +406,6 @@ struct bnxt_softc {
 	struct bnxt_bar_info	hwrm_bar;
 	struct bnxt_bar_info	doorbell_bar;
 	struct bnxt_link_info	link_info;
-#define FW_VER_STR_LEN		32
-#define BC_HWRM_STR_LEN		21
-#define PHY_VER_STR_LEN		(FW_VER_STR_LEN - BC_HWRM_STR_LEN)
-	char			fw_ver_str[FW_VER_STR_LEN];
 #define BNXT_FLAG_NPAR		1
 	uint32_t		flags;
 	uint32_t		total_msix;
@@ -429,6 +453,7 @@ struct bnxt_softc {
 	struct sysctl_oid	*hw_stats_oid;
 
 	struct bnxt_full_tpa_start *tpa_start;
+	struct bnxt_ver_info	*ver_info;
 };
 
 struct bnxt_filter_info {

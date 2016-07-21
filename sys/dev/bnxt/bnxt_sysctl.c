@@ -51,11 +51,11 @@ __FBSDID("$FreeBSD$");
 int
 bnxt_init_sysctl_ctx(struct bnxt_softc *softc)
 {
-	struct sysctl_ctx_list *dev_ctx;
+	struct sysctl_ctx_list *ctx;
 
 	sysctl_ctx_init(&softc->hw_stats);
-	dev_ctx = device_get_sysctl_ctx(softc->dev);
-	softc->hw_stats_oid = SYSCTL_ADD_NODE(dev_ctx,
+	ctx = device_get_sysctl_ctx(softc->dev);
+	softc->hw_stats_oid = SYSCTL_ADD_NODE(ctx,
 	    SYSCTL_CHILDREN(device_get_sysctl_tree(softc->dev)), OID_AUTO,
 	    "hwstats", CTLFLAG_RD, 0, "hardware statistics");
 	if (!softc->hw_stats_oid) {
@@ -63,9 +63,18 @@ bnxt_init_sysctl_ctx(struct bnxt_softc *softc)
 		return ENOMEM;
 	}
 
+	sysctl_ctx_init(&softc->ver_info->ver_ctx);
+	ctx = device_get_sysctl_ctx(softc->dev);
+	softc->ver_info->ver_oid = SYSCTL_ADD_NODE(ctx,
+	    SYSCTL_CHILDREN(device_get_sysctl_tree(softc->dev)), OID_AUTO,
+	    "ver", CTLFLAG_RD, 0, "hardware/firmware version information");
+	if (!softc->ver_info->ver_oid) {
+		sysctl_ctx_free(&softc->ver_info->ver_ctx);
+		return ENOMEM;
+	}
+
 	return 0;
 }
-
 
 int
 bnxt_free_sysctl_ctx(struct bnxt_softc *softc)
@@ -78,6 +87,13 @@ bnxt_free_sysctl_ctx(struct bnxt_softc *softc)
 			return rc;
 
 		softc->hw_stats_oid = NULL;
+	}
+	if (softc->ver_info->ver_oid != NULL) {
+		rc = sysctl_ctx_free(&softc->ver_info->ver_ctx);
+		if (rc)
+			return rc;
+
+		softc->ver_info->ver_oid = NULL;
 	}
 	return 0;
 }
@@ -180,6 +196,77 @@ bnxt_create_rx_sysctls(struct bnxt_softc *softc, int rxr)
 	SYSCTL_ADD_QUAD(&softc->hw_stats, SYSCTL_CHILDREN(oid), OID_AUTO,
 	    "tpa_aborts", CTLFLAG_RD, &rx_stats[rxr].tpa_aborts,
 	    "TPA aborts");
+
+	return 0;
+}
+
+static char *bnxt_chip_type[] = {
+	"ASIC",
+	"FPGA",
+	"Palladium",
+	"Unknown"
+};
+#define MAX_CHIP_TYPE 3
+
+int
+bnxt_create_ver_sysctls(struct bnxt_ver_info *vi)
+{
+	struct sysctl_oid *oid = vi->ver_oid;
+
+	if (!oid)
+		return ENOMEM;
+
+	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "hwrm_if", CTLFLAG_RD, vi->hwrm_if_ver, 0,
+	    "HWRM interface version");
+	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "hwrm_fw", CTLFLAG_RD, vi->hwrm_fw_ver, 0,
+	    "HWRM firmware version");
+	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "mgmt_fw", CTLFLAG_RD, vi->mgmt_fw_ver, 0,
+	    "management firmware version");
+	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "netctrl_fw", CTLFLAG_RD, vi->netctrl_fw_ver, 0,
+	    "network control firmware version");
+	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "roce_fw", CTLFLAG_RD, vi->roce_fw_ver, 0,
+	    "RoCE firmware version");
+	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "phy", CTLFLAG_RD, vi->phy_ver, 0,
+	    "PHY version");
+	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "hwrm_fw_name", CTLFLAG_RD, vi->hwrm_fw_name, 0,
+	    "HWRM firmware name");
+	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "mgmt_fw_name", CTLFLAG_RD, vi->mgmt_fw_name, 0,
+	    "management firmware name");
+	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "netctrl_fw_name", CTLFLAG_RD, vi->netctrl_fw_name, 0,
+	    "network control firmware name");
+	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "roce_fw_name", CTLFLAG_RD, vi->roce_fw_name, 0,
+	    "RoCE firmware name");
+	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "phy_vendor", CTLFLAG_RD, vi->phy_vendor, 0,
+	    "PHY vendor name");
+	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "phy_partnumber", CTLFLAG_RD, vi->phy_partnumber, 0,
+	    "PHY vendor part number");
+	SYSCTL_ADD_U16(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "chip_num", CTLFLAG_RD, &vi->chip_num, 0, "chip number");
+	SYSCTL_ADD_U8(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "chip_rev", CTLFLAG_RD, &vi->chip_rev, 0, "chip revision");
+	SYSCTL_ADD_U8(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "chip_metal", CTLFLAG_RD, &vi->chip_metal, 0, "chip metal number");
+	SYSCTL_ADD_U8(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "chip_bond_id", CTLFLAG_RD, &vi->chip_bond_id, 0,
+	    "chip bond id");
+	SYSCTL_ADD_U8(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "chip_metal", CTLFLAG_RD, &vi->chip_metal, 0, "chip metal number");
+	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "chip_type", CTLFLAG_RD, vi->chip_type > MAX_CHIP_TYPE ?
+	    bnxt_chip_type[MAX_CHIP_TYPE] : bnxt_chip_type[vi->chip_type], 0,
+	    "RoCE firmware name");
 
 	return 0;
 }
