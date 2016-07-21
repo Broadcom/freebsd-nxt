@@ -382,6 +382,7 @@ struct bnxt_softc {
 #define BC_HWRM_STR_LEN		21
 #define PHY_VER_STR_LEN		(FW_VER_STR_LEN - BC_HWRM_STR_LEN)
 	char			fw_ver_str[FW_VER_STR_LEN];
+#define BNXT_FLAG_NPAR		1
 	uint32_t		flags;
 	uint32_t		total_msix;
 

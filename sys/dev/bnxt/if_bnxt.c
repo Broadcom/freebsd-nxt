@@ -545,6 +545,14 @@ bnxt_attach_pre(if_ctx_t ctx)
 	softc->sctx = iflib_get_sctx(ctx);
 	scctx = softc->scctx;
 
+	switch (softc->sctx->isc_vendor_info->pvi_device_id) {
+	case BCM57402_NPAR:
+	case BCM57404_NPAR:
+	case BCM57406_NPAR:
+		softc->flags |= BNXT_FLAG_NPAR;
+		break;
+	}
+
 	pci_enable_busmaster(softc->dev);
 
 	if (bnxt_pci_mapping(softc))
@@ -1479,6 +1487,12 @@ bnxt_add_media_types(struct bnxt_softc *softc)
 
 	supported = link_info->support_speeds;
 
+	/* Auto is always supported */
+	ifmedia_add(softc->media, IFM_ETHER | IFM_AUTO, 0, NULL);
+
+	if (softc->flags & BNXT_FLAG_NPAR)
+		return;
+
 	switch (phy_type) {
 	case HWRM_PORT_PHY_QCFG_OUTPUT_PHY_TYPE_BASECR:
 		if (supported & HWRM_PORT_PHY_QCFG_OUTPUT_SUPPORT_SPEEDS_100GB)
@@ -1581,9 +1595,6 @@ bnxt_add_media_types(struct bnxt_softc *softc)
 			    NULL);
 		break;
 	}
-
-	/* Auto is always supported */
-	ifmedia_add(softc->media, IFM_ETHER | IFM_AUTO, 0, NULL);
 
 	return;
 }
