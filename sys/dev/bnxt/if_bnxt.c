@@ -490,8 +490,8 @@ bnxt_rx_queues_alloc(if_ctx_t ctx, caddr_t *vaddrs,
 	bus_dmamap_sync(softc->vnic_info.rss_hash_key_tbl.idi_tag,
 	    softc->vnic_info.rss_hash_key_tbl.idi_map,
 	    BUS_DMASYNC_PREWRITE);
-	arc4rand(softc->vnic_info.rss_hash_key_tbl.idi_vaddr,
-	    softc->vnic_info.rss_hash_key_tbl.idi_size, 0);
+	memcpy(softc->vnic_info.rss_hash_key_tbl.idi_vaddr,
+	    softc->vnic_info.rss_hash_key, HW_HASH_KEY_SIZE);
 
 	/* Allocate the RSS tables */
 	rc = iflib_dma_alloc(ctx, HW_HASH_INDEX_SIZE * sizeof(uint16_t),
@@ -670,6 +670,17 @@ bnxt_attach_pre(if_ctx_t ctx)
 	rc = bnxt_init_sysctl_ctx(softc);
 	if (rc)
 		goto failed;
+	arc4rand(softc->vnic_info.rss_hash_key, HW_HASH_KEY_SIZE, 0);
+	softc->vnic_info.rss_hash_type =
+	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_IPV4 |
+	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_TCP_IPV4 |
+	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_UDP_IPV4 |
+	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_IPV6 |
+	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_TCP_IPV6 |
+	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_UDP_IPV6;
+	rc = bnxt_create_config_sysctls_pre(softc);
+	if (rc)
+		goto failed;
 
 	/* Initialize the vlan list */
 	SLIST_INIT(&softc->vnic_info.vlan_tags);
@@ -700,7 +711,7 @@ bnxt_attach_post(if_ctx_t ctx)
 	int capabilities, enabling;
 	int rc;
 
-	bnxt_create_config_sysctls(softc);
+	bnxt_create_config_sysctls_post(softc);
 
 	/* Update link state etc... */
 	rc = bnxt_probe_phy(softc);
@@ -887,13 +898,9 @@ bnxt_init(if_ctx_t ctx)
 			j = 0;
 	}
 
+	/* TODO: Make the hash type configurable */
 	rc = bnxt_hwrm_rss_cfg(softc, &softc->vnic_info,
-	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_IPV4 |
-	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_TCP_IPV4 |
-	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_UDP_IPV4 |
-	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_IPV6 |
-	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_TCP_IPV6 |
-	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_UDP_IPV6);
+	    softc->vnic_info.rss_hash_type);
 	if (rc)
 		goto fail;
 

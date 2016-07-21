@@ -98,14 +98,6 @@ bnxt_free_sysctl_ctx(struct bnxt_softc *softc)
 		else
 			softc->ver_info->ver_oid = NULL;
 	}
-	if (softc->vnic_info.vlan_only_oid != NULL) {
-		orc = sysctl_remove_oid(softc->vnic_info.vlan_only_oid, 1, 0);
-
-		if (orc)
-			rc = orc;
-		else
-			softc->vnic_info.vlan_only_oid = NULL;
-	}
 
 	return rc;
 }
@@ -284,6 +276,112 @@ bnxt_create_ver_sysctls(struct bnxt_ver_info *vi)
 }
 
 static int
+bnxt_rss_key_sysctl(SYSCTL_HANDLER_ARGS)
+{
+	struct bnxt_softc *softc = arg1;
+	char buf[HW_HASH_KEY_SIZE*2+1] = {0};
+	char *p;
+	int i;
+	int rc;
+
+	for (p = buf, i=0; i<HW_HASH_KEY_SIZE; i++)
+		p += sprintf(p, "%02x", softc->vnic_info.rss_hash_key[i]);
+
+	rc = sysctl_handle_string(oidp, buf, sizeof(buf), req);
+	if (rc || req->newptr == NULL)
+		return rc;
+
+	if (strspn(buf, "0123456789abcdefABCDEF") != (HW_HASH_KEY_SIZE * 2))
+		return EINVAL;
+
+	for (p = buf, i=0; i<HW_HASH_KEY_SIZE; i++) {
+		if (sscanf(p, "%02hhx", &softc->vnic_info.rss_hash_key[i]) != 1)
+			return EINVAL;
+		p += 2;
+	}
+
+	if (if_getdrvflags(iflib_get_ifp(softc->ctx)) & IFF_DRV_RUNNING)
+		bnxt_hwrm_rss_cfg(softc, &softc->vnic_info,
+		    softc->vnic_info.rss_hash_type);
+
+	return rc;
+}
+
+static const char *bnxt_hash_types[] = {"ipv4", "tcp_ipv4", "udp_ipv4", "ipv6",
+    "tcp_ipv6", "udp_ipv6", NULL};
+
+static int bnxt_get_rss_type_str_bit(char *str)
+{
+	int i;
+
+	for (i=0; bnxt_hash_types[i]; i++)
+		if (strcmp(bnxt_hash_types[i], str) == 0)
+			return i;
+
+	return -1;
+}
+
+static int
+bnxt_rss_type_sysctl(SYSCTL_HANDLER_ARGS)
+{
+	struct bnxt_softc *softc = arg1;
+	char buf[256] = {0};
+	char *p;
+	char *next;
+	int rc;
+	int type;
+	int bit;
+
+	for (type = softc->vnic_info.rss_hash_type; type;
+	    type &= ~(1<<bit)) {
+		bit = ffs(type) - 1;
+		if (bit >= sizeof(bnxt_hash_types) / sizeof(const char *))
+			continue;
+		if (type != softc->vnic_info.rss_hash_type)
+			strcat(buf, ",");
+		strcat(buf, bnxt_hash_types[bit]);
+	}
+
+	rc = sysctl_handle_string(oidp, buf, sizeof(buf), req);
+	if (rc || req->newptr == NULL)
+		return rc;
+
+	for (type = 0, next = buf, p = strsep(&next, " ,"); p;
+	    p = strsep(&next, " ,")) {
+		bit = bnxt_get_rss_type_str_bit(p);
+		if (bit == -1)
+			return EINVAL;
+		type |= 1<<bit;
+	}
+	if (type != softc->vnic_info.rss_hash_type) {
+		softc->vnic_info.rss_hash_type = type;
+		if (if_getdrvflags(iflib_get_ifp(softc->ctx)) & IFF_DRV_RUNNING)
+			bnxt_hwrm_rss_cfg(softc, &softc->vnic_info,
+			    softc->vnic_info.rss_hash_type);
+	}
+
+	return rc;
+}
+
+int
+bnxt_create_config_sysctls_pre(struct bnxt_softc *softc)
+{
+	struct sysctl_ctx_list *ctx = device_get_sysctl_ctx(softc->dev);
+	struct sysctl_oid_list *children;
+
+	children = SYSCTL_CHILDREN(device_get_sysctl_tree(softc->dev));;
+
+	SYSCTL_ADD_PROC(ctx, children, OID_AUTO, "rss_key",
+	    CTLTYPE_STRING|CTLFLAG_RWTUN, softc, 0, bnxt_rss_key_sysctl, "A",
+	    "RSS key");
+	SYSCTL_ADD_PROC(ctx, children, OID_AUTO, "rss_type",
+	    CTLTYPE_STRING|CTLFLAG_RWTUN, softc, 0, bnxt_rss_type_sysctl, "A",
+	    "RSS key");
+
+	return 0;
+}
+
+static int
 bnxt_vlan_only_sysctl(SYSCTL_HANDLER_ARGS) {
 	struct bnxt_softc *softc = arg1;
 	int rc;
@@ -302,23 +400,23 @@ bnxt_vlan_only_sysctl(SYSCTL_HANDLER_ARGS) {
 
 	if (val != softc->vnic_info.vlan_only) {
 		softc->vnic_info.vlan_only = val;
-		rc = bnxt_hwrm_cfa_l2_set_rx_mask(softc, &softc->vnic_info);
+		if (if_getdrvflags(iflib_get_ifp(softc->ctx)) & IFF_DRV_RUNNING)
+		    rc = bnxt_hwrm_cfa_l2_set_rx_mask(softc, &softc->vnic_info);
 	}
 
 	return rc;
 }
 
 int
-bnxt_create_config_sysctls(struct bnxt_softc *softc)
+bnxt_create_config_sysctls_post(struct bnxt_softc *softc)
 {
 	struct sysctl_ctx_list *ctx = device_get_sysctl_ctx(softc->dev);
 	struct sysctl_oid_list *children;
 
 	children = SYSCTL_CHILDREN(device_get_sysctl_tree(softc->dev));;
 
-	softc->vnic_info.vlan_only_oid = SYSCTL_ADD_PROC(ctx, children,
-	    OID_AUTO, "vlan_only", CTLTYPE_INT|CTLFLAG_RWTUN, softc, 0,
-	    bnxt_vlan_only_sysctl, "I",
+	SYSCTL_ADD_PROC(ctx, children, OID_AUTO, "vlan_only",
+	    CTLTYPE_INT|CTLFLAG_RWTUN, softc, 0, bnxt_vlan_only_sysctl, "I",
 	    "require vlan tag on received packets when vlan is enabled");
 
 	return 0;

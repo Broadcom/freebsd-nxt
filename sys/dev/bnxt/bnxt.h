@@ -320,7 +320,6 @@ struct bnxt_vnic_info {
 
 	uint32_t	rx_mask;
 	bool		vlan_only;
-	struct sysctl_oid *vlan_only_oid;
 	struct iflib_dma_info mc_list;
 	int		mc_list_count;
 #define BNXT_MAX_MC_ADDRS	16
@@ -332,6 +331,8 @@ struct bnxt_vnic_info {
 	uint32_t	flow_id;
 
 	uint16_t	rss_id;
+	uint32_t	rss_hash_type;
+	uint8_t		rss_hash_key[HW_HASH_KEY_SIZE];
 	struct iflib_dma_info rss_hash_key_tbl;
 	struct iflib_dma_info	rss_grp_tbl;
 	SLIST_HEAD(vlan_head, bnxt_vlan_tag) vlan_tags;
