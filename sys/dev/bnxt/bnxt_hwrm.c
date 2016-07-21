@@ -503,7 +503,7 @@ bnxt_hwrm_set_link_setting(struct bnxt_softc *softc, bool set_pause,
 	struct hwrm_port_phy_cfg_input req = {0};
 
 	if (softc->flags & BNXT_FLAG_NPAR)
-		return ENOTSUPP;
+		return ENOTSUP;
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_PORT_PHY_CFG, -1, -1);
 	if (set_pause)
@@ -523,7 +523,7 @@ bnxt_hwrm_set_pause(struct bnxt_softc *softc)
 	int rc;
 
 	if (softc->flags & BNXT_FLAG_NPAR)
-		return ENOTSUPP;
+		return ENOTSUP;
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_PORT_PHY_CFG, -1, -1);
 	bnxt_hwrm_set_pause_common(softc, &req);
