@@ -322,10 +322,12 @@ struct bnxt_vnic_info {
 	bool		vlan_only;
 	struct iflib_dma_info mc_list;
 	int		mc_list_count;
-#define BNXT_MAX_MC_ADDRS	16
+#define BNXT_MAX_MC_ADDRS		16
 
 	uint32_t	flags;
-#define BNXT_VNIC_FLAG_DEFAULT	1
+#define BNXT_VNIC_FLAG_DEFAULT		0x01
+#define BNXT_VNIC_FLAG_BD_STALL		0x02
+#define BNXT_VNIC_FLAG_VLAN_STRIP	0x04
 
 	uint64_t	filter_id;
 	uint32_t	flow_id;

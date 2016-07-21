@@ -568,7 +568,11 @@ bnxt_hwrm_vnic_cfg(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_VNIC_CFG, -1, -1);
 
 	if (vnic->flags & BNXT_VNIC_FLAG_DEFAULT)
-		req.flags = htole32(HWRM_VNIC_ALLOC_INPUT_FLAGS_DEFAULT);
+		req.flags |= htole32(HWRM_VNIC_CFG_INPUT_FLAGS_DEFAULT);
+	if (vnic->flags & BNXT_VNIC_FLAG_BD_STALL)
+		req.flags |= htole32(HWRM_VNIC_CFG_INPUT_FLAGS_BD_STALL_MODE);
+	if (vnic->flags & BNXT_VNIC_FLAG_VLAN_STRIP)
+		req.flags |= htole32(HWRM_VNIC_CFG_INPUT_FLAGS_VLAN_STRIP_MODE);
 	req.enables = htole32(HWRM_VNIC_CFG_INPUT_ENABLES_DFLT_RING_GRP |
 	    HWRM_VNIC_CFG_INPUT_ENABLES_RSS_RULE |
 	    HWRM_VNIC_CFG_INPUT_ENABLES_MRU);

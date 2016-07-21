@@ -265,8 +265,6 @@ bnxt_create_ver_sysctls(struct bnxt_ver_info *vi)
 	SYSCTL_ADD_U8(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
 	    "chip_bond_id", CTLFLAG_RD, &vi->chip_bond_id, 0,
 	    "chip bond id");
-	SYSCTL_ADD_U8(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
-	    "chip_metal", CTLFLAG_RD, &vi->chip_metal, 0, "chip metal number");
 	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
 	    "chip_type", CTLFLAG_RD, vi->chip_type > MAX_CHIP_TYPE ?
 	    bnxt_chip_type[MAX_CHIP_TYPE] : bnxt_chip_type[vi->chip_type], 0,
@@ -363,6 +361,56 @@ bnxt_rss_type_sysctl(SYSCTL_HANDLER_ARGS)
 	return rc;
 }
 
+static int
+bnxt_rx_stall_sysctl(SYSCTL_HANDLER_ARGS) {
+	struct bnxt_softc *softc = arg1;
+	int rc;
+	int val;
+
+	if (softc == NULL)
+		return EBUSY;
+
+	val = (bool)(softc->vnic_info.flags & BNXT_VNIC_FLAG_BD_STALL);
+	rc = sysctl_handle_int(oidp, &val, 0, req);
+	if (rc || !req->newptr)
+		return rc;
+
+	if (val)
+		softc->vnic_info.flags |= BNXT_VNIC_FLAG_BD_STALL;
+	else
+		softc->vnic_info.flags &= ~BNXT_VNIC_FLAG_BD_STALL;
+
+	if (if_getdrvflags(iflib_get_ifp(softc->ctx)) & IFF_DRV_RUNNING)
+		rc = bnxt_hwrm_vnic_cfg(softc, &softc->vnic_info);
+
+	return rc;
+}
+
+static int
+bnxt_vlan_strip_sysctl(SYSCTL_HANDLER_ARGS) {
+	struct bnxt_softc *softc = arg1;
+	int rc;
+	int val;
+
+	if (softc == NULL)
+		return EBUSY;
+
+	val = (bool)(softc->vnic_info.flags & BNXT_VNIC_FLAG_VLAN_STRIP);
+	rc = sysctl_handle_int(oidp, &val, 0, req);
+	if (rc || !req->newptr)
+		return rc;
+
+	if (val)
+		softc->vnic_info.flags |= BNXT_VNIC_FLAG_VLAN_STRIP;
+	else
+		softc->vnic_info.flags &= ~BNXT_VNIC_FLAG_VLAN_STRIP;
+
+	if (if_getdrvflags(iflib_get_ifp(softc->ctx)) & IFF_DRV_RUNNING)
+		rc = bnxt_hwrm_vnic_cfg(softc, &softc->vnic_info);
+
+	return rc;
+}
+
 int
 bnxt_create_config_sysctls_pre(struct bnxt_softc *softc)
 {
@@ -377,6 +425,12 @@ bnxt_create_config_sysctls_pre(struct bnxt_softc *softc)
 	SYSCTL_ADD_PROC(ctx, children, OID_AUTO, "rss_type",
 	    CTLTYPE_STRING|CTLFLAG_RWTUN, softc, 0, bnxt_rss_type_sysctl, "A",
 	    "RSS key");
+	SYSCTL_ADD_PROC(ctx, children, OID_AUTO, "rx_stall",
+	    CTLTYPE_INT|CTLFLAG_RWTUN, softc, 0, bnxt_rx_stall_sysctl, "I",
+	    "buffer rx packets in hardware until the host posts new buffers");
+	SYSCTL_ADD_PROC(ctx, children, OID_AUTO, "vlan_strip",
+	    CTLTYPE_INT|CTLFLAG_RWTUN, softc, 0, bnxt_vlan_strip_sysctl, "I",
+	    "strip VLAN tag in the RX path");
 
 	return 0;
 }
@@ -401,7 +455,8 @@ bnxt_vlan_only_sysctl(SYSCTL_HANDLER_ARGS) {
 	if (val != softc->vnic_info.vlan_only) {
 		softc->vnic_info.vlan_only = val;
 		if (if_getdrvflags(iflib_get_ifp(softc->ctx)) & IFF_DRV_RUNNING)
-		    rc = bnxt_hwrm_cfa_l2_set_rx_mask(softc, &softc->vnic_info);
+			rc = bnxt_hwrm_cfa_l2_set_rx_mask(softc,
+			    &softc->vnic_info);
 	}
 
 	return rc;
