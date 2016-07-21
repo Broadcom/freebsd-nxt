@@ -50,12 +50,35 @@ __FBSDID("$FreeBSD$");
 /* PCI IDs */
 #define BROADCOM_VENDOR_ID	0x14E4
 
-#define BCM57301	0x16C8
-#define BCM57302	0x16C9
-#define BCM57304	0x16CA
-#define BCM57402	0x16D0
-#define BCM57404	0x16D1
-#define BCM57406	0x16D2
+#define BCM57301	0x16c8
+#define BCM57302	0x16c9
+#define BCM57304	0x16ca
+#define BCM57417_NPAR	0x16cc
+#define BCM58700	0x16cd
+#define BCM57311	0x16ce
+#define BCM57312	0x16cf
+#define BCM57402	0x16d0
+#define BCM57404	0x16d1
+#define BCM57406	0x16d2
+#define BCM57402_NPAR	0x16d4
+#define BCM57407	0x16d5
+#define BCM57412	0x16d6
+#define BCM57414	0x16d7
+#define BCM57416	0x16d8
+#define BCM57417	0x16d9
+#define BCM57412_NPAR	0x16de
+#define BCM57314	0x16df
+#define BCM57417_SFP	0x16e2
+#define BCM57416_SFP	0x16e3
+#define BCM57404_NPAR	0x16e7
+#define BCM57406_NPAR	0x16e8
+#define BCM57407_SFP	0x16e9
+#define BCM57414_NPAR	0x16ec
+#define BCM57416_NPAR	0x16ee
+#define BCM57304_VF	0x16cb
+#define BCM57404_VF	0x16d3
+#define BCM57414_VF	0x16dc
+#define BCM57314_VF	0x16e1
 
 #define CSUM_OFFLOAD		(CSUM_IP_TSO|CSUM_IP6_TSO|CSUM_IP| \
 				 CSUM_IP_UDP|CSUM_IP_TCP|CSUM_IP_SCTP| \
