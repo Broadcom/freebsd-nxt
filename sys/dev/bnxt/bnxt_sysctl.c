@@ -212,9 +212,59 @@ static char *bnxt_chip_type[] = {
 };
 #define MAX_CHIP_TYPE 3
 
-int
-bnxt_create_ver_sysctls(struct bnxt_ver_info *vi)
+void *bnxt_hwrm_nvm_read(struct bnxt_softc *softc, uint16_t index,
+    uint32_t offset, uint32_t length);
+
+static int
+bnxt_package_ver_sysctl(SYSCTL_HANDLER_ARGS)
 {
+	struct bnxt_softc *softc = arg1;
+	char *pkglog = NULL;
+	char *p;
+	char *next;
+	char unk[] = "<unknown>";
+	char *buf = unk;
+	int rc;
+	int field;
+	uint16_t ordinal = BNX_DIR_ORDINAL_FIRST;
+	uint16_t index;
+	uint32_t data_len;
+
+	rc = bnxt_hwrm_nvm_find_dir_entry(softc, BNX_DIR_TYPE_PKG_LOG,
+	    &ordinal, BNX_DIR_EXT_NONE, &index, false,
+	    BNXT_DIR_SEARCH_OPT_EQUAL, &data_len, NULL, NULL);
+	if (rc == 0 && data_len) {
+		pkglog = bnxt_hwrm_nvm_read(softc, index, 0, data_len);
+		if (pkglog) {
+			/* NULL terminate */
+			pkglog[data_len-1] = 0;
+
+			/* Set p = start of last line */
+			p = strrchr(pkglog, '\n');
+			if (p == NULL)
+				p = pkglog;
+
+			/* Now find the correct tab delimited field */
+			for (field = 0, next = p, p = strsep(&next, "\t");
+			    field < BNX_PKG_LOG_FIELD_IDX_PKG_VERSION && p;
+			    p = strsep(&next, "\t")) {
+				field++;
+			}
+			if (field == BNX_PKG_LOG_FIELD_IDX_PKG_VERSION)
+				buf = p;
+		}
+	}
+
+	rc = sysctl_handle_string(oidp, buf, 0, req);
+	if (pkglog)
+		free(pkglog, M_DEVBUF);
+	return rc;
+}
+
+int
+bnxt_create_ver_sysctls(struct bnxt_softc *softc)
+{
+	struct bnxt_ver_info *vi = softc->ver_info;
 	struct sysctl_oid *oid = vi->ver_oid;
 
 	if (!oid)
@@ -269,6 +319,10 @@ bnxt_create_ver_sysctls(struct bnxt_ver_info *vi)
 	    "chip_type", CTLFLAG_RD, vi->chip_type > MAX_CHIP_TYPE ?
 	    bnxt_chip_type[MAX_CHIP_TYPE] : bnxt_chip_type[vi->chip_type], 0,
 	    "RoCE firmware name");
+	SYSCTL_ADD_PROC(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "package_ver", CTLTYPE_STRING|CTLFLAG_RD, softc, 0,
+	    bnxt_package_ver_sysctl, "A",
+	    "currently installed package version");
 
 	return 0;
 }

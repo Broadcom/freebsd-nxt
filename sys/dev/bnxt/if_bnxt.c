@@ -719,7 +719,7 @@ bnxt_attach_post(if_ctx_t ctx)
 		goto failed;
 
 	/* Needs to be done after probing the phy */
-	bnxt_create_ver_sysctls(softc->ver_info);
+	bnxt_create_ver_sysctls(softc);
 	bnxt_add_media_types(softc);
 	ifmedia_set(softc->media, IFM_ETHER | IFM_AUTO);
 

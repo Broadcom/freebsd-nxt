@@ -239,6 +239,8 @@ bnxt_hwrm_ver_get(struct bnxt_softc *softc)
 	struct hwrm_ver_get_output	*resp =
 	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	int				rc;
+	const char nastr[] = "<not installed>";
+	const char naver[] = "<N/A>";
 
 	softc->hwrm_max_req_len = HWRM_MAX_REQ_LEN;
 	softc->hwrm_cmd_timeo = 1000;
@@ -269,21 +271,47 @@ bnxt_hwrm_ver_get(struct bnxt_softc *softc)
 	    resp->hwrm_intf_maj, resp->hwrm_intf_min, resp->hwrm_intf_upd);
 	snprintf(softc->ver_info->hwrm_fw_ver, BNXT_VERSTR_SIZE, "%d.%d.%d",
 	    resp->hwrm_fw_maj, resp->hwrm_fw_min, resp->hwrm_fw_bld);
-	snprintf(softc->ver_info->mgmt_fw_ver, BNXT_VERSTR_SIZE, "%d.%d.%d",
-	    resp->mgmt_fw_maj, resp->mgmt_fw_min, resp->mgmt_fw_bld);
-	snprintf(softc->ver_info->netctrl_fw_ver, BNXT_VERSTR_SIZE, "%d.%d.%d",
-	    resp->netctrl_fw_maj, resp->netctrl_fw_min,
-	    resp->netctrl_fw_bld);
-	snprintf(softc->ver_info->roce_fw_ver, BNXT_VERSTR_SIZE, "%d.%d.%d",
-	    resp->roce_fw_maj, resp->roce_fw_min, resp->roce_fw_bld);
 	strlcpy(softc->ver_info->hwrm_fw_name, resp->hwrm_fw_name,
 	    BNXT_NAME_SIZE);
-	strlcpy(softc->ver_info->mgmt_fw_name, resp->mgmt_fw_name,
-	    BNXT_NAME_SIZE);
-	strlcpy(softc->ver_info->netctrl_fw_name, resp->netctrl_fw_name,
-	    BNXT_NAME_SIZE);
-	strlcpy(softc->ver_info->roce_fw_name, resp->roce_fw_name,
-	    BNXT_NAME_SIZE);
+
+	if (resp->mgmt_fw_maj == 0 && resp->mgmt_fw_min == 0 &&
+	    resp->mgmt_fw_bld == 0) {
+		strlcpy(softc->ver_info->mgmt_fw_ver, naver, BNXT_VERSTR_SIZE);
+		strlcpy(softc->ver_info->mgmt_fw_name, nastr, BNXT_NAME_SIZE);
+	}
+	else {
+		snprintf(softc->ver_info->mgmt_fw_ver, BNXT_VERSTR_SIZE,
+		    "%d.%d.%d", resp->mgmt_fw_maj, resp->mgmt_fw_min,
+		    resp->mgmt_fw_bld);
+		strlcpy(softc->ver_info->mgmt_fw_name, resp->mgmt_fw_name,
+		    BNXT_NAME_SIZE);
+	}
+	if (resp->netctrl_fw_maj == 0 && resp->netctrl_fw_min == 0 &&
+	    resp->netctrl_fw_bld == 0) {
+		strlcpy(softc->ver_info->netctrl_fw_ver, naver,
+		    BNXT_VERSTR_SIZE);
+		strlcpy(softc->ver_info->netctrl_fw_name, nastr,
+		    BNXT_NAME_SIZE);
+	}
+	else {
+		snprintf(softc->ver_info->netctrl_fw_ver, BNXT_VERSTR_SIZE,
+		    "%d.%d.%d", resp->netctrl_fw_maj, resp->netctrl_fw_min,
+		    resp->netctrl_fw_bld);
+		strlcpy(softc->ver_info->netctrl_fw_name, resp->netctrl_fw_name,
+		    BNXT_NAME_SIZE);
+	}
+	if (resp->roce_fw_maj == 0 && resp->roce_fw_min == 0 &&
+	    resp->roce_fw_bld == 0) {
+		strlcpy(softc->ver_info->roce_fw_ver, naver, BNXT_VERSTR_SIZE);
+		strlcpy(softc->ver_info->roce_fw_name, nastr, BNXT_NAME_SIZE);
+	}
+	else {
+		snprintf(softc->ver_info->roce_fw_ver, BNXT_VERSTR_SIZE,
+		    "%d.%d.%d", resp->roce_fw_maj, resp->roce_fw_min,
+		    resp->roce_fw_bld);
+		strlcpy(softc->ver_info->roce_fw_name, resp->roce_fw_name,
+		    BNXT_NAME_SIZE);
+	}
 	softc->ver_info->chip_num = le16toh(resp->chip_num);
 	softc->ver_info->chip_rev = resp->chip_rev;
 	softc->ver_info->chip_metal = resp->chip_metal;
@@ -1064,4 +1092,87 @@ bnxt_hwrm_vnic_tpa_cfg(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic,
 	req.min_agg_len = htole32(0);
 
 	return hwrm_send_message(softc, &req, sizeof(req));
+}
+
+int
+bnxt_hwrm_nvm_find_dir_entry(struct bnxt_softc *softc, uint16_t type,
+    uint16_t *ordinal, uint16_t ext, uint16_t *index, bool use_index,
+    uint8_t search_opt, uint32_t *data_length, uint32_t *item_length,
+    uint32_t *fw_ver)
+{
+	struct hwrm_nvm_find_dir_entry_input req = {0};
+	struct hwrm_nvm_find_dir_entry_output *resp =
+	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	int	rc = 0;
+
+	MPASS(ordinal);
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_FIND_DIR_ENTRY, -1, -1);
+	if (use_index) {
+		req.enables = htole32(
+		    HWRM_NVM_FIND_DIR_ENTRY_INPUT_ENABLES_DIR_IDX_VALID);
+		req.dir_idx = htole16(*index);
+	}
+	req.dir_type = htole16(type);
+	req.dir_ordinal = htole16(*ordinal);
+	req.dir_ext = htole16(ext);
+	req.opt_ordinal = search_opt;
+
+	BNXT_HWRM_LOCK(softc);
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	if (rc)
+		goto exit;
+
+	if (item_length)
+		*item_length = le32toh(resp->dir_item_length);
+	if (data_length)
+		*data_length = le32toh(resp->dir_data_length);
+	if (fw_ver)
+		*fw_ver = le32toh(resp->fw_ver);
+	*ordinal = le16toh(resp->dir_ordinal);
+	if (index)
+		*index = le16toh(resp->dir_idx);
+
+exit:
+	BNXT_HWRM_UNLOCK(softc);
+	return (rc);
+}
+
+void *
+bnxt_hwrm_nvm_read(struct bnxt_softc *softc, uint16_t index, uint32_t offset,
+    uint32_t length)
+{
+	struct hwrm_nvm_read_input req = {0};
+	struct iflib_dma_info data;
+	void *buf = NULL;
+	int rc;
+
+	rc = iflib_dma_alloc(softc->ctx, length, &softc->hwrm_cmd_resp,
+	    BUS_DMA_NOWAIT);
+	if (rc)
+		return NULL;
+	buf = malloc(length, M_DEVBUF, M_NOWAIT);
+	if (buf == NULL)
+		goto error;
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_READ, -1, -1);
+	req.host_dest_addr = htole64(data.idi_paddr);
+	req.dir_idx = htole16(index);
+	req.offset = htole32(offset);
+	req.len = htole32(length);
+	rc = hwrm_send_message(softc, &req, sizeof(req));
+	if (rc)
+		goto error;
+	memcpy(buf, data.idi_vaddr, length);
+
+	goto exit;
+
+error:
+	if (buf) {
+		free(buf, M_DEVBUF);
+		buf = NULL;
+	}
+exit:
+	iflib_dma_free(&data);
+	return buf;
 }
