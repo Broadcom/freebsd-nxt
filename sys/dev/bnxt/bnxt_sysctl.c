@@ -236,7 +236,7 @@ bnxt_package_ver_sysctl(SYSCTL_HANDLER_ARGS)
 	if (rc == 0 && data_len) {
 		pkglog = bnxt_hwrm_nvm_read(softc, index, 0, data_len);
 		if (pkglog) {
-			/* NULL terminate */
+			/* NULL terminate (removes last \n) */
 			pkglog[data_len-1] = 0;
 
 			/* Set p = start of last line */
