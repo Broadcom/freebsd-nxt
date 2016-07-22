@@ -1147,7 +1147,7 @@ bnxt_hwrm_nvm_read(struct bnxt_softc *softc, uint16_t index, uint32_t offset,
 	void *buf = NULL;
 	int rc;
 
-	rc = iflib_dma_alloc(softc->ctx, length, &softc->hwrm_cmd_resp,
+	rc = iflib_dma_alloc(softc->ctx, length, &data,
 	    BUS_DMA_NOWAIT);
 	if (rc)
 		return NULL;
@@ -1175,4 +1175,225 @@ error:
 exit:
 	iflib_dma_free(&data);
 	return buf;
+}
+
+int
+bnxt_hwrm_fw_reset(struct bnxt_softc *softc, uint8_t processor,
+    uint8_t *selfreset)
+{
+	struct hwrm_fw_reset_input req = {0};
+	struct hwrm_fw_reset_output *resp =
+	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	int rc;
+
+	MPASS(selfreset);
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_FW_RESET, -1, -1);
+	req.embedded_proc_type = processor;
+	req.selfrst_status = *selfreset;
+
+	BNXT_HWRM_LOCK(softc);
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	if (rc)
+		goto exit;
+	*selfreset = resp->selfrst_status;
+
+exit:
+	BNXT_HWRM_UNLOCK(softc);
+	return rc;
+}
+
+int
+bnxt_hwrm_fw_qstatus(struct bnxt_softc *softc, uint8_t type, uint8_t *selfreset)
+{
+	struct hwrm_fw_qstatus_input req = {0};
+	struct hwrm_fw_qstatus_output *resp =
+	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	int rc;
+
+	MPASS(selfreset);
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_FW_QSTATUS, -1, -1);
+	req.embedded_proc_type = type;
+
+	BNXT_HWRM_LOCK(softc);
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	if (rc)
+		goto exit;
+	*selfreset = resp->selfrst_status;
+
+exit:
+	BNXT_HWRM_UNLOCK(softc);
+	return rc;
+}
+
+int
+bnxt_hwrm_nvm_write(struct bnxt_softc *softc, void *data, uint16_t type,
+    uint16_t ordinal, uint16_t ext, uint16_t attr, uint16_t option,
+    uint32_t data_length, bool keep, uint32_t *item_length, uint16_t *index)
+{
+	struct hwrm_nvm_write_input req = {0};
+	struct hwrm_nvm_write_output *resp =
+	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	struct iflib_dma_info dma_data;
+	int rc;
+
+	rc = iflib_dma_alloc(softc->ctx, data_length, &dma_data,
+	    BUS_DMA_NOWAIT);
+	if (rc)
+		return ENOMEM;
+	memcpy(dma_data.idi_vaddr, data, data_length);
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_WRITE, -1, -1);
+
+	req.host_src_addr = htole64(dma_data.idi_paddr);
+	req.dir_type = htole16(type);
+	req.dir_ordinal = htole16(ordinal);
+	req.dir_ext = htole16(ext);
+	req.dir_attr = htole16(attr);
+	req.dir_data_length = htole32(data_length);
+	req.option = htole16(option);
+	if (keep) {
+		req.flags =
+		    htole16(HWRM_NVM_WRITE_INPUT_FLAGS_KEEP_ORIG_ACTIVE_IMG);
+	}
+	if (item_length)
+		req.dir_item_length = htole32(item_length);
+
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	if (rc)
+		goto exit;
+	if (item_length)
+		*item_length = le32toh(resp->dir_item_length);
+	if (index)
+		*index = le16toh(resp->dir_idx);
+
+exit:
+	BNXT_HWRM_UNLOCK(softc);
+	return rc;
+}
+
+int
+bnxt_hwrm_nvm_erase_dir_entry(struct bnxt_softc *softc, uint16_t index)
+{
+	struct hwrm_nvm_erase_dir_entry_input req = {0};
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_ERASE_DIR_ENTRY, -1, -1);
+	req.dir_idx = htole16(index);
+	return hwrm_send_message(softc, &req, sizeof(req));
+}
+
+int
+bnxt_hwrm_nvm_get_dir_info(struct bnxt_softc *softc, uint32_t *entries,
+    uint32_t *entry_length)
+{
+	struct hwrm_nvm_get_dir_info_input req = {0};
+	struct hwrm_nvm_get_dir_info_output *resp =
+	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	int rc;
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_GET_DIR_INFO, -1, -1);
+
+	BNXT_HWRM_LOCK(softc);
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	if (rc)
+		goto exit;
+
+	if (entries)
+		*entries = le32toh(resp->entries);
+	if (entry_length)
+		*entry_length = le32toh(resp->entry_length);
+
+exit:
+	BNXT_HWRM_UNLOCK(softc);
+	return rc;
+}
+
+void *
+bnxt_hwrm_nvm_get_dir_entries(struct bnxt_softc *softc, uint32_t *entries,
+    uint32_t *entry_length)
+{
+	struct hwrm_nvm_get_dir_entries_input req = {0};
+	uint32_t ent;
+	uint32_t ent_len;
+	struct iflib_dma_info dma_data;
+	void *data;
+	size_t data_len;
+	int rc;
+
+	if (!entries)
+		entries = &ent;
+	if (!entry_length)
+		entry_length = &ent_len;
+
+	rc = bnxt_hwrm_nvm_get_dir_info(softc, entries, entry_length);
+	if (rc)
+		return NULL;
+
+	/*
+	 * TODO: There's a race condition here that could blow up DMA memory...
+	 *	 we need to allocate the max size, not the currently in use
+	 *	 size.  The command should totally have a max size here.
+	 */
+	data_len = *entries * *entry_length;
+
+	rc = iflib_dma_alloc(softc->ctx, data_len, &dma_data,
+	    BUS_DMA_NOWAIT);
+	if (rc)
+		return NULL;
+
+	data = malloc(data_len, M_DEVBUF, M_NOWAIT);
+	if (data == NULL) {
+		iflib_dma_free(&dma_data);
+		return NULL;
+	}
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_GET_DIR_ENTRIES, -1, -1);
+	req.host_dest_addr = htole64(dma_data.idi_paddr);
+	rc = hwrm_send_message(softc, &req, sizeof(req));
+	if (rc) {
+		free(data, M_DEVBUF);
+		data = NULL;
+		goto exit;
+	}
+	memcpy(data, dma_data.idi_vaddr, data_len);
+
+exit:
+	iflib_dma_free(&dma_data);
+	return data;
+}
+
+int
+bnxt_hwrm_nvm_get_dev_info(struct bnxt_softc *softc, uint16_t *mfg_id,
+    uint16_t *device_id, uint32_t *sector_size, uint32_t *nvram_size,
+    uint32_t *reserved_size, uint32_t *available_size)
+{
+	struct hwrm_nvm_get_dev_info_input req = {0};
+	struct hwrm_nvm_get_dev_info_output *resp =
+	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	int rc;
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_GET_DEV_INFO, -1, -1);
+
+	BNXT_HWRM_LOCK(softc);
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	if (rc)
+		goto exit;
+
+	if (mfg_id)
+		*mfg_id = le16toh(resp->manufacturer_id);
+	if (device_id)
+		*device_id = le16toh(resp->device_id);
+	if (sector_size)
+		*sector_size = le32toh(resp->sector_size);
+	if (nvram_size)
+		*nvram_size = le32toh(resp->nvram_size);
+	if (reserved_size)
+		*reserved_size = le32toh(resp->reserved_size);
+	if (available_size)
+		*available_size = le32toh(resp->available_size);
+
+exit:
+	BNXT_HWRM_UNLOCK(softc);
+	return rc;
 }

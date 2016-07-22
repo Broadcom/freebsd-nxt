@@ -82,5 +82,20 @@ int bnxt_hwrm_nvm_find_dir_entry(struct bnxt_softc *softc, uint16_t type,
     uint32_t *fw_ver);
 void *bnxt_hwrm_nvm_read(struct bnxt_softc *softc, uint16_t index,
     uint32_t offset, uint32_t length);
+int bnxt_hwrm_fw_reset(struct bnxt_softc *softc, uint8_t processor,
+    uint8_t *selfreset);
+int bnxt_hwrm_fw_qstatus(struct bnxt_softc *softc, uint8_t type,
+    uint8_t *selfreset);
+int bnxt_hwrm_nvm_write(struct bnxt_softc *softc, void *data, uint16_t type,
+    uint16_t ordinal, uint16_t ext, uint16_t attr, uint16_t option,
+    uint32_t data_length, bool keep, uint32_t *item_length, uint16_t *index);
+int bnxt_hwrm_nvm_erase_dir_entry(struct bnxt_softc *softc, uint16_t index);
+int bnxt_hwrm_nvm_get_dir_info(struct bnxt_softc *softc, uint32_t *entries,
+    uint32_t *entry_length);
+void *bnxt_hwrm_nvm_get_dir_entries(struct bnxt_softc *softc,
+    uint32_t *entries, uint32_t *entry_length);
+int bnxt_hwrm_nvm_get_dev_info(struct bnxt_softc *softc, uint16_t *mfg_id,
+    uint16_t *device_id, uint32_t *sector_size, uint32_t *nvram_size,
+    uint32_t *reserved_size, uint32_t *available_size);
 
 #endif

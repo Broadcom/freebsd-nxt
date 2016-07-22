@@ -233,6 +233,73 @@ enum bnxnvm_pkglog_field_index {
 #define BNX_DIR_EXT_NONE		0
 #define BNXT_DIR_SEARCH_OPT_EQUAL	0
 
+enum bnxt_ioctl_type {
+	BNXT_GETIOCTL_DIR,
+	BNXT_GETIOCTL_ITEM,
+	BNXT_GETIOCTL_FWSTATUS,
+	BNXT_SETIOCTL_CREATEITEM,
+	BNXT_SETIOCTL_ERASEITEM,
+	BNXT_SETIOCTL_WRITEITEM,
+	BNXT_SETIOCTL_FWRESET
+};
+
+struct bnxt_ioctl_data_dir {
+	unsigned int count;
+	unsigned int entry_size;
+	size_t size;
+	uint8_t entries[];
+};
+
+struct bnxt_ioctl_data_item {
+	int index;
+	uint32_t length;
+	uint8_t data[];
+};
+
+struct bnxt_ioctl_data_fw_status {
+	int processor_type;
+};
+
+struct bnxt_ioctl_data_create {
+	uint16_t type;
+	uint16_t ordinal;
+	uint16_t ext;
+	uint16_t attr;
+	uint32_t length;
+};
+
+struct bnxt_ioctl_data_erase {
+	int index;
+};
+
+struct bnxt_ioctl_data_write {
+	uint16_t type;
+	uint16_t ordinal;
+	uint16_t ext;
+	uint16_t attr;
+	uint32_t length;
+	uint8_t data[];
+};
+
+struct bnxt_ioctl_data_reset {
+	int processor_type;
+};
+
+/* IOCTL interface */
+struct bnxt_ioctl_data {
+	enum bnxt_ioctl_type type;
+	int rc;
+	union {
+		struct bnxt_ioctl_data_dir dir;
+		struct bnxt_ioctl_data_item item;
+		struct bnxt_ioctl_data_fw_status fw_status;
+		struct bnxt_ioctl_data_create create;
+		struct bnxt_ioctl_data_erase erase;
+		struct bnxt_ioctl_data_write write;
+		struct bnxt_ioctl_data_reset reset;
+	};
+};
+
 struct bnxt_bar_info {
 	struct resource		*res;
 	bus_space_tag_t		tag;
@@ -459,6 +526,18 @@ struct bnxt_ver_info {
 	struct sysctl_oid	*ver_oid;
 };
 
+struct bnxt_nvram_info {
+	uint16_t	mfg_id;
+	uint16_t	device_id;
+	uint32_t	sector_size;
+	uint32_t	size;
+	uint32_t	reserved_size;
+	uint32_t	available_size;
+
+	struct sysctl_ctx_list	nvm_ctx;
+	struct sysctl_oid	*nvm_oid;
+};
+
 struct bnxt_softc {
 	device_t	dev;
 	if_ctx_t	ctx;
@@ -518,6 +597,7 @@ struct bnxt_softc {
 
 	struct bnxt_full_tpa_start *tpa_start;
 	struct bnxt_ver_info	*ver_info;
+	struct bnxt_nvram_info	*nvm_info;
 };
 
 struct bnxt_filter_info {

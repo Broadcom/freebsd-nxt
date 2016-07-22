@@ -75,6 +75,16 @@ bnxt_init_sysctl_ctx(struct bnxt_softc *softc)
 		return ENOMEM;
 	}
 
+	sysctl_ctx_init(&softc->nvm_info->nvm_ctx);
+	ctx = device_get_sysctl_ctx(softc->dev);
+	softc->nvm_info->nvm_oid = SYSCTL_ADD_NODE(ctx,
+	    SYSCTL_CHILDREN(device_get_sysctl_tree(softc->dev)), OID_AUTO,
+	    "nvram", CTLFLAG_RD, 0, "nvram information");
+	if (!softc->nvm_info->nvm_oid) {
+		sysctl_ctx_free(&softc->nvm_info->nvm_ctx);
+		return ENOMEM;
+	}
+
 	return 0;
 }
 
@@ -97,6 +107,13 @@ bnxt_free_sysctl_ctx(struct bnxt_softc *softc)
 			rc = orc;
 		else
 			softc->ver_info->ver_oid = NULL;
+	}
+	if (softc->nvm_info->nvm_oid != NULL) {
+		orc = sysctl_ctx_free(&softc->nvm_info->nvm_ctx);
+		if (orc)
+			rc = orc;
+		else
+			softc->nvm_info->nvm_oid = NULL;
 	}
 
 	return rc;
@@ -323,6 +340,32 @@ bnxt_create_ver_sysctls(struct bnxt_softc *softc)
 	    "package_ver", CTLTYPE_STRING|CTLFLAG_RD, softc, 0,
 	    bnxt_package_ver_sysctl, "A",
 	    "currently installed package version");
+
+	return 0;
+}
+
+int
+bnxt_create_nvram_sysctls(struct bnxt_nvram_info *ni)
+{
+	struct sysctl_oid *oid = ni->nvm_oid;
+
+	if (!oid)
+		return ENOMEM;
+
+	SYSCTL_ADD_U16(&ni->nvm_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "mfg_id", CTLFLAG_RD, &ni->mfg_id, 0, "manufacturer id");
+	SYSCTL_ADD_U16(&ni->nvm_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "device_id", CTLFLAG_RD, &ni->device_id, 0, "device id");
+	SYSCTL_ADD_U32(&ni->nvm_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "sector_size", CTLFLAG_RD, &ni->sector_size, 0, "sector size");
+	SYSCTL_ADD_U32(&ni->nvm_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "size", CTLFLAG_RD, &ni->size, 0, "nvram total size");
+	SYSCTL_ADD_U32(&ni->nvm_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "reserved_size", CTLFLAG_RD, &ni->reserved_size, 0,
+	    "total reserved space");
+	SYSCTL_ADD_U32(&ni->nvm_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "available_size", CTLFLAG_RD, &ni->available_size, 0,
+	    "total available space");
 
 	return 0;
 }

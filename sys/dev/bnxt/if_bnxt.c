@@ -37,6 +37,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/module.h>
 #include <sys/rman.h>
 #include <sys/endian.h>
+#include <sys/sockio.h>
 
 #include <machine/bus.h>
 #include <machine/resource.h>
@@ -137,6 +138,9 @@ static int bnxt_msix_intr_assign(if_ctx_t ctx, int msix);
 static void bnxt_vlan_register(if_ctx_t ctx, uint16_t vtag);
 static void bnxt_vlan_unregister(if_ctx_t ctx, uint16_t vtag);
 
+/* ioctl */
+static int bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data);
+
 /* Internal support functions */
 static int bnxt_probe_phy(struct bnxt_softc *softc);
 static void bnxt_add_media_types(struct bnxt_softc *softc);
@@ -207,6 +211,8 @@ static device_method_t bnxt_iflib_methods[] = {
 
 	DEVMETHOD(ifdi_vlan_register, bnxt_vlan_register),
 	DEVMETHOD(ifdi_vlan_unregister, bnxt_vlan_unregister),
+
+	DEVMETHOD(ifdi_priv_ioctl, bnxt_priv_ioctl),
 
 	DEVMETHOD_END
 };
@@ -590,11 +596,25 @@ bnxt_attach_pre(if_ctx_t ctx)
 		goto ver_fail;
 	}
 
+	/* Get NVRAM info */
+	softc->nvm_info = malloc(sizeof(struct bnxt_nvram_info),
+	    M_DEVBUF, M_NOWAIT | M_ZERO);
+	if (softc->nvm_info == NULL) {
+		rc = ENOMEM;
+		device_printf(softc->dev,
+		    "Unable to allocate space for NVRAM info\n");
+		goto nvm_alloc_fail;
+	}
+	rc = bnxt_hwrm_nvm_get_dev_info(softc, &softc->nvm_info->mfg_id,
+	    &softc->nvm_info->device_id, &softc->nvm_info->sector_size,
+	    &softc->nvm_info->size, &softc->nvm_info->reserved_size,
+	    &softc->nvm_info->available_size);
+
 	/* Register the driver with the FW */
 	rc = bnxt_hwrm_func_drv_rgtr(softc);
 	if (rc) {
 		device_printf(softc->dev, "attach: hwrm drv rgtr failed\n");
-		goto ver_fail;
+		goto drv_rgtr_fail;
 	}
 
 	/* Get the HW capabilities */
@@ -669,7 +689,11 @@ bnxt_attach_pre(if_ctx_t ctx)
 
 	rc = bnxt_init_sysctl_ctx(softc);
 	if (rc)
+		goto init_sysctl_failed;
+	rc = bnxt_create_nvram_sysctls(softc->nvm_info);
+	if (rc)
 		goto failed;
+
 	arc4rand(softc->vnic_info.rss_hash_key, HW_HASH_KEY_SIZE, 0);
 	softc->vnic_info.rss_hash_type =
 	    HWRM_VNIC_RSS_CFG_INPUT_HASH_TYPE_IPV4 |
@@ -689,7 +713,12 @@ bnxt_attach_pre(if_ctx_t ctx)
 	return (rc);
 
 failed:
+	bnxt_free_sysctl_ctx(softc);
+init_sysctl_failed:
 	bnxt_hwrm_func_drv_unrgtr(softc, false);
+drv_rgtr_fail:
+	free(softc->nvm_info, M_DEVBUF);
+nvm_alloc_fail:
 ver_fail:
 	free(softc->ver_info, M_DEVBUF);
 ver_alloc_fail:
@@ -778,6 +807,7 @@ bnxt_detach(if_ctx_t ctx)
 	iflib_dma_free(&softc->def_cp_ring_mem);
 	free(softc->tpa_start, M_DEVBUF);
 	free(softc->ver_info, M_DEVBUF);
+	free(softc->nvm_info, M_DEVBUF);
 
 	/* hwrm is cleaned up in queues_free() since it's called later */
 	pci_disable_busmaster(softc->dev);
@@ -1454,6 +1484,127 @@ bnxt_vlan_unregister(if_ctx_t ctx, uint16_t vtag)
 			break;
 		}
 	}
+}
+
+static int
+bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
+{
+	struct bnxt_softc *softc = iflib_get_softc(ctx);
+	struct ifreq *ifr = (struct ifreq *)data;
+	struct bnxt_ioctl_data *iod =
+	    (struct bnxt_ioctl_data *)(ifr->ifr_ifru.ifru_data);
+	int rc;
+	void *p;
+
+	switch (command) {
+	case SIOCGPRIVATE_0:
+		switch (iod->type) {
+		case BNXT_GETIOCTL_DIR:
+		{
+			struct bnxt_ioctl_data_dir *dir = (void *)&iod->dir;
+
+			p = bnxt_hwrm_nvm_get_dir_entries(softc, &dir->count,
+			    &dir->entry_size);
+			if (p) {
+				memcpy(dir->entries, p,
+				    min(dir->size,
+				    dir->count * dir->entry_size));
+				free(p, M_DEVBUF);
+				iod->rc = 0;
+				return 0;
+			}
+			iod->rc = -1;
+			return 0;
+		}
+		case BNXT_GETIOCTL_ITEM:
+		{
+			struct bnxt_ioctl_data_item *item = (void *)&iod->item;
+
+			p = bnxt_hwrm_nvm_read(softc, item->index, 0,
+			    item->length);
+			if (p) {
+				memcpy(item->data, p, item->length);
+				free(p, M_DEVBUF);
+				iod->rc = 0;
+				return 0;
+			}
+			iod->rc = -1;
+			return 0;
+		}
+		case BNXT_GETIOCTL_FWSTATUS:
+		{
+			uint8_t selfreset;
+			struct bnxt_ioctl_data_fw_status *fws = (void *)
+			   &iod->fw_status;
+
+			rc = bnxt_hwrm_fw_qstatus(softc, fws->processor_type,
+			    &selfreset);
+			if (rc)
+				iod->rc = -1;
+			else
+				iod->rc = selfreset;
+
+			return 0;
+		}
+		case BNXT_SETIOCTL_CREATEITEM:
+		{
+			uint16_t index;
+			struct bnxt_ioctl_data_create *cr =
+			    (void *)&iod->create;
+
+			rc = bnxt_hwrm_nvm_write(softc, NULL, cr->type,
+			    cr->ordinal, cr->ext, cr->attr, 0, 0, false,
+			    &cr->length, &index);
+			if (rc)
+				iod->rc = -1;
+			else
+				iod->rc = index;
+			return 0;
+		}
+		case BNXT_SETIOCTL_ERASEITEM:
+		{
+			struct bnxt_ioctl_data_erase *er =
+			    (void *)&iod->erase;
+
+			rc = bnxt_hwrm_nvm_erase_dir_entry(softc, er->index);
+			if (rc)
+				iod->rc = -1;
+			else
+				iod->rc = 0;
+			return 0;
+		}
+		case BNXT_SETIOCTL_WRITEITEM:
+		{
+			uint16_t index;
+			struct bnxt_ioctl_data_write *wr = (void *)&iod->write;
+
+			rc = bnxt_hwrm_nvm_write(softc, wr->data, wr->type,
+			    wr->ordinal, wr->ext, wr->attr, 0, wr->length,
+			    false, NULL, &index);
+			if (rc)
+				iod->rc = -1;
+			else
+				iod->rc = index;
+			return 0;
+		}
+		case BNXT_SETIOCTL_FWRESET:
+		{
+			uint8_t selfreset;
+			struct bnxt_ioctl_data_reset *rst = (void *)&iod->reset;
+
+			rc = bnxt_hwrm_fw_reset(softc, rst->processor_type,
+			    &selfreset);
+			if (rc)
+				iod->rc = -1;
+			else
+				iod->rc = selfreset;
+			break;
+		}
+		}
+		break;
+	}
+
+	return ENOTSUP;
 }
 
 /*

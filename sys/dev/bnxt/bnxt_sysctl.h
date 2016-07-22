@@ -37,5 +37,6 @@ int bnxt_free_sysctl_ctx(struct bnxt_softc *softc);
 int bnxt_create_tx_sysctls(struct bnxt_softc *softc, int txr);
 int bnxt_create_rx_sysctls(struct bnxt_softc *softc, int rxr);
 int bnxt_create_ver_sysctls(struct bnxt_softc *softc);
+int bnxt_create_nvram_sysctls(struct bnxt_nvram_info *ni);
 int bnxt_create_config_sysctls_pre(struct bnxt_softc *softc);
 int bnxt_create_config_sysctls_post(struct bnxt_softc *softc);
