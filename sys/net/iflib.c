@@ -3312,6 +3312,7 @@ iflib_if_ioctl(if_t ifp, u_long command, caddr_t data)
 		break;
 	    }
 	case SIOCGPRIVATE_0:
+	case SIOCGPRIVATE_1:
 	case SIOCSDRVSPEC:
 	case SIOCGDRVSPEC:
 		CTX_LOCK(ctx);
