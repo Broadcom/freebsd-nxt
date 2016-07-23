@@ -1499,107 +1499,163 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 	switch (command) {
 	case SIOCGPRIVATE_0:
 		switch (iod->type) {
-		case BNXT_GETIOCTL_DIR:
+		case BNXT_HWRM_NVM_FIND_DIR_ENTRY:
 		{
-			struct bnxt_ioctl_data_dir *dir = (void *)&iod->dir;
+			struct bnxt_ioctl_hwrm_nvm_find_dir_entry *find =
+			    &iod->find;
 
-			p = bnxt_hwrm_nvm_get_dir_entries(softc, &dir->count,
-			    &dir->entry_size);
+			rc = bnxt_hwrm_nvm_find_dir_entry(softc, find->type,
+			    &find->ordinal, find->ext, &find->index,
+			    find->use_index, find->search_opt,
+			    &find->data_length, &find->item_length,
+			    &find->fw_ver);
+			if (rc)
+				iod->rc = -1;
+			else
+				iod->rc = 0;
+
+			return 0;
+		}
+		case BNXT_HWRM_NVM_READ:
+		{
+			struct bnxt_ioctl_hwrm_nvm_read *rd = &iod->read;
+
+			p = bnxt_hwrm_nvm_read(softc, rd->index, rd->offset,
+			    rd->length);
 			if (p) {
-				memcpy(dir->entries, p,
-				    min(dir->size,
-				    dir->count * dir->entry_size));
+				memcpy(rd->data, p, rd->length);
 				free(p, M_DEVBUF);
 				iod->rc = 0;
-				return 0;
 			}
-			iod->rc = -1;
-			return 0;
-		}
-		case BNXT_GETIOCTL_ITEM:
-		{
-			struct bnxt_ioctl_data_item *item = (void *)&iod->item;
-
-			p = bnxt_hwrm_nvm_read(softc, item->index, 0,
-			    item->length);
-			if (p) {
-				memcpy(item->data, p, item->length);
-				free(p, M_DEVBUF);
-				iod->rc = 0;
-				return 0;
-			}
-			iod->rc = -1;
-			return 0;
-		}
-		case BNXT_GETIOCTL_FWSTATUS:
-		{
-			uint8_t selfreset;
-			struct bnxt_ioctl_data_fw_status *fws = (void *)
-			   &iod->fw_status;
-
-			rc = bnxt_hwrm_fw_qstatus(softc, fws->processor_type,
-			    &selfreset);
-			if (rc)
-				iod->rc = -1;
 			else
-				iod->rc = selfreset;
-
-			return 0;
-		}
-		case BNXT_SETIOCTL_CREATEITEM:
-		{
-			uint16_t index;
-			struct bnxt_ioctl_data_create *cr =
-			    (void *)&iod->create;
-
-			rc = bnxt_hwrm_nvm_write(softc, NULL, cr->type,
-			    cr->ordinal, cr->ext, cr->attr, 0, 0, false,
-			    &cr->length, &index);
-			if (rc)
 				iod->rc = -1;
-			else
-				iod->rc = index;
+
 			return 0;
 		}
-		case BNXT_SETIOCTL_ERASEITEM:
+		case BNXT_HWRM_FW_RESET:
 		{
-			struct bnxt_ioctl_data_erase *er =
-			    (void *)&iod->erase;
+			struct bnxt_ioctl_hwrm_fw_reset *rst =
+			    &iod->reset;
 
-			rc = bnxt_hwrm_nvm_erase_dir_entry(softc, er->index);
+			rc = bnxt_hwrm_fw_reset(softc, rst->processor,
+			    &rst->selfreset);
 			if (rc)
 				iod->rc = -1;
 			else
 				iod->rc = 0;
+
 			return 0;
 		}
-		case BNXT_SETIOCTL_WRITEITEM:
+		case BNXT_HWRM_FW_QSTATUS:
 		{
-			uint16_t index;
-			struct bnxt_ioctl_data_write *wr = (void *)&iod->write;
+			struct bnxt_ioctl_hwrm_fw_qstatus *qstat =
+			    &iod->status;
+
+			rc = bnxt_hwrm_fw_qstatus(softc, qstat->processor,
+			    &qstat->selfreset);
+			if (rc)
+				iod->rc = -1;
+			else
+				iod->rc = 0;
+
+			return 0;
+		}
+		case BNXT_HWRM_NVM_WRITE:
+		{
+			struct bnxt_ioctl_hwrm_nvm_write *wr =
+			    &iod->write;
 
 			rc = bnxt_hwrm_nvm_write(softc, wr->data, wr->type,
-			    wr->ordinal, wr->ext, wr->attr, 0, wr->length,
-			    false, NULL, &index);
+			    wr->ordinal, wr->ext, wr->attr, wr->option,
+			    wr->data_length, wr->keep, &wr->item_length,
+			    &wr->index);
 			if (rc)
 				iod->rc = -1;
 			else
-				iod->rc = index;
+				iod->rc = 0;
+
 			return 0;
 		}
-		case BNXT_SETIOCTL_FWRESET:
+		case BNXT_HWRM_NVM_ERASE_DIR_ENTRY:
 		{
-			uint8_t selfreset;
-			struct bnxt_ioctl_data_reset *rst = (void *)&iod->reset;
+			struct bnxt_ioctl_hwrm_nvm_erase_dir_entry *erase =
+			    &iod->erase;
 
-			rc = bnxt_hwrm_fw_reset(softc, rst->processor_type,
-			    &selfreset);
+			rc = bnxt_hwrm_nvm_erase_dir_entry(softc, erase->index);
 			if (rc)
 				iod->rc = -1;
 			else
-				iod->rc = selfreset;
-			break;
+				iod->rc = 0;
+
+			return 0;
 		}
+		case BNXT_HWRM_NVM_GET_DIR_INFO:
+		{
+			struct bnxt_ioctl_hwrm_nvm_get_dir_info *info =
+			    &iod->dir_info;
+
+
+			rc = bnxt_hwrm_nvm_get_dir_info(softc, &info->entries,
+			    &info->entry_length);
+			if (rc)
+				iod->rc = -1;
+			else
+				iod->rc = 0;
+
+			return 0;
+		}
+		case BNXT_HWRM_NVM_GET_DIR_ENTRIES:
+		{
+			struct bnxt_ioctl_hwrm_nvm_get_dir_entries *get =
+			    &iod->dir_entries;
+			uint32_t	oldent = get->entries;
+			uint32_t	oldlen = get->entry_length;
+
+			p = bnxt_hwrm_nvm_get_dir_entries(softc, &get->entries,
+			    &get->entry_length);
+			if (p) {
+				memcpy(get->data, p, min(oldent * oldlen,
+				    get->entries * get->entry_length));
+				free(p, M_DEVBUF);
+				iod->rc = 0;
+			}
+			else
+				iod->rc = -1;
+
+			return 0;
+		}
+#ifdef notyet
+		case BNXT_HWRM_NVM_VERIFY_UPDATE:
+		{
+			struct bnxt_ioctl_hwrm_nvm_verify_update *vrfy =
+			    &iod->verify;
+
+			rc = bnxt_hwrm_nvm_verify_update(softc, vrfy->type,
+			    vrfy->ordinal, vrfy->ext);
+			if (rc)
+				iod->rc = -1;
+			else
+				iod->rc = 0;
+
+			return 0;
+		}
+		case BNXT_HWRM_NVM_INSTALL_UPDATE:
+		{
+			struct bnxt_ioctl_hwrm_nvm_install_update *inst =
+			    &iod->install;
+
+			rc = bnxt_hwrm_nvm_install_update(softc,
+			    inst->install_type, &inst->installed_items,
+			    &inst->result, &inst->problem_item,
+			    &inst->reset_required);
+			if (rc)
+				iod->rc = -1;
+			else
+				iod->rc = 0;
+
+			return 0;
+		}
+#endif
 		}
 		break;
 	}

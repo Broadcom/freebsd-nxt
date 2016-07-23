@@ -97,5 +97,10 @@ void *bnxt_hwrm_nvm_get_dir_entries(struct bnxt_softc *softc,
 int bnxt_hwrm_nvm_get_dev_info(struct bnxt_softc *softc, uint16_t *mfg_id,
     uint16_t *device_id, uint32_t *sector_size, uint32_t *nvram_size,
     uint32_t *reserved_size, uint32_t *available_size);
+int bnxt_hwrm_nvm_install_update(struct bnxt_softc *softc,
+    uint32_t install_type, uint64_t *installed_items, uint8_t *result,
+    uint8_t *problem_item, uint8_t *reset_required);
+int bnxt_hwrm_nvm_verify_update(struct bnxt_softc *softc, uint16_t type,
+    uint16_t ordinal, uint16_t ext);
 
 #endif

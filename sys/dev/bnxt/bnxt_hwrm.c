@@ -1402,3 +1402,52 @@ exit:
 	BNXT_HWRM_UNLOCK(softc);
 	return rc;
 }
+
+#ifdef notyet
+int
+bnxt_hwrm_nvm_install_update(struct bnxt_softc *softc,
+    uint32_t install_type, uint64_t *installed_items, uint8_t *result,
+    uint8_t *problem_item, uint8_t *reset_required)
+{
+	struct hwrm_nvm_install_update_input req = {0};
+	struct hwrm_nvm_install_update_output *resp =
+	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	int rc;
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_INSTALL_UPDATE, -1, -1);
+	req.install_type = htole32(install_type);
+
+	BNXT_HWRM_LOCK(softc);
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	if (rc)
+		goto exit;
+
+	if (installed_items)
+		*installed_items = le32toh(resp->installed_items);
+	if (result)
+		*result = resp->result;
+	if (problem_item)
+		*problem_item = resp->problem_item;
+	if (reset_required)
+		*reset_required = resp->reset_required;
+
+exit:
+	BNXT_HWRM_UNLOCK(softc);
+	return rc;
+}
+
+int
+bnxt_hwrm_nvm_verify_update(struct bnxt_softc *softc, uint16_t type,
+    uint16_t ordinal, uint16_t ext)
+{
+	struct hwrm_nvm_verify_updateinput req = {0};
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_VERIFY_UPDATE, -1, -1);
+
+	req.dir_type = htole16(type);
+	req.dir_ordinal = htole16(ordinal);
+	req.dir_ext = htole16(ext);
+
+	return hwrm_send_message(softc, &req, sizeof(req));
+}
+#endif
