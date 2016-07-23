@@ -1238,15 +1238,20 @@ bnxt_hwrm_nvm_write(struct bnxt_softc *softc, void *data, uint16_t type,
 	struct iflib_dma_info dma_data;
 	int rc;
 
-	rc = iflib_dma_alloc(softc->ctx, data_length, &dma_data,
-	    BUS_DMA_NOWAIT);
-	if (rc)
-		return ENOMEM;
-	memcpy(dma_data.idi_vaddr, data, data_length);
+	if (data_length) {
+		rc = iflib_dma_alloc(softc->ctx, data_length, &dma_data,
+		    BUS_DMA_NOWAIT);
+		if (rc)
+			return ENOMEM;
+		memcpy(dma_data.idi_vaddr, data, data_length);
+	}
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_WRITE, -1, -1);
 
-	req.host_src_addr = htole64(dma_data.idi_paddr);
+	if (data_length)
+		req.host_src_addr = htole64(dma_data.idi_paddr);
+	else
+		req.host_src_addr = htole64(0);
 	req.dir_type = htole16(type);
 	req.dir_ordinal = htole16(ordinal);
 	req.dir_ext = htole16(ext);
