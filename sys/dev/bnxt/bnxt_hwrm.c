@@ -66,6 +66,7 @@ bnxt_hwrm_err_map(uint16_t err)
 	case HWRM_ERR_CODE_CMD_NOT_SUPPORTED:
 		return ENOSYS;
 	case HWRM_ERR_CODE_FAIL:
+		return EIO;
 	case HWRM_ERR_CODE_HWRM_ERROR:
 	case HWRM_ERR_CODE_UNKNOWN_ERR:
 	default:
@@ -174,8 +175,13 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 
 	err = le16toh(resp->error_code);
 	if (err) {
-		device_printf(softc->dev, "%s command returned %s error.\n",
-		    GET_HWRM_REQ_TYPE(req->req_type), GET_HWRM_ERROR_CODE(err));
+		/* HWRM_ERR_CODE_FAIL is a "normal" error, don't log */
+		if (err != HWRM_ERR_CODE_FAIL) {
+			device_printf(softc->dev,
+			    "%s command returned %s error.\n",
+			    GET_HWRM_REQ_TYPE(req->req_type),
+			    GET_HWRM_ERROR_CODE(err));
+		}
 		//decode_hwrm_req(req);
 		//decode_hwrm_resp(resp);
 		return bnxt_hwrm_err_map(err);
