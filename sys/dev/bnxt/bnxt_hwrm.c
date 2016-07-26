@@ -1110,6 +1110,7 @@ bnxt_hwrm_nvm_find_dir_entry(struct bnxt_softc *softc, uint16_t type,
 	struct hwrm_nvm_find_dir_entry_output *resp =
 	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	int	rc = 0;
+	uint16_t old_timeo;
 
 	MPASS(ordinal);
 
@@ -1125,7 +1126,10 @@ bnxt_hwrm_nvm_find_dir_entry(struct bnxt_softc *softc, uint16_t type,
 	req.opt_ordinal = search_opt;
 
 	BNXT_HWRM_LOCK(softc);
+	old_timeo = softc->hwrm_cmd_timeo;
+	softc->hwrm_cmd_timeo = UINT16_MAX;
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	softc->hwrm_cmd_timeo = old_timeo;
 	if (rc)
 		goto exit;
 
@@ -1152,6 +1156,7 @@ bnxt_hwrm_nvm_read(struct bnxt_softc *softc, uint16_t index, uint32_t offset,
 	struct iflib_dma_info data;
 	void *buf = NULL;
 	int rc;
+	uint16_t old_timeo;
 
 	rc = iflib_dma_alloc(softc->ctx, length, &data,
 	    BUS_DMA_NOWAIT);
@@ -1166,7 +1171,12 @@ bnxt_hwrm_nvm_read(struct bnxt_softc *softc, uint16_t index, uint32_t offset,
 	req.dir_idx = htole16(index);
 	req.offset = htole32(offset);
 	req.len = htole32(length);
-	rc = hwrm_send_message(softc, &req, sizeof(req));
+	BNXT_HWRM_LOCK(softc);
+	old_timeo = softc->hwrm_cmd_timeo;
+	softc->hwrm_cmd_timeo = UINT16_MAX;
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	softc->hwrm_cmd_timeo = old_timeo;
+	BNXT_HWRM_UNLOCK(softc);
 	if (rc)
 		goto error;
 	memcpy(buf, data.idi_vaddr, length);
@@ -1243,6 +1253,7 @@ bnxt_hwrm_nvm_write(struct bnxt_softc *softc, void *data, uint16_t type,
 	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	struct iflib_dma_info dma_data;
 	int rc;
+	uint16_t old_timeo;
 
 	if (data_length) {
 		rc = iflib_dma_alloc(softc->ctx, data_length, &dma_data,
@@ -1272,7 +1283,10 @@ bnxt_hwrm_nvm_write(struct bnxt_softc *softc, void *data, uint16_t type,
 		req.dir_item_length = htole32(item_length);
 
 	BNXT_HWRM_LOCK(softc);
+	old_timeo = softc->hwrm_cmd_timeo;
+	softc->hwrm_cmd_timeo = UINT16_MAX;
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	softc->hwrm_cmd_timeo = old_timeo;
 	if (rc)
 		goto exit;
 	if (item_length)
@@ -1289,10 +1303,18 @@ int
 bnxt_hwrm_nvm_erase_dir_entry(struct bnxt_softc *softc, uint16_t index)
 {
 	struct hwrm_nvm_erase_dir_entry_input req = {0};
+	uint16_t old_timeo;
+	int rc;
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_ERASE_DIR_ENTRY, -1, -1);
 	req.dir_idx = htole16(index);
-	return hwrm_send_message(softc, &req, sizeof(req));
+	BNXT_HWRM_LOCK(softc);
+	old_timeo = softc->hwrm_cmd_timeo;
+	softc->hwrm_cmd_timeo = UINT16_MAX;
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	softc->hwrm_cmd_timeo = old_timeo;
+	BNXT_HWRM_UNLOCK(softc);
+	return rc;
 }
 
 int
@@ -1303,11 +1325,15 @@ bnxt_hwrm_nvm_get_dir_info(struct bnxt_softc *softc, uint32_t *entries,
 	struct hwrm_nvm_get_dir_info_output *resp =
 	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	int rc;
+	uint16_t old_timeo;
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_GET_DIR_INFO, -1, -1);
 
 	BNXT_HWRM_LOCK(softc);
+	old_timeo = softc->hwrm_cmd_timeo;
+	softc->hwrm_cmd_timeo = UINT16_MAX;
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	softc->hwrm_cmd_timeo = old_timeo;
 	if (rc)
 		goto exit;
 
@@ -1332,6 +1358,7 @@ bnxt_hwrm_nvm_get_dir_entries(struct bnxt_softc *softc, uint32_t *entries,
 	void *data;
 	size_t data_len;
 	int rc;
+	uint16_t old_timeo;
 
 	if (!entries)
 		entries = &ent;
@@ -1362,7 +1389,12 @@ bnxt_hwrm_nvm_get_dir_entries(struct bnxt_softc *softc, uint32_t *entries,
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_GET_DIR_ENTRIES, -1, -1);
 	req.host_dest_addr = htole64(dma_data.idi_paddr);
-	rc = hwrm_send_message(softc, &req, sizeof(req));
+	BNXT_HWRM_LOCK(softc);
+	old_timeo = softc->hwrm_cmd_timeo;
+	softc->hwrm_cmd_timeo = UINT16_MAX;
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	softc->hwrm_cmd_timeo = old_timeo;
+	BNXT_HWRM_UNLOCK(softc);
 	if (rc) {
 		free(data, M_DEVBUF);
 		data = NULL;
@@ -1384,11 +1416,15 @@ bnxt_hwrm_nvm_get_dev_info(struct bnxt_softc *softc, uint16_t *mfg_id,
 	struct hwrm_nvm_get_dev_info_output *resp =
 	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	int rc;
+	uint16_t old_timeo;
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_GET_DEV_INFO, -1, -1);
 
 	BNXT_HWRM_LOCK(softc);
+	old_timeo = softc->hwrm_cmd_timeo;
+	softc->hwrm_cmd_timeo = UINT16_MAX;
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	softc->hwrm_cmd_timeo = old_timeo;
 	if (rc)
 		goto exit;
 
@@ -1420,12 +1456,16 @@ bnxt_hwrm_nvm_install_update(struct bnxt_softc *softc,
 	struct hwrm_nvm_install_update_output *resp =
 	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	int rc;
+	uint16_t old_timeo;
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_INSTALL_UPDATE, -1, -1);
 	req.install_type = htole32(install_type);
 
 	BNXT_HWRM_LOCK(softc);
+	old_timeo = softc->hwrm_cmd_timeo;
+	softc->hwrm_cmd_timeo = UINT16_MAX;
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	softc->hwrm_cmd_timeo = old_timeo;
 	if (rc)
 		goto exit;
 
@@ -1448,6 +1488,8 @@ bnxt_hwrm_nvm_verify_update(struct bnxt_softc *softc, uint16_t type,
     uint16_t ordinal, uint16_t ext)
 {
 	struct hwrm_nvm_verify_updateinput req = {0};
+	uint16_t old_timeo;
+	int rc;
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_VERIFY_UPDATE, -1, -1);
 
@@ -1455,6 +1497,12 @@ bnxt_hwrm_nvm_verify_update(struct bnxt_softc *softc, uint16_t type,
 	req.dir_ordinal = htole16(ordinal);
 	req.dir_ext = htole16(ext);
 
-	return hwrm_send_message(softc, &req, sizeof(req));
+	BNXT_HWRM_LOCK(softc);
+	old_timeo = softc->hwrm_cmd_timeo;
+	softc->hwrm_cmd_timeo = UINT16_MAX;
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	softc->hwrm_cmd_timeo = old_timeo;
+	BNXT_HWRM_UNLOCK(softc);
+	return rc;
 }
 #endif
