@@ -38,6 +38,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/rman.h>
 #include <sys/endian.h>
 #include <sys/sockio.h>
+#include <sys/priv.h>
 
 #include <machine/bus.h>
 #include <machine/resource.h>
@@ -1491,14 +1492,26 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 {
 	struct bnxt_softc *softc = iflib_get_softc(ctx);
 	struct ifreq *ifr = (struct ifreq *)data;
-	struct bnxt_ioctl_data *iod =
-	    (struct bnxt_ioctl_data *)(ifr->ifr_ifru.ifru_data);
-	int rc;
-	void *p;
+	struct ifreq_buffer *ifbuf = &ifr->ifr_ifru.ifru_buffer;
+	struct bnxt_ioctl_header *ioh =
+	    (struct bnxt_ioctl_header *)(ifbuf->buffer);
+	int rc = ENOTSUP;
+	struct bnxt_ioctl_data *iod = NULL;
+	void *p = NULL;
 
 	switch (command) {
 	case SIOCGPRIVATE_0:
-		switch (iod->type) {
+		if ((rc = priv_check(curthread, PRIV_DRIVER)) != 0)
+			goto exit;
+
+		iod = malloc(ifbuf->length, M_DEVBUF, M_NOWAIT | M_ZERO);
+		if (!iod) {
+			rc = ENOMEM;
+			goto exit;
+		}
+		copyin(ioh, iod, ifbuf->length);
+
+		switch (ioh->type) {
 		case BNXT_HWRM_NVM_FIND_DIR_ENTRY:
 		{
 			struct bnxt_ioctl_hwrm_nvm_find_dir_entry *find =
@@ -1509,12 +1522,18 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			    find->use_index, find->search_opt,
 			    &find->data_length, &find->item_length,
 			    &find->fw_ver);
-			if (rc)
-				iod->rc = -1;
-			else
-				iod->rc = 0;
+			if (rc) {
+				iod->hdr.rc = -1;
+				copyout(&iod->hdr.rc, &ioh->rc,
+				    sizeof(ioh->rc));
+			}
+			else {
+				iod->hdr.rc = 0;
+				copyout(iod, ioh, ifbuf->length);
+			}
 
-			return 0;
+			rc = 0;
+			goto exit;
 		}
 		case BNXT_HWRM_NVM_READ:
 		{
@@ -1524,13 +1543,17 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			    rd->length);
 			if (p) {
 				memcpy(rd->data, p, rd->length);
-				free(p, M_DEVBUF);
-				iod->rc = 0;
+				iod->hdr.rc = 0;
+				copyout(iod, ioh, ifbuf->length);
 			}
-			else
-				iod->rc = -1;
+			else {
+				iod->hdr.rc = -1;
+				copyout(&iod->hdr.rc, &ioh->rc,
+				    sizeof(ioh->rc));
+			}
 
-			return 0;
+			rc = 0;
+			goto exit;
 		}
 		case BNXT_HWRM_FW_RESET:
 		{
@@ -1539,12 +1562,18 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 
 			rc = bnxt_hwrm_fw_reset(softc, rst->processor,
 			    &rst->selfreset);
-			if (rc)
-				iod->rc = -1;
-			else
-				iod->rc = 0;
+			if (rc) {
+				iod->hdr.rc = -1;
+				copyout(&iod->hdr.rc, &ioh->rc,
+				    sizeof(ioh->rc));
+			}
+			else {
+				iod->hdr.rc = 0;
+				copyout(iod, ioh, ifbuf->length);
+			}
 
-			return 0;
+			rc = 0;
+			goto exit;
 		}
 		case BNXT_HWRM_FW_QSTATUS:
 		{
@@ -1553,12 +1582,18 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 
 			rc = bnxt_hwrm_fw_qstatus(softc, qstat->processor,
 			    &qstat->selfreset);
-			if (rc)
-				iod->rc = -1;
-			else
-				iod->rc = 0;
+			if (rc) {
+				iod->hdr.rc = -1;
+				copyout(&iod->hdr.rc, &ioh->rc,
+				    sizeof(ioh->rc));
+			}
+			else {
+				iod->hdr.rc = 0;
+				copyout(iod, ioh, ifbuf->length);
+			}
 
-			return 0;
+			rc = 0;
+			goto exit;
 		}
 		case BNXT_HWRM_NVM_WRITE:
 		{
@@ -1569,12 +1604,18 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			    wr->ordinal, wr->ext, wr->attr, wr->option,
 			    wr->data_length, wr->keep, &wr->item_length,
 			    &wr->index);
-			if (rc)
-				iod->rc = -1;
-			else
-				iod->rc = 0;
+			if (rc) {
+				iod->hdr.rc = -1;
+				copyout(&iod->hdr.rc, &ioh->rc,
+				    sizeof(ioh->rc));
+			}
+			else {
+				iod->hdr.rc = 0;
+				copyout(iod, ioh, ifbuf->length);
+			}
 
-			return 0;
+			rc = 0;
+			goto exit;
 		}
 		case BNXT_HWRM_NVM_ERASE_DIR_ENTRY:
 		{
@@ -1582,47 +1623,63 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			    &iod->erase;
 
 			rc = bnxt_hwrm_nvm_erase_dir_entry(softc, erase->index);
-			if (rc)
-				iod->rc = -1;
-			else
-				iod->rc = 0;
+			if (rc) {
+				iod->hdr.rc = -1;
+				copyout(&iod->hdr.rc, &ioh->rc,
+				    sizeof(ioh->rc));
+			}
+			else {
+				iod->hdr.rc = 0;
+				copyout(iod, ioh, ifbuf->length);
+			}
 
-			return 0;
+			rc = 0;
+			goto exit;
 		}
 		case BNXT_HWRM_NVM_GET_DIR_INFO:
 		{
 			struct bnxt_ioctl_hwrm_nvm_get_dir_info *info =
 			    &iod->dir_info;
 
-
 			rc = bnxt_hwrm_nvm_get_dir_info(softc, &info->entries,
 			    &info->entry_length);
-			if (rc)
-				iod->rc = -1;
-			else
-				iod->rc = 0;
+			if (rc) {
+				iod->hdr.rc = -1;
+				copyout(&iod->hdr.rc, &ioh->rc,
+				    sizeof(ioh->rc));
+			}
+			else {
+				iod->hdr.rc = 0;
+				copyout(iod, ioh, ifbuf->length);
+			}
 
-			return 0;
+			rc = 0;
+			goto exit;
 		}
 		case BNXT_HWRM_NVM_GET_DIR_ENTRIES:
 		{
 			struct bnxt_ioctl_hwrm_nvm_get_dir_entries *get =
 			    &iod->dir_entries;
-			uint32_t	oldent = get->entries;
-			uint32_t	oldlen = get->entry_length;
 
 			p = bnxt_hwrm_nvm_get_dir_entries(softc, &get->entries,
 			    &get->entry_length);
-			if (p) {
-				memcpy(get->data, p, min(oldent * oldlen,
-				    get->entries * get->entry_length));
-				free(p, M_DEVBUF);
-				iod->rc = 0;
+			if (p && (get->entries * get->entry_length <=
+			    ifbuf->length -
+			    offsetof(struct bnxt_ioctl_hwrm_nvm_get_dir_entries,
+			    data))) {
+				memcpy(get->data, p,
+				    get->entry_length * get->entries);
+				iod->hdr.rc = 0;
+				copyout(iod, ioh, ifbuf->length);
 			}
-			else
-				iod->rc = -1;
+			else {
+				iod->hdr.rc = -1;
+				copyout(&iod->hdr.rc, &ioh->rc,
+				    sizeof(ioh->rc));
+			}
 
-			return 0;
+			rc = 0;
+			goto exit;
 		}
 #ifdef notyet
 		case BNXT_HWRM_NVM_VERIFY_UPDATE:
@@ -1632,12 +1689,18 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 
 			rc = bnxt_hwrm_nvm_verify_update(softc, vrfy->type,
 			    vrfy->ordinal, vrfy->ext);
-			if (rc)
-				iod->rc = -1;
-			else
-				iod->rc = 0;
+			if (rc) {
+				iod->hdr.rc = -1;
+				copyout(&iod->hdr.rc, &ioh->rc,
+				    sizeof(ioh->rc));
+			}
+			else {
+				iod->hdr.rc = 0;
+				copyout(iod, ioh, ifbuf->length);
+			}
 
-			return 0;
+			rc = 0;
+			goto exit;
 		}
 		case BNXT_HWRM_NVM_INSTALL_UPDATE:
 		{
@@ -1648,19 +1711,30 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			    inst->install_type, &inst->installed_items,
 			    &inst->result, &inst->problem_item,
 			    &inst->reset_required);
-			if (rc)
-				iod->rc = -1;
-			else
-				iod->rc = 0;
+			if (rc) {
+				iod->hdr.rc = -1;
+				copyout(&iod->hdr.rc, &ioh->rc,
+				    sizeof(ioh->rc));
+			}
+			else {
+				iod->hdr.rc = 0;
+				copyout(iod, ioh, ifbuf->length);
+			}
 
-			return 0;
+			rc = 0;
+			goto exit;
 		}
 #endif
 		}
 		break;
 	}
 
-	return ENOTSUP;
+exit:
+	if (p)
+		free(p, M_DEVBUF);
+	if (iod)
+		free(iod, M_DEVBUF);
+	return rc;
 }
 
 /*

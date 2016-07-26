@@ -248,7 +248,13 @@ enum bnxt_ioctl_type {
 #endif
 };
 
+struct bnxt_ioctl_header {
+	enum bnxt_ioctl_type type;
+	int		rc;
+};
+
 struct bnxt_ioctl_hwrm_nvm_find_dir_entry {
+	struct bnxt_ioctl_header hdr;
 	uint32_t	data_length;
 	uint32_t	fw_ver;
 	uint32_t	item_length;
@@ -261,6 +267,7 @@ struct bnxt_ioctl_hwrm_nvm_find_dir_entry {
 };
 
 struct bnxt_ioctl_hwrm_nvm_read {
+	struct bnxt_ioctl_header hdr;
 	uint32_t	length;
 	uint32_t	offset;
 	uint16_t	index;
@@ -268,16 +275,19 @@ struct bnxt_ioctl_hwrm_nvm_read {
 };
 
 struct bnxt_ioctl_hwrm_fw_reset {
+	struct bnxt_ioctl_header hdr;
 	uint8_t		processor;
 	uint8_t		selfreset;
 };
 
 struct bnxt_ioctl_hwrm_fw_qstatus {
+	struct bnxt_ioctl_header hdr;
 	uint8_t		processor;
 	uint8_t		selfreset;
 };
 
 struct bnxt_ioctl_hwrm_nvm_write {
+	struct bnxt_ioctl_header hdr;
 	uint32_t	data_length;
 	uint32_t	item_length;
 	uint16_t	attr;
@@ -291,21 +301,27 @@ struct bnxt_ioctl_hwrm_nvm_write {
 };
 
 struct bnxt_ioctl_hwrm_nvm_erase_dir_entry {
+	struct bnxt_ioctl_header hdr;
+	enum bnxt_ioctl_type type;
+	int		rc;
 	uint16_t	index;
 };
 
 struct bnxt_ioctl_hwrm_nvm_get_dir_info {
+	struct bnxt_ioctl_header hdr;
 	uint32_t	entries;
 	uint32_t	entry_length;
 };
 
 struct bnxt_ioctl_hwrm_nvm_get_dir_entries {
+	struct bnxt_ioctl_header hdr;
 	uint32_t	entries;
 	uint32_t	entry_length;
 	uint8_t		data[];
 };
 
 struct bnxt_ioctl_hwrm_nvm_install_update {
+	struct bnxt_ioctl_header hdr;
 	uint64_t	installed_items;
 	uint32_t	install_type;
 	uint8_t		problem_item;
@@ -314,6 +330,7 @@ struct bnxt_ioctl_hwrm_nvm_install_update {
 };
 
 struct bnxt_ioctl_hwrm_nvm_verify_update {
+	struct bnxt_ioctl_header hdr;
 	uint16_t	ext;
 	uint16_t	ordinal;
 	uint16_t	type;
@@ -321,9 +338,8 @@ struct bnxt_ioctl_hwrm_nvm_verify_update {
 
 /* IOCTL interface */
 struct bnxt_ioctl_data {
-	enum bnxt_ioctl_type type;
-	int rc;
 	union {
+		struct bnxt_ioctl_header			hdr;
 		struct bnxt_ioctl_hwrm_nvm_find_dir_entry	find;
 		struct bnxt_ioctl_hwrm_nvm_read			read;
 		struct bnxt_ioctl_hwrm_fw_reset			reset;

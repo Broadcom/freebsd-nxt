@@ -1157,7 +1157,7 @@ bnxt_hwrm_nvm_read(struct bnxt_softc *softc, uint16_t index, uint32_t offset,
 	    BUS_DMA_NOWAIT);
 	if (rc)
 		return NULL;
-	buf = malloc(length, M_DEVBUF, M_NOWAIT);
+	buf = malloc(length, M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (buf == NULL)
 		goto error;
 
@@ -1353,7 +1353,7 @@ bnxt_hwrm_nvm_get_dir_entries(struct bnxt_softc *softc, uint32_t *entries,
 	if (rc)
 		return NULL;
 
-	data = malloc(data_len, M_DEVBUF, M_NOWAIT);
+	data = malloc(data_len, M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (data == NULL) {
 		iflib_dma_free(&dma_data);
 		return NULL;
