@@ -1271,6 +1271,7 @@ bnxt_hwrm_nvm_write(struct bnxt_softc *softc, void *data, uint16_t type,
 	if (item_length)
 		req.dir_item_length = htole32(item_length);
 
+	BNXT_HWRM_LOCK(softc);
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	if (rc)
 		goto exit;
