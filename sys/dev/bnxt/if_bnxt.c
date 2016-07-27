@@ -1538,19 +1538,36 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 		case BNXT_HWRM_NVM_READ:
 		{
 			struct bnxt_ioctl_hwrm_nvm_read *rd = &iod->read;
+			size_t offset;
+			size_t remain;
+			size_t csize;
 
-			p = bnxt_hwrm_nvm_read(softc, rd->index, rd->offset,
-			    rd->length);
-			if (p) {
-				memcpy(rd->data, p, rd->length);
-				iod->hdr.rc = 0;
+			/*
+			 * Some HWRM versions can't read more than 0x8000 bytes
+			 */
+			for (remain = rd->length, offset = 0;
+			    remain && offset < rd->length;
+			    offset += 0x8000) {
+				csize = min(remain, 0x8000);
+				p = bnxt_hwrm_nvm_read(softc, rd->index,
+				    rd->offset + offset, csize);
+				if (p) {
+					memcpy(rd->data + offset, p,
+					    csize);
+					iod->hdr.rc = 0;
+					free(p, M_DEVBUF);
+					p = NULL;
+				}
+				else {
+					iod->hdr.rc = -1;
+					copyout(&iod->hdr.rc, &ioh->rc,
+					    sizeof(ioh->rc));
+					break;
+				}
+				remain -= csize;
+			}
+			if (iod->hdr.rc == 0)
 				copyout(iod, ioh, ifbuf->length);
-			}
-			else {
-				iod->hdr.rc = -1;
-				copyout(&iod->hdr.rc, &ioh->rc,
-				    sizeof(ioh->rc));
-			}
 
 			rc = 0;
 			goto exit;
