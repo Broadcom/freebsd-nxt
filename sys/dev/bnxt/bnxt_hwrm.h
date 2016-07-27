@@ -82,6 +82,8 @@ int bnxt_hwrm_nvm_find_dir_entry(struct bnxt_softc *softc, uint16_t type,
     uint32_t *fw_ver);
 void *bnxt_hwrm_nvm_read(struct bnxt_softc *softc, uint16_t index,
     uint32_t offset, uint32_t length);
+int bnxt_hwrm_nvm_modify(struct bnxt_softc *softc, uint16_t index,
+    uint32_t offset, void *data, uint32_t length);
 int bnxt_hwrm_fw_reset(struct bnxt_softc *softc, uint8_t processor,
     uint8_t *selfreset);
 int bnxt_hwrm_fw_qstatus(struct bnxt_softc *softc, uint8_t type,

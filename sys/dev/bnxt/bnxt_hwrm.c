@@ -1195,6 +1195,52 @@ exit:
 }
 
 int
+bnxt_hwrm_nvm_modify(struct bnxt_softc *softc, uint16_t index, uint32_t offset,
+    void *data, uint32_t length)
+{
+	struct hwrm_nvm_modify_input req = {0};
+	struct iflib_dma_info dma_data;
+	void *buf = NULL;
+	int rc;
+	uint16_t old_timeo;
+
+	if (length == 0 || !data)
+		return EINVAL;
+	rc = iflib_dma_alloc(softc->ctx, length, &dma_data,
+	    BUS_DMA_NOWAIT);
+	if (rc)
+		return ENOMEM;
+	memcpy(dma_data.idi_vaddr, data, length);
+	bus_dmamap_sync(dma_data.idi_tag, dma_data.idi_map,
+	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_MODIFY, -1, -1);
+	req.host_src_addr = htole64(dma_data.idi_paddr);
+	req.dir_idx = htole16(index);
+	req.offset = htole32(offset);
+	req.len = htole32(length);
+	BNXT_HWRM_LOCK(softc);
+	old_timeo = softc->hwrm_cmd_timeo;
+	softc->hwrm_cmd_timeo = UINT16_MAX;
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	softc->hwrm_cmd_timeo = old_timeo;
+	BNXT_HWRM_UNLOCK(softc);
+	if (rc)
+		goto error;
+
+	goto exit;
+
+error:
+	if (buf) {
+		free(buf, M_DEVBUF);
+		buf = NULL;
+	}
+exit:
+	iflib_dma_free(&dma_data);
+	return rc;
+}
+
+int
 bnxt_hwrm_fw_reset(struct bnxt_softc *softc, uint8_t processor,
     uint8_t *selfreset)
 {
@@ -1265,13 +1311,12 @@ bnxt_hwrm_nvm_write(struct bnxt_softc *softc, void *data, uint16_t type,
 		bus_dmamap_sync(dma_data.idi_tag, dma_data.idi_map,
 		    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 	}
+	else
+		dma_data.idi_paddr = 0;
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_WRITE, -1, -1);
 
-	if (data_length)
-		req.host_src_addr = htole64(dma_data.idi_paddr);
-	else
-		req.host_src_addr = htole64(0);
+	req.host_src_addr = htole64(dma_data.idi_paddr);
 	req.dir_type = htole16(type);
 	req.dir_ordinal = htole16(ordinal);
 	req.dir_ext = htole16(ext);
@@ -1283,7 +1328,7 @@ bnxt_hwrm_nvm_write(struct bnxt_softc *softc, void *data, uint16_t type,
 		    htole16(HWRM_NVM_WRITE_INPUT_FLAGS_KEEP_ORIG_ACTIVE_IMG);
 	}
 	if (item_length)
-		req.dir_item_length = htole32(item_length);
+		req.dir_item_length = htole32(*item_length);
 
 	BNXT_HWRM_LOCK(softc);
 	old_timeo = softc->hwrm_cmd_timeo;
@@ -1299,6 +1344,8 @@ bnxt_hwrm_nvm_write(struct bnxt_softc *softc, void *data, uint16_t type,
 
 exit:
 	BNXT_HWRM_UNLOCK(softc);
+	if (data_length)
+		iflib_dma_free(&dma_data);
 	return rc;
 }
 

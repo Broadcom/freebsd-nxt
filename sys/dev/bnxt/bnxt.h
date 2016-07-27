@@ -242,6 +242,7 @@ enum bnxt_ioctl_type {
 	BNXT_HWRM_NVM_ERASE_DIR_ENTRY,
 	BNXT_HWRM_NVM_GET_DIR_INFO,
 	BNXT_HWRM_NVM_GET_DIR_ENTRIES,
+	BNXT_HWRM_NVM_MODIFY,
 #ifdef notyet
 	BNXT_HWRM_NVM_VERIFY_UPDATE,
 	BNXT_HWRM_NVM_INSTALL_UPDATE,
@@ -336,6 +337,14 @@ struct bnxt_ioctl_hwrm_nvm_verify_update {
 	uint16_t	type;
 };
 
+struct bnxt_ioctl_hwrm_nvm_modify {
+	struct bnxt_ioctl_header hdr;
+	uint32_t	length;
+	uint32_t	offset;
+	uint16_t	index;
+	uint8_t		data[];
+};
+
 /* IOCTL interface */
 struct bnxt_ioctl_data {
 	union {
@@ -350,6 +359,7 @@ struct bnxt_ioctl_data {
 		struct bnxt_ioctl_hwrm_nvm_get_dir_entries	dir_entries;
 		struct bnxt_ioctl_hwrm_nvm_install_update	install;
 		struct bnxt_ioctl_hwrm_nvm_verify_update	verify;
+		struct bnxt_ioctl_hwrm_nvm_modify		modify;
 	};
 };
 

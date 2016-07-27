@@ -1742,6 +1742,25 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			goto exit;
 		}
 #endif
+		case BNXT_HWRM_NVM_MODIFY:
+		{
+			struct bnxt_ioctl_hwrm_nvm_modify *mod = &iod->modify;
+
+			rc = bnxt_hwrm_nvm_modify(softc, mod->index,
+			    mod->offset, mod->data, mod->length);
+			if (rc) {
+				iod->hdr.rc = -1;
+				copyout(&iod->hdr.rc, &ioh->rc,
+				    sizeof(ioh->rc));
+			}
+			else {
+				iod->hdr.rc = 0;
+				copyout(iod, ioh, ifbuf->length);
+			}
+
+			rc = 0;
+			goto exit;
+		}
 		}
 		break;
 	}
