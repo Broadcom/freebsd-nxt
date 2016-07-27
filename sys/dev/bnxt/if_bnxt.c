@@ -1679,10 +1679,7 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 
 			p = bnxt_hwrm_nvm_get_dir_entries(softc, &get->entries,
 			    &get->entry_length);
-			if (p && (get->entries * get->entry_length <=
-			    ifbuf->length -
-			    offsetof(struct bnxt_ioctl_hwrm_nvm_get_dir_entries,
-			    data))) {
+			if (p) {
 				copyout(p, get->data,
 				    get->entry_length * get->entries);
 				iod->hdr.rc = 0;

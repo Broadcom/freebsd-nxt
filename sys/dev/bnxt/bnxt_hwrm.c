@@ -1306,7 +1306,8 @@ bnxt_hwrm_nvm_write(struct bnxt_softc *softc, void *data, bool cpyin,
 			return ENOMEM;
 		if (cpyin) {
 			rc = copyin(data, dma_data.idi_vaddr, data_length);
-			goto early_exit;
+			if (rc)
+				goto early_exit;
 		}
 		else
 			memcpy(dma_data.idi_vaddr, data, data_length);
