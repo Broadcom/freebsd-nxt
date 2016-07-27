@@ -249,7 +249,8 @@ bnxt_package_ver_sysctl(SYSCTL_HANDLER_ARGS)
 
 	rc = bnxt_hwrm_nvm_find_dir_entry(softc, BNX_DIR_TYPE_PKG_LOG,
 	    &ordinal, BNX_DIR_EXT_NONE, &index, false,
-	    BNXT_DIR_SEARCH_OPT_EQUAL, &data_len, NULL, NULL);
+	    HWRM_NVM_FIND_DIR_ENTRY_INPUT_OPT_ORDINAL_EQ,
+	    &data_len, NULL, NULL);
 	if (rc == 0 && data_len) {
 		pkglog = bnxt_hwrm_nvm_read(softc, index, 0, data_len);
 		if (pkglog) {

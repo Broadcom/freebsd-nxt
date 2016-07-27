@@ -60,6 +60,7 @@ __FBSDID("$FreeBSD$");
 
 #include "bnxt.h"
 #include "bnxt_hwrm.h"
+#include "bnxt_ioctl.h"
 #include "bnxt_sysctl.h"
 #include "hsi_struct_def.h"
 
