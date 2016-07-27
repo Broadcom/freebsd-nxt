@@ -1196,11 +1196,10 @@ exit:
 
 int
 bnxt_hwrm_nvm_modify(struct bnxt_softc *softc, uint16_t index, uint32_t offset,
-    void *data, uint32_t length)
+    void *data, bool cpyin, uint32_t length)
 {
 	struct hwrm_nvm_modify_input req = {0};
 	struct iflib_dma_info dma_data;
-	void *buf = NULL;
 	int rc;
 	uint16_t old_timeo;
 
@@ -1210,7 +1209,13 @@ bnxt_hwrm_nvm_modify(struct bnxt_softc *softc, uint16_t index, uint32_t offset,
 	    BUS_DMA_NOWAIT);
 	if (rc)
 		return ENOMEM;
-	memcpy(dma_data.idi_vaddr, data, length);
+	if (cpyin) {
+		rc = copyin(data, dma_data.idi_vaddr, length);
+		if (rc)
+			goto exit;
+	}
+	else
+		memcpy(dma_data.idi_vaddr, data, length);
 	bus_dmamap_sync(dma_data.idi_tag, dma_data.idi_map,
 	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 
@@ -1225,16 +1230,7 @@ bnxt_hwrm_nvm_modify(struct bnxt_softc *softc, uint16_t index, uint32_t offset,
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	softc->hwrm_cmd_timeo = old_timeo;
 	BNXT_HWRM_UNLOCK(softc);
-	if (rc)
-		goto error;
 
-	goto exit;
-
-error:
-	if (buf) {
-		free(buf, M_DEVBUF);
-		buf = NULL;
-	}
 exit:
 	iflib_dma_free(&dma_data);
 	return rc;
@@ -1291,9 +1287,10 @@ exit:
 }
 
 int
-bnxt_hwrm_nvm_write(struct bnxt_softc *softc, void *data, uint16_t type,
-    uint16_t ordinal, uint16_t ext, uint16_t attr, uint16_t option,
-    uint32_t data_length, bool keep, uint32_t *item_length, uint16_t *index)
+bnxt_hwrm_nvm_write(struct bnxt_softc *softc, void *data, bool cpyin,
+    uint16_t type, uint16_t ordinal, uint16_t ext, uint16_t attr,
+    uint16_t option, uint32_t data_length, bool keep, uint32_t *item_length,
+    uint16_t *index)
 {
 	struct hwrm_nvm_write_input req = {0};
 	struct hwrm_nvm_write_output *resp =
@@ -1307,7 +1304,12 @@ bnxt_hwrm_nvm_write(struct bnxt_softc *softc, void *data, uint16_t type,
 		    BUS_DMA_NOWAIT);
 		if (rc)
 			return ENOMEM;
-		memcpy(dma_data.idi_vaddr, data, data_length);
+		if (cpyin) {
+			rc = copyin(data, dma_data.idi_vaddr, data_length);
+			goto early_exit;
+		}
+		else
+			memcpy(dma_data.idi_vaddr, data, data_length);
 		bus_dmamap_sync(dma_data.idi_tag, dma_data.idi_map,
 		    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 	}
@@ -1344,6 +1346,7 @@ bnxt_hwrm_nvm_write(struct bnxt_softc *softc, void *data, uint16_t type,
 
 exit:
 	BNXT_HWRM_UNLOCK(softc);
+early_exit:
 	if (data_length)
 		iflib_dma_free(&dma_data);
 	return rc;

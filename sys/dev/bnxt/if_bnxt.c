@@ -1552,8 +1552,7 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 				p = bnxt_hwrm_nvm_read(softc, rd->index,
 				    rd->offset + offset, csize);
 				if (p) {
-					memcpy(rd->data + offset, p,
-					    csize);
+					copyout(p, rd->data + offset, csize);
 					iod->hdr.rc = 0;
 					free(p, M_DEVBUF);
 					p = NULL;
@@ -1617,10 +1616,10 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			struct bnxt_ioctl_hwrm_nvm_write *wr =
 			    &iod->write;
 
-			rc = bnxt_hwrm_nvm_write(softc, wr->data, wr->type,
-			    wr->ordinal, wr->ext, wr->attr, wr->option,
-			    wr->data_length, wr->keep, &wr->item_length,
-			    &wr->index);
+			rc = bnxt_hwrm_nvm_write(softc, wr->data, true,
+			    wr->type, wr->ordinal, wr->ext, wr->attr,
+			    wr->option, wr->data_length, wr->keep,
+			    &wr->item_length, &wr->index);
 			if (rc) {
 				iod->hdr.rc = -1;
 				copyout(&iod->hdr.rc, &ioh->rc,
@@ -1684,7 +1683,7 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			    ifbuf->length -
 			    offsetof(struct bnxt_ioctl_hwrm_nvm_get_dir_entries,
 			    data))) {
-				memcpy(get->data, p,
+				copyout(p, get->data,
 				    get->entry_length * get->entries);
 				iod->hdr.rc = 0;
 				copyout(iod, ioh, ifbuf->length);
@@ -1747,7 +1746,7 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			struct bnxt_ioctl_hwrm_nvm_modify *mod = &iod->modify;
 
 			rc = bnxt_hwrm_nvm_modify(softc, mod->index,
-			    mod->offset, mod->data, mod->length);
+			    mod->offset, mod->data, true, mod->length);
 			if (rc) {
 				iod->hdr.rc = -1;
 				copyout(&iod->hdr.rc, &ioh->rc,
