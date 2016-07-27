@@ -1179,6 +1179,7 @@ bnxt_hwrm_nvm_read(struct bnxt_softc *softc, uint16_t index, uint32_t offset,
 	BNXT_HWRM_UNLOCK(softc);
 	if (rc)
 		goto error;
+	bus_dmamap_sync(data.idi_tag, data.idi_map, BUS_DMASYNC_POSTREAD);
 	memcpy(buf, data.idi_vaddr, length);
 
 	goto exit;
@@ -1261,6 +1262,8 @@ bnxt_hwrm_nvm_write(struct bnxt_softc *softc, void *data, uint16_t type,
 		if (rc)
 			return ENOMEM;
 		memcpy(dma_data.idi_vaddr, data, data_length);
+		bus_dmamap_sync(dma_data.idi_tag, dma_data.idi_map,
+		    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 	}
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_WRITE, -1, -1);
@@ -1400,6 +1403,8 @@ bnxt_hwrm_nvm_get_dir_entries(struct bnxt_softc *softc, uint32_t *entries,
 		data = NULL;
 		goto exit;
 	}
+	bus_dmamap_sync(dma_data.idi_tag, dma_data.idi_map,
+	    BUS_DMASYNC_POSTWRITE);
 	memcpy(data, dma_data.idi_vaddr, data_len);
 
 exit:
