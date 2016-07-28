@@ -43,10 +43,8 @@ enum bnxt_ioctl_type {
 	BNXT_HWRM_NVM_GET_DIR_INFO,
 	BNXT_HWRM_NVM_GET_DIR_ENTRIES,
 	BNXT_HWRM_NVM_MODIFY,
-#ifdef notyet
 	BNXT_HWRM_NVM_VERIFY_UPDATE,
 	BNXT_HWRM_NVM_INSTALL_UPDATE,
-#endif
 };
 
 struct bnxt_ioctl_header {

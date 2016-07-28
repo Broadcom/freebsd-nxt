@@ -1474,7 +1474,6 @@ exit:
 	return rc;
 }
 
-#ifdef notyet
 int
 bnxt_hwrm_nvm_install_update(struct bnxt_softc *softc,
     uint32_t install_type, uint64_t *installed_items, uint8_t *result,
@@ -1515,7 +1514,7 @@ int
 bnxt_hwrm_nvm_verify_update(struct bnxt_softc *softc, uint16_t type,
     uint16_t ordinal, uint16_t ext)
 {
-	struct hwrm_nvm_verify_updateinput req = {0};
+	struct hwrm_nvm_verify_update_input req = {0};
 	uint16_t old_timeo;
 	int rc;
 
@@ -1533,4 +1532,3 @@ bnxt_hwrm_nvm_verify_update(struct bnxt_softc *softc, uint16_t type,
 	BNXT_HWRM_UNLOCK(softc);
 	return rc;
 }
-#endif

@@ -1704,7 +1704,6 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			rc = 0;
 			goto exit;
 		}
-#ifdef notyet
 		case BNXT_HWRM_NVM_VERIFY_UPDATE:
 		{
 			struct bnxt_ioctl_hwrm_nvm_verify_update *vrfy =
@@ -1747,7 +1746,6 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			rc = 0;
 			goto exit;
 		}
-#endif
 		case BNXT_HWRM_NVM_MODIFY:
 		{
 			struct bnxt_ioctl_hwrm_nvm_modify *mod = &iod->modify;
