@@ -277,6 +277,8 @@ bnxt_hwrm_ver_get(struct bnxt_softc *softc)
 	    resp->hwrm_intf_maj, resp->hwrm_intf_min, resp->hwrm_intf_upd);
 	snprintf(softc->ver_info->hwrm_fw_ver, BNXT_VERSTR_SIZE, "%d.%d.%d",
 	    resp->hwrm_fw_maj, resp->hwrm_fw_min, resp->hwrm_fw_bld);
+	strlcpy(softc->ver_info->driver_hwrm_if_ver, HWRM_VERSION_STR,
+	    BNXT_VERSTR_SIZE);
 	strlcpy(softc->ver_info->hwrm_fw_name, resp->hwrm_fw_name,
 	    BNXT_NAME_SIZE);
 

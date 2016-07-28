@@ -301,6 +301,9 @@ bnxt_create_ver_sysctls(struct bnxt_softc *softc)
 	    "hwrm_if", CTLFLAG_RD, vi->hwrm_if_ver, 0,
 	    "HWRM interface version");
 	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "driver_hwrm_if", CTLFLAG_RD, vi->driver_hwrm_if_ver, 0,
+	    "HWRM firmware version");
+	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
 	    "hwrm_fw", CTLFLAG_RD, vi->hwrm_fw_ver, 0,
 	    "HWRM firmware version");
 	SYSCTL_ADD_STRING(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,

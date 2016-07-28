@@ -434,6 +434,7 @@ struct bnxt_full_tpa_start {
 #define BNXT_NAME_SIZE		17
 struct bnxt_ver_info {
 	char		hwrm_if_ver[BNXT_VERSTR_SIZE];
+	char		driver_hwrm_if_ver[BNXT_VERSTR_SIZE];
 	char		hwrm_fw_ver[BNXT_VERSTR_SIZE];
 	char		mgmt_fw_ver[BNXT_VERSTR_SIZE];
 	char		netctrl_fw_ver[BNXT_VERSTR_SIZE];
