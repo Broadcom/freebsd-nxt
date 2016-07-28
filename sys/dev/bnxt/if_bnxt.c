@@ -1498,7 +1498,6 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 	    (struct bnxt_ioctl_header *)(ifbuf->buffer);
 	int rc = ENOTSUP;
 	struct bnxt_ioctl_data *iod = NULL;
-	void *p = NULL;
 
 	switch (command) {
 	case SIOCGPRIVATE_0:
@@ -1566,8 +1565,6 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 					copyout(dma_data.idi_vaddr,
 					    rd->data + offset, csize);
 					iod->hdr.rc = 0;
-					free(p, M_DEVBUF);
-					p = NULL;
 				}
 				remain -= csize;
 			}
@@ -1697,7 +1694,7 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 				    sizeof(ioh->rc));
 			}
 			else {
-				copyout(p, get->data,
+				copyout(dma_data.idi_vaddr, get->data,
 				    get->entry_length * get->entries);
 				iod->hdr.rc = 0;
 				copyout(iod, ioh, ifbuf->length);
@@ -1775,8 +1772,6 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 	}
 
 exit:
-	if (p)
-		free(p, M_DEVBUF);
 	if (iod)
 		free(iod, M_DEVBUF);
 	return rc;
