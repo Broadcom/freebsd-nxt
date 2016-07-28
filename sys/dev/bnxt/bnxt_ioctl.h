@@ -117,6 +117,7 @@ struct bnxt_ioctl_hwrm_nvm_get_dir_info {
 struct bnxt_ioctl_hwrm_nvm_get_dir_entries {
 	struct bnxt_ioctl_header hdr;
 	uint8_t		*data;
+	size_t		max_size;
 	uint32_t	entries;
 	uint32_t	entry_length;
 };

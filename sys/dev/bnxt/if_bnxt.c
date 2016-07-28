@@ -1524,7 +1524,7 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			    &find->data_length, &find->item_length,
 			    &find->fw_ver);
 			if (rc) {
-				iod->hdr.rc = -1;
+				iod->hdr.rc = rc;
 				copyout(&iod->hdr.rc, &ioh->rc,
 				    sizeof(ioh->rc));
 			}
@@ -1539,6 +1539,7 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 		case BNXT_HWRM_NVM_READ:
 		{
 			struct bnxt_ioctl_hwrm_nvm_read *rd = &iod->read;
+			struct iflib_dma_info dma_data;
 			size_t offset;
 			size_t remain;
 			size_t csize;
@@ -1546,29 +1547,34 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			/*
 			 * Some HWRM versions can't read more than 0x8000 bytes
 			 */
+			rc = iflib_dma_alloc(softc->ctx,
+			    min(rd->length, 0x8000), &dma_data, BUS_DMA_NOWAIT);
+			if (rc)
+				break;
 			for (remain = rd->length, offset = 0;
-			    remain && offset < rd->length;
-			    offset += 0x8000) {
+			    remain && offset < rd->length; offset += 0x8000) {
 				csize = min(remain, 0x8000);
-				p = bnxt_hwrm_nvm_read(softc, rd->index,
-				    rd->offset + offset, csize);
-				if (p) {
-					copyout(p, rd->data + offset, csize);
-					iod->hdr.rc = 0;
-					free(p, M_DEVBUF);
-					p = NULL;
-				}
-				else {
-					iod->hdr.rc = -1;
+				rc = bnxt_hwrm_nvm_read(softc, rd->index,
+				    rd->offset + offset, csize, &dma_data);
+				if (rc) {
+					iod->hdr.rc = rc;
 					copyout(&iod->hdr.rc, &ioh->rc,
 					    sizeof(ioh->rc));
 					break;
+				}
+				else {
+					copyout(dma_data.idi_vaddr,
+					    rd->data + offset, csize);
+					iod->hdr.rc = 0;
+					free(p, M_DEVBUF);
+					p = NULL;
 				}
 				remain -= csize;
 			}
 			if (iod->hdr.rc == 0)
 				copyout(iod, ioh, ifbuf->length);
 
+			iflib_dma_free(&dma_data);
 			rc = 0;
 			goto exit;
 		}
@@ -1580,7 +1586,7 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			rc = bnxt_hwrm_fw_reset(softc, rst->processor,
 			    &rst->selfreset);
 			if (rc) {
-				iod->hdr.rc = -1;
+				iod->hdr.rc = rc;
 				copyout(&iod->hdr.rc, &ioh->rc,
 				    sizeof(ioh->rc));
 			}
@@ -1600,7 +1606,7 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			rc = bnxt_hwrm_fw_qstatus(softc, qstat->processor,
 			    &qstat->selfreset);
 			if (rc) {
-				iod->hdr.rc = -1;
+				iod->hdr.rc = rc;
 				copyout(&iod->hdr.rc, &ioh->rc,
 				    sizeof(ioh->rc));
 			}
@@ -1622,7 +1628,7 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			    wr->option, wr->data_length, wr->keep,
 			    &wr->item_length, &wr->index);
 			if (rc) {
-				iod->hdr.rc = -1;
+				iod->hdr.rc = rc;
 				copyout(&iod->hdr.rc, &ioh->rc,
 				    sizeof(ioh->rc));
 			}
@@ -1641,7 +1647,7 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 
 			rc = bnxt_hwrm_nvm_erase_dir_entry(softc, erase->index);
 			if (rc) {
-				iod->hdr.rc = -1;
+				iod->hdr.rc = rc;
 				copyout(&iod->hdr.rc, &ioh->rc,
 				    sizeof(ioh->rc));
 			}
@@ -1661,7 +1667,7 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			rc = bnxt_hwrm_nvm_get_dir_info(softc, &info->entries,
 			    &info->entry_length);
 			if (rc) {
-				iod->hdr.rc = -1;
+				iod->hdr.rc = rc;
 				copyout(&iod->hdr.rc, &ioh->rc,
 				    sizeof(ioh->rc));
 			}
@@ -1677,20 +1683,26 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 		{
 			struct bnxt_ioctl_hwrm_nvm_get_dir_entries *get =
 			    &iod->dir_entries;
+			struct iflib_dma_info dma_data;
 
-			p = bnxt_hwrm_nvm_get_dir_entries(softc, &get->entries,
-			    &get->entry_length);
-			if (p) {
+			rc = iflib_dma_alloc(softc->ctx, get->max_size,
+			    &dma_data, BUS_DMA_NOWAIT);
+			if (rc)
+				break;
+			rc = bnxt_hwrm_nvm_get_dir_entries(softc, &get->entries,
+			    &get->entry_length, &dma_data);
+			if (rc) {
+				iod->hdr.rc = rc;
+				copyout(&iod->hdr.rc, &ioh->rc,
+				    sizeof(ioh->rc));
+			}
+			else {
 				copyout(p, get->data,
 				    get->entry_length * get->entries);
 				iod->hdr.rc = 0;
 				copyout(iod, ioh, ifbuf->length);
 			}
-			else {
-				iod->hdr.rc = -1;
-				copyout(&iod->hdr.rc, &ioh->rc,
-				    sizeof(ioh->rc));
-			}
+			iflib_dma_free(&dma_data);
 
 			rc = 0;
 			goto exit;
@@ -1704,7 +1716,7 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			rc = bnxt_hwrm_nvm_verify_update(softc, vrfy->type,
 			    vrfy->ordinal, vrfy->ext);
 			if (rc) {
-				iod->hdr.rc = -1;
+				iod->hdr.rc = rc;
 				copyout(&iod->hdr.rc, &ioh->rc,
 				    sizeof(ioh->rc));
 			}
@@ -1726,7 +1738,7 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			    &inst->result, &inst->problem_item,
 			    &inst->reset_required);
 			if (rc) {
-				iod->hdr.rc = -1;
+				iod->hdr.rc = rc;
 				copyout(&iod->hdr.rc, &ioh->rc,
 				    sizeof(ioh->rc));
 			}
@@ -1746,7 +1758,7 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			rc = bnxt_hwrm_nvm_modify(softc, mod->index,
 			    mod->offset, mod->data, true, mod->length);
 			if (rc) {
-				iod->hdr.rc = -1;
+				iod->hdr.rc = rc;
 				copyout(&iod->hdr.rc, &ioh->rc,
 				    sizeof(ioh->rc));
 			}

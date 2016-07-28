@@ -229,13 +229,11 @@ static char *bnxt_chip_type[] = {
 };
 #define MAX_CHIP_TYPE 3
 
-void *bnxt_hwrm_nvm_read(struct bnxt_softc *softc, uint16_t index,
-    uint32_t offset, uint32_t length);
-
 static int
 bnxt_package_ver_sysctl(SYSCTL_HANDLER_ARGS)
 {
 	struct bnxt_softc *softc = arg1;
+	struct iflib_dma_info dma_data;
 	char *pkglog = NULL;
 	char *p;
 	char *next;
@@ -251,31 +249,42 @@ bnxt_package_ver_sysctl(SYSCTL_HANDLER_ARGS)
 	    &ordinal, BNX_DIR_EXT_NONE, &index, false,
 	    HWRM_NVM_FIND_DIR_ENTRY_INPUT_OPT_ORDINAL_EQ,
 	    &data_len, NULL, NULL);
+	dma_data.idi_vaddr = NULL;
 	if (rc == 0 && data_len) {
-		pkglog = bnxt_hwrm_nvm_read(softc, index, 0, data_len);
-		if (pkglog) {
-			/* NULL terminate (removes last \n) */
-			pkglog[data_len-1] = 0;
+		rc = iflib_dma_alloc(softc->ctx, data_len, &dma_data,
+		    BUS_DMA_NOWAIT);
+		if (rc == 0) {
+			rc = bnxt_hwrm_nvm_read(softc, index, 0, data_len,
+			    &dma_data);
+			if (rc == 0) {
+				pkglog = dma_data.idi_vaddr;
+				/* NULL terminate (removes last \n) */
+				pkglog[data_len-1] = 0;
 
-			/* Set p = start of last line */
-			p = strrchr(pkglog, '\n');
-			if (p == NULL)
-				p = pkglog;
+				/* Set p = start of last line */
+				p = strrchr(pkglog, '\n');
+				if (p == NULL)
+					p = pkglog;
 
-			/* Now find the correct tab delimited field */
-			for (field = 0, next = p, p = strsep(&next, "\t");
-			    field < BNX_PKG_LOG_FIELD_IDX_PKG_VERSION && p;
-			    p = strsep(&next, "\t")) {
-				field++;
+				/* Now find the correct tab delimited field */
+				for (field = 0, next = p,
+				    p = strsep(&next, "\t");
+				    field <
+				    BNX_PKG_LOG_FIELD_IDX_PKG_VERSION && p;
+				    p = strsep(&next, "\t")) {
+					field++;
+				}
+				if (field == BNX_PKG_LOG_FIELD_IDX_PKG_VERSION)
+					buf = p;
 			}
-			if (field == BNX_PKG_LOG_FIELD_IDX_PKG_VERSION)
-				buf = p;
 		}
+		else
+			dma_data.idi_vaddr = NULL;
 	}
 
 	rc = sysctl_handle_string(oidp, buf, 0, req);
-	if (pkglog)
-		free(pkglog, M_DEVBUF);
+	if (dma_data.idi_vaddr)
+		iflib_dma_free(&dma_data);
 	return rc;
 }
 

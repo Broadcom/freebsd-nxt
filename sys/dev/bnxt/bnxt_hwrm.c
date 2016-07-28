@@ -1148,26 +1148,20 @@ exit:
 	return (rc);
 }
 
-void *
+int
 bnxt_hwrm_nvm_read(struct bnxt_softc *softc, uint16_t index, uint32_t offset,
-    uint32_t length)
+    uint32_t length, struct iflib_dma_info *data)
 {
 	struct hwrm_nvm_read_input req = {0};
-	struct iflib_dma_info data;
-	void *buf = NULL;
 	int rc;
 	uint16_t old_timeo;
 
-	rc = iflib_dma_alloc(softc->ctx, length, &data,
-	    BUS_DMA_NOWAIT);
-	if (rc)
-		return NULL;
-	buf = malloc(length, M_DEVBUF, M_NOWAIT | M_ZERO);
-	if (buf == NULL)
-		goto error;
-
+	if (length > data->idi_size) {
+		rc = EINVAL;
+		goto exit;
+	}
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_READ, -1, -1);
-	req.host_dest_addr = htole64(data.idi_paddr);
+	req.host_dest_addr = htole64(data->idi_paddr);
 	req.dir_idx = htole16(index);
 	req.offset = htole32(offset);
 	req.len = htole32(length);
@@ -1178,20 +1172,13 @@ bnxt_hwrm_nvm_read(struct bnxt_softc *softc, uint16_t index, uint32_t offset,
 	softc->hwrm_cmd_timeo = old_timeo;
 	BNXT_HWRM_UNLOCK(softc);
 	if (rc)
-		goto error;
-	bus_dmamap_sync(data.idi_tag, data.idi_map, BUS_DMASYNC_POSTREAD);
-	memcpy(buf, data.idi_vaddr, length);
+		goto exit;
+	bus_dmamap_sync(data->idi_tag, data->idi_map, BUS_DMASYNC_POSTREAD);
 
 	goto exit;
 
-error:
-	if (buf) {
-		free(buf, M_DEVBUF);
-		buf = NULL;
-	}
 exit:
-	iflib_dma_free(&data);
-	return buf;
+	return rc;
 }
 
 int
@@ -1401,16 +1388,13 @@ exit:
 	return rc;
 }
 
-void *
+int
 bnxt_hwrm_nvm_get_dir_entries(struct bnxt_softc *softc, uint32_t *entries,
-    uint32_t *entry_length)
+    uint32_t *entry_length, struct iflib_dma_info *dma_data)
 {
 	struct hwrm_nvm_get_dir_entries_input req = {0};
 	uint32_t ent;
 	uint32_t ent_len;
-	struct iflib_dma_info dma_data;
-	void *data;
-	size_t data_len;
 	int rc;
 	uint16_t old_timeo;
 
@@ -1421,46 +1405,32 @@ bnxt_hwrm_nvm_get_dir_entries(struct bnxt_softc *softc, uint32_t *entries,
 
 	rc = bnxt_hwrm_nvm_get_dir_info(softc, entries, entry_length);
 	if (rc)
-		return NULL;
+		goto exit;
+	if (*entries * *entry_length > dma_data->idi_size) {
+		rc = EINVAL;
+		goto exit;
+	}
 
 	/*
 	 * TODO: There's a race condition here that could blow up DMA memory...
 	 *	 we need to allocate the max size, not the currently in use
 	 *	 size.  The command should totally have a max size here.
 	 */
-	data_len = *entries * *entry_length;
-
-	rc = iflib_dma_alloc(softc->ctx, data_len, &dma_data,
-	    BUS_DMA_NOWAIT);
-	if (rc)
-		return NULL;
-
-	data = malloc(data_len, M_DEVBUF, M_NOWAIT | M_ZERO);
-	if (data == NULL) {
-		iflib_dma_free(&dma_data);
-		return NULL;
-	}
-
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_GET_DIR_ENTRIES, -1, -1);
-	req.host_dest_addr = htole64(dma_data.idi_paddr);
+	req.host_dest_addr = htole64(dma_data->idi_paddr);
 	BNXT_HWRM_LOCK(softc);
 	old_timeo = softc->hwrm_cmd_timeo;
 	softc->hwrm_cmd_timeo = UINT16_MAX;
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	softc->hwrm_cmd_timeo = old_timeo;
 	BNXT_HWRM_UNLOCK(softc);
-	if (rc) {
-		free(data, M_DEVBUF);
-		data = NULL;
+	if (rc)
 		goto exit;
-	}
-	bus_dmamap_sync(dma_data.idi_tag, dma_data.idi_map,
+	bus_dmamap_sync(dma_data->idi_tag, dma_data->idi_map,
 	    BUS_DMASYNC_POSTWRITE);
-	memcpy(data, dma_data.idi_vaddr, data_len);
 
 exit:
-	iflib_dma_free(&dma_data);
-	return data;
+	return rc;
 }
 
 int
