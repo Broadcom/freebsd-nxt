@@ -288,6 +288,31 @@ bnxt_package_ver_sysctl(SYSCTL_HANDLER_ARGS)
 	return rc;
 }
 
+static int
+bnxt_hwrm_min_ver_sysctl(SYSCTL_HANDLER_ARGS)
+{
+	struct bnxt_softc *softc = arg1;
+	char buf[16];
+	uint8_t	newver[3];
+	int rc;
+
+	sprintf(buf, "%hhu.%hhu.%hhu", softc->ver_info->hwrm_min_major,
+	    softc->ver_info->hwrm_min_minor, softc->ver_info->hwrm_min_update);
+
+	rc = sysctl_handle_string(oidp, buf, sizeof(buf), req);
+	if (rc || req->newptr == NULL)
+		return rc;
+	if (sscanf(buf, "%hhu.%hhu.%hhu%*c", &newver[0], &newver[1],
+	    &newver[2]) != 3)
+		return EINVAL;
+	softc->ver_info->hwrm_min_major = newver[0];
+	softc->ver_info->hwrm_min_minor = newver[1];
+	softc->ver_info->hwrm_min_update = newver[2];
+	bnxt_check_hwrm_version(softc);
+
+	return rc;
+}
+
 int
 bnxt_create_ver_sysctls(struct bnxt_softc *softc)
 {
@@ -352,6 +377,10 @@ bnxt_create_ver_sysctls(struct bnxt_softc *softc)
 	SYSCTL_ADD_PROC(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
 	    "package_ver", CTLTYPE_STRING|CTLFLAG_RD, softc, 0,
 	    bnxt_package_ver_sysctl, "A",
+	    "currently installed package version");
+	SYSCTL_ADD_PROC(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
+	    "hwrm_min_ver", CTLTYPE_STRING|CTLFLAG_RWTUN, softc, 0,
+	    bnxt_hwrm_min_ver_sysctl, "A",
 	    "currently installed package version");
 
 	return 0;

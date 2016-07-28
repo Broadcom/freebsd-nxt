@@ -353,7 +353,6 @@ struct bnxt_vf_info {
 };
 
 #define BNXT_FLAG_VF		(1<<1)
-#define BNXT_FLAG_HWRM_120	0x800
 
 #define BNXT_PF(softc)		(!((softc)->flags & BNXT_FLAG_VF))
 #define BNXT_VF(softc)		((softc)->flags & BNXT_FLAG_VF)
@@ -433,6 +432,9 @@ struct bnxt_full_tpa_start {
 #define BNXT_VERSTR_SIZE	(3*3+2+1)	/* ie: "255.255.255\0" */
 #define BNXT_NAME_SIZE		17
 struct bnxt_ver_info {
+	uint8_t		hwrm_if_major;
+	uint8_t		hwrm_if_minor;
+	uint8_t		hwrm_if_update;
 	char		hwrm_if_ver[BNXT_VERSTR_SIZE];
 	char		driver_hwrm_if_ver[BNXT_VERSTR_SIZE];
 	char		hwrm_fw_ver[BNXT_VERSTR_SIZE];
@@ -454,6 +456,10 @@ struct bnxt_ver_info {
 	uint8_t		chip_metal;
 	uint8_t		chip_bond_id;
 	uint8_t		chip_type;
+
+	uint8_t		hwrm_min_major;
+	uint8_t		hwrm_min_minor;
+	uint8_t		hwrm_min_update;
 
 	struct sysctl_ctx_list	ver_ctx;
 	struct sysctl_oid	*ver_oid;
@@ -563,5 +569,6 @@ struct bnxt_filter_info {
 
 /* Function declarations */
 void bnxt_report_link(struct bnxt_softc *softc);
+bool bnxt_check_hwrm_version(struct bnxt_softc *softc);
 
 #endif /* _BNXT_H */

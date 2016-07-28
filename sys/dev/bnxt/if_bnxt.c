@@ -591,6 +591,10 @@ bnxt_attach_pre(if_ctx_t ctx)
 		    "Unable to allocate space for version info\n");
 		goto ver_alloc_fail;
 	}
+	/* Default minimum required HWRM version */
+	softc->ver_info->hwrm_min_major = 1;
+	softc->ver_info->hwrm_min_minor = 2;
+	softc->ver_info->hwrm_min_update = 2;
 
 	rc = bnxt_hwrm_ver_get(softc);
 	if (rc) {
@@ -2294,4 +2298,40 @@ get_phy_type(struct bnxt_softc *softc)
 		return HWRM_PORT_PHY_QCFG_OUTPUT_PHY_TYPE_BASESR;
 
 	return phy_type;
+}
+
+bool
+bnxt_check_hwrm_version(struct bnxt_softc *softc)
+{
+	char buf[16];
+
+	sprintf(buf, "%hhu.%hhu.%hhu", softc->ver_info->hwrm_min_major,
+	    softc->ver_info->hwrm_min_minor, softc->ver_info->hwrm_min_update);
+	if (softc->ver_info->hwrm_min_major > softc->ver_info->hwrm_if_major) {
+		device_printf(softc->dev,
+		    "WARNING: HWRM version %s is too old (older than %s)\n",
+		    softc->ver_info->hwrm_if_ver, buf);
+		return false;
+	}
+	else if(softc->ver_info->hwrm_min_major ==
+	    softc->ver_info->hwrm_if_major) {
+		if (softc->ver_info->hwrm_min_minor >
+		    softc->ver_info->hwrm_if_minor) {
+			device_printf(softc->dev,
+			    "WARNING: HWRM version %s is too old (older than %s)\n",
+			    softc->ver_info->hwrm_if_ver, buf);
+			return false;
+		}
+		else if (softc->ver_info->hwrm_min_minor ==
+		    softc->ver_info->hwrm_if_minor) {
+			if (softc->ver_info->hwrm_min_update >
+			    softc->ver_info->hwrm_if_update) {
+				device_printf(softc->dev,
+				    "WARNING: HWRM version %s is too old (older than %s)\n",
+				    softc->ver_info->hwrm_if_ver, buf);
+				return false;
+			}
+		}
+	}
+	return true;
 }

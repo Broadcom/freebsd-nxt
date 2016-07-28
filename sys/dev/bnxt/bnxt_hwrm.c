@@ -261,20 +261,11 @@ bnxt_hwrm_ver_get(struct bnxt_softc *softc)
 	if (rc)
 		goto fail;
 
-	if (resp->hwrm_intf_maj < 1) {
-		device_printf(softc->dev,
-		    "HWRM interface %d.%d.%d is older than 1.0.0.\n",
-		    resp->hwrm_intf_maj, resp->hwrm_intf_min,
-		    resp->hwrm_intf_upd);
-		device_printf(softc->dev, "Please update firmware with "
-		    "HWRM interface 1.0.0 or newer.\n");
-	}
-	if ((resp->hwrm_intf_maj == 1 && resp->hwrm_intf_min >= 2) ||
-	    (resp->hwrm_intf_maj > 1))
-		softc->flags |= BNXT_FLAG_HWRM_120;
-
 	snprintf(softc->ver_info->hwrm_if_ver, BNXT_VERSTR_SIZE, "%d.%d.%d",
 	    resp->hwrm_intf_maj, resp->hwrm_intf_min, resp->hwrm_intf_upd);
+	softc->ver_info->hwrm_if_major = resp->hwrm_intf_maj;
+	softc->ver_info->hwrm_if_minor = resp->hwrm_intf_min;
+	softc->ver_info->hwrm_if_update = resp->hwrm_intf_upd;
 	snprintf(softc->ver_info->hwrm_fw_ver, BNXT_VERSTR_SIZE, "%d.%d.%d",
 	    resp->hwrm_fw_maj, resp->hwrm_fw_min, resp->hwrm_fw_bld);
 	strlcpy(softc->ver_info->driver_hwrm_if_ver, HWRM_VERSION_STR,
@@ -481,9 +472,8 @@ bnxt_hwrm_set_pause_common(struct bnxt_softc *softc,
     struct hwrm_port_phy_cfg_input *req)
 {
 	if (softc->link_info.autoneg & BNXT_AUTONEG_FLOW_CTRL) {
-		if (softc->flags & BNXT_FLAG_HWRM_120)
-			req->auto_pause =
-			    HWRM_PORT_PHY_CFG_INPUT_AUTO_PAUSE_AUTONEG_PAUSE;
+		req->auto_pause =
+		    HWRM_PORT_PHY_CFG_INPUT_AUTO_PAUSE_AUTONEG_PAUSE;
 		if (softc->link_info.req_flow_ctrl &
 		    HWRM_PORT_PHY_QCFG_OUTPUT_PAUSE_RX)
 			req->auto_pause |=
@@ -505,11 +495,9 @@ bnxt_hwrm_set_pause_common(struct bnxt_softc *softc,
 			    HWRM_PORT_PHY_CFG_INPUT_FORCE_PAUSE_TX;
 		req->enables |=
 			htole32(HWRM_PORT_PHY_CFG_INPUT_ENABLES_FORCE_PAUSE);
-		if (softc->flags & BNXT_FLAG_HWRM_120) {
-			req->auto_pause = req->force_pause;
-			req->enables |= htole32(
-			    HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_PAUSE);
-		}
+		req->auto_pause = req->force_pause;
+		req->enables |= htole32(
+		    HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_PAUSE);
 	}
 }
 
