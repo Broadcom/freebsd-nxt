@@ -1520,3 +1520,62 @@ bnxt_hwrm_nvm_verify_update(struct bnxt_softc *softc, uint16_t type,
 	BNXT_HWRM_UNLOCK(softc);
 	return rc;
 }
+
+int
+bnxt_hwrm_fw_get_time(struct bnxt_softc *softc, uint16_t *year, uint8_t *month,
+    uint8_t *day, uint8_t *hour, uint8_t *minute, uint8_t *second,
+    uint16_t *millisecond, uint16_t *zone)
+{
+	struct hwrm_fw_get_time_input req = {0};
+	struct hwrm_fw_get_time_output *resp =
+	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
+	int rc;
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_FW_GET_TIME, -1, -1);
+
+	BNXT_HWRM_LOCK(softc);
+	rc = _hwrm_send_message(softc, &req, sizeof(req));
+	if (rc)
+		goto exit;
+
+	if (year)
+		*year = le16toh(resp->year);
+	if (month)
+		*month = resp->month;
+	if (day)
+		*day = resp->day;
+	if (hour)
+		*hour = resp->hour;
+	if (minute)
+		*minute = resp->minute;
+	if (second)
+		*second = resp->second;
+	if (millisecond)
+		*millisecond = le16toh(resp->millisecond);
+	if (zone)
+		*zone = le16toh(resp->zone);
+
+exit:
+	BNXT_HWRM_UNLOCK(softc);
+	return rc;
+}
+
+int
+bnxt_hwrm_fw_set_time(struct bnxt_softc *softc, uint16_t year, uint8_t month,
+    uint8_t day, uint8_t hour, uint8_t minute, uint8_t second,
+    uint16_t millisecond, uint16_t zone)
+{
+	struct hwrm_fw_set_time_input req = {0};
+
+	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_FW_SET_TIME, -1, -1);
+
+	req.year = htole16(year);
+	req.month = month;
+	req.day = day;
+	req.hour = hour;
+	req.minute = minute;
+	req.second = second;
+	req.millisecond = htole16(millisecond);
+	req.zone = htole16(zone);
+	return hwrm_send_message(softc, &req, sizeof(req));
+}

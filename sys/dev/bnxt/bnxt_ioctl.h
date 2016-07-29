@@ -45,6 +45,8 @@ enum bnxt_ioctl_type {
 	BNXT_HWRM_NVM_MODIFY,
 	BNXT_HWRM_NVM_VERIFY_UPDATE,
 	BNXT_HWRM_NVM_INSTALL_UPDATE,
+	BNXT_HWRM_FW_GET_TIME,
+	BNXT_HWRM_FW_SET_TIME,
 };
 
 struct bnxt_ioctl_header {
@@ -144,6 +146,30 @@ struct bnxt_ioctl_hwrm_nvm_modify {
 	uint16_t	index;
 };
 
+struct bnxt_ioctl_hwrm_fw_get_time {
+	struct bnxt_ioctl_header hdr;
+	uint16_t	millisecond;
+	uint16_t	year;
+	uint16_t	zone;
+	uint8_t		day;
+	uint8_t		hour;
+	uint8_t		minute;
+	uint8_t		month;
+	uint8_t		second;
+};
+
+struct bnxt_ioctl_hwrm_fw_set_time {
+	struct bnxt_ioctl_header hdr;
+	uint16_t	millisecond;
+	uint16_t	year;
+	uint16_t	zone;
+	uint8_t		day;
+	uint8_t		hour;
+	uint8_t		minute;
+	uint8_t		month;
+	uint8_t		second;
+};
+
 /* IOCTL interface */
 struct bnxt_ioctl_data {
 	union {
@@ -159,6 +185,8 @@ struct bnxt_ioctl_data {
 		struct bnxt_ioctl_hwrm_nvm_install_update	install;
 		struct bnxt_ioctl_hwrm_nvm_verify_update	verify;
 		struct bnxt_ioctl_hwrm_nvm_modify		modify;
+		struct bnxt_ioctl_hwrm_fw_get_time		get_time;
+		struct bnxt_ioctl_hwrm_fw_set_time		set_time;
 	};
 };
 

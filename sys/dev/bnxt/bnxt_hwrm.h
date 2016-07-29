@@ -105,5 +105,11 @@ int bnxt_hwrm_nvm_install_update(struct bnxt_softc *softc,
     uint8_t *problem_item, uint8_t *reset_required);
 int bnxt_hwrm_nvm_verify_update(struct bnxt_softc *softc, uint16_t type,
     uint16_t ordinal, uint16_t ext);
+int bnxt_hwrm_fw_get_time(struct bnxt_softc *softc, uint16_t *year,
+    uint8_t *month, uint8_t *day, uint8_t *hour, uint8_t *minute,
+    uint8_t *second, uint16_t *millisecond, uint16_t *zone);
+int bnxt_hwrm_fw_set_time(struct bnxt_softc *softc, uint16_t year,
+    uint8_t month, uint8_t day, uint8_t hour, uint8_t minute, uint8_t second,
+    uint16_t millisecond, uint16_t zone);
 
 #endif

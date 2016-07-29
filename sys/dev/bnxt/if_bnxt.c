@@ -1769,6 +1769,48 @@ bnxt_priv_ioctl(if_ctx_t ctx, u_long command, caddr_t data)
 			rc = 0;
 			goto exit;
 		}
+		case BNXT_HWRM_FW_GET_TIME:
+		{
+			struct bnxt_ioctl_hwrm_fw_get_time *gtm =
+			    &iod->get_time;
+
+			rc = bnxt_hwrm_fw_get_time(softc, &gtm->year,
+			    &gtm->month, &gtm->day, &gtm->hour, &gtm->minute,
+			    &gtm->second, &gtm->millisecond, &gtm->zone);
+			if (rc) {
+				iod->hdr.rc = rc;
+				copyout(&iod->hdr.rc, &ioh->rc,
+				    sizeof(ioh->rc));
+			}
+			else {
+				iod->hdr.rc = 0;
+				copyout(iod, ioh, ifbuf->length);
+			}
+
+			rc = 0;
+			goto exit;
+		}
+		case BNXT_HWRM_FW_SET_TIME:
+		{
+			struct bnxt_ioctl_hwrm_fw_set_time *stm =
+			    &iod->set_time;
+
+			rc = bnxt_hwrm_fw_set_time(softc, stm->year,
+			    stm->month, stm->day, stm->hour, stm->minute,
+			    stm->second, stm->millisecond, stm->zone);
+			if (rc) {
+				iod->hdr.rc = rc;
+				copyout(&iod->hdr.rc, &ioh->rc,
+				    sizeof(ioh->rc));
+			}
+			else {
+				iod->hdr.rc = 0;
+				copyout(iod, ioh, ifbuf->length);
+			}
+
+			rc = 0;
+			goto exit;
+		}
 		}
 		break;
 	}
