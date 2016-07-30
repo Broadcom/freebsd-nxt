@@ -381,7 +381,7 @@ bnxt_create_ver_sysctls(struct bnxt_softc *softc)
 	SYSCTL_ADD_PROC(&vi->ver_ctx, SYSCTL_CHILDREN(oid), OID_AUTO,
 	    "hwrm_min_ver", CTLTYPE_STRING|CTLFLAG_RWTUN, softc, 0,
 	    bnxt_hwrm_min_ver_sysctl, "A",
-	    "currently installed package version");
+	    "minimum hwrm API vesion to support");
 
 	return 0;
 }
@@ -563,7 +563,7 @@ bnxt_create_config_sysctls_pre(struct bnxt_softc *softc)
 	    "RSS key");
 	SYSCTL_ADD_PROC(ctx, children, OID_AUTO, "rss_type",
 	    CTLTYPE_STRING|CTLFLAG_RWTUN, softc, 0, bnxt_rss_type_sysctl, "A",
-	    "RSS key");
+	    "RSS type bits");
 	SYSCTL_ADD_PROC(ctx, children, OID_AUTO, "rx_stall",
 	    CTLTYPE_INT|CTLFLAG_RWTUN, softc, 0, bnxt_rx_stall_sysctl, "I",
 	    "buffer rx packets in hardware until the host posts new buffers");
