@@ -21,7 +21,7 @@
 /*
  * Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2012, Joyent, Inc. All rights reserved.
- * Copyright (c) 2011, 2015 by Delphix. All rights reserved.
+ * Copyright (c) 2011, 2016 by Delphix. All rights reserved.
  * Copyright (c) 2014 by Saso Kiselkov. All rights reserved.
  * Copyright 2015 Nexenta Systems, Inc.  All rights reserved.
  */
@@ -784,6 +784,7 @@ typedef struct arc_write_callback arc_write_callback_t;
 struct arc_write_callback {
 	void		*awcb_private;
 	arc_done_func_t	*awcb_ready;
+	arc_done_func_t	*awcb_children_ready;
 	arc_done_func_t	*awcb_physdone;
 	arc_done_func_t	*awcb_done;
 	arc_buf_t	*awcb_buf;
@@ -919,6 +920,12 @@ sysctl_vfs_zfs_arc_max(SYSCTL_HANDLER_ARGS)
 	if (err != 0 || req->newptr == NULL)
 		return (err);
 
+	if (zfs_arc_max == 0) {
+		/* Loader tunable so blindly set */
+		zfs_arc_max = val;
+		return (0);
+	}
+
 	if (val < arc_abs_min || val > kmem_size())
 		return (EINVAL);
 	if (val < arc_c_min)
@@ -955,6 +962,12 @@ sysctl_vfs_zfs_arc_min(SYSCTL_HANDLER_ARGS)
 	err = sysctl_handle_64(oidp, &val, 0, req);
 	if (err != 0 || req->newptr == NULL)
 		return (err);
+
+	if (zfs_arc_min == 0) {
+		/* Loader tunable so blindly set */
+		zfs_arc_min = val;
+		return (0);
+	}
 
 	if (val < arc_abs_min || val > arc_c_max)
 		return (EINVAL);
@@ -5094,6 +5107,15 @@ arc_write_ready(zio_t *zio)
 	hdr->b_flags |= ARC_FLAG_IO_IN_PROGRESS;
 }
 
+static void
+arc_write_children_ready(zio_t *zio)
+{
+	arc_write_callback_t *callback = zio->io_private;
+	arc_buf_t *buf = callback->awcb_buf;
+
+	callback->awcb_children_ready(zio, buf, callback->awcb_private);
+}
+
 /*
  * The SPA calls this callback for each physical write that happens on behalf
  * of a logical write.  See the comment in dbuf_write_physdone() for details.
@@ -5190,7 +5212,8 @@ arc_write_done(zio_t *zio)
 zio_t *
 arc_write(zio_t *pio, spa_t *spa, uint64_t txg,
     blkptr_t *bp, arc_buf_t *buf, boolean_t l2arc, boolean_t l2arc_compress,
-    const zio_prop_t *zp, arc_done_func_t *ready, arc_done_func_t *physdone,
+    const zio_prop_t *zp, arc_done_func_t *ready,
+    arc_done_func_t *children_ready, arc_done_func_t *physdone,
     arc_done_func_t *done, void *private, zio_priority_t priority,
     int zio_flags, const zbookmark_phys_t *zb)
 {
@@ -5210,13 +5233,16 @@ arc_write(zio_t *pio, spa_t *spa, uint64_t txg,
 		hdr->b_flags |= ARC_FLAG_L2COMPRESS;
 	callback = kmem_zalloc(sizeof (arc_write_callback_t), KM_SLEEP);
 	callback->awcb_ready = ready;
+	callback->awcb_children_ready = children_ready;
 	callback->awcb_physdone = physdone;
 	callback->awcb_done = done;
 	callback->awcb_private = private;
 	callback->awcb_buf = buf;
 
 	zio = zio_write(pio, spa, txg, bp, buf->b_data, hdr->b_size, zp,
-	    arc_write_ready, arc_write_physdone, arc_write_done, callback,
+	    arc_write_ready,
+	    (children_ready != NULL) ? arc_write_children_ready : NULL,
+	    arc_write_physdone, arc_write_done, callback,
 	    priority, zio_flags, zb);
 
 	return (zio);

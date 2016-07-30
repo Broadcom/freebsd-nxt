@@ -22,6 +22,8 @@
 #	    to be created before files are installed
 #	LOCAL_TOOL_DIRS="list of dirs" to add additional dirs to the build-tools
 #	    list
+#	LOCAL_XTOOL_DIRS="list of dirs" to add additional dirs to the
+#	    cross-tools target
 #	METALOG="path to metadata log" to write permission and ownership
 #	    when NO_ROOT is set.  (default: ${DESTDIR}/METALOG)
 #	TARGET="machine" to crossbuild world for a different machine type
@@ -82,7 +84,7 @@ MK_CROSS_COMPILER=	no
 # Check if there is a local compiler that can satisfy as an external compiler.
 .if ${MK_SYSTEM_COMPILER} == "yes" && ${MK_CROSS_COMPILER} == "yes" && \
     (${MK_CLANG_BOOTSTRAP} == "yes" || ${MK_GCC_BOOTSTRAP} == "yes") && \
-    !make(showconfig)
+    !make(showconfig) && !make(native-xtools) && !make(xdev*)
 # Which compiler is expected to be used?
 .if ${MK_CLANG_BOOTSTRAP} == "yes"
 _expected_compiler_type=	clang
@@ -555,7 +557,7 @@ XCXXFLAGS+=	-isystem ${WORLDTMP}/usr/include/c++/v1 -std=c++11 \
 .endif
 .else
 TARGET_ABI?=	unknown
-TARGET_TRIPLE?=	${TARGET_ARCH:C/amd64/x86_64/}-${TARGET_ABI}-freebsd11.0
+TARGET_TRIPLE?=	${TARGET_ARCH:C/amd64/x86_64/}-${TARGET_ABI}-freebsd12.0
 XCFLAGS+=	-target ${TARGET_TRIPLE}
 .endif
 XCFLAGS+=	--sysroot=${WORLDTMP}
@@ -884,7 +886,7 @@ ITOOLS=	[ awk cap_mkdb cat chflags chmod chown cmp cp \
 	${LOCAL_ITOOLS}
 
 # Needed for share/man
-.if ${MK_MAN} != "no"
+.if ${MK_MAN_UTILS} != "no"
 ITOOLS+=makewhatis
 .endif
 
@@ -1815,6 +1817,7 @@ _usb_tools=	sys/boot/usb/tools
 
 cross-tools: .MAKE .PHONY
 .for _tool in \
+    ${LOCAL_XTOOL_DIRS} \
     ${_clang_libs} \
     ${_clang} \
     ${_binutils} \
