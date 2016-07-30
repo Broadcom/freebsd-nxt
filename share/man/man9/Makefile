@@ -1181,6 +1181,8 @@ MLINKS+=mutex.9 mtx_assert.9 \
 	mutex.9 MTX_SYSINIT.9 \
 	mutex.9 mtx_trylock.9 \
 	mutex.9 mtx_trylock_flags.9 \
+	mutex.9 mtx_trylock_spin.9 \
+	mutex.9 mtx_trylock_spin_flags.9 \
 	mutex.9 mtx_unlock.9 \
 	mutex.9 mtx_unlock_flags.9 \
 	mutex.9 mtx_unlock_spin.9 \
@@ -1764,6 +1766,7 @@ MLINKS+=timeout.9 callout.9 \
 	timeout.9 callout_schedule_sbt_curcpu.9 \
 	timeout.9 callout_schedule_sbt_on.9 \
 	timeout.9 callout_stop.9 \
+	timeout.9 callout_when.9 \
 	timeout.9 untimeout.9
 MLINKS+=ucred.9 cred_update_thread.9 \
 	ucred.9 crcopy.9 \

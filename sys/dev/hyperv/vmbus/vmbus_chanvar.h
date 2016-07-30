@@ -39,36 +39,7 @@
 #include <dev/hyperv/include/hyperv.h>
 #include <dev/hyperv/include/hyperv_busdma.h>
 #include <dev/hyperv/include/vmbus.h>
-
-typedef struct {
-	/*
-	 * offset in bytes from the start of ring data below
-	 */
-	volatile uint32_t       write_index;
-	/*
-	 * offset in bytes from the start of ring data below
-	 */
-	volatile uint32_t       read_index;
-	/*
-	 * NOTE: The interrupt_mask field is used only for channels, but
-	 * vmbus connection also uses this data structure
-	 */
-	volatile uint32_t       interrupt_mask;
-	/* pad it to PAGE_SIZE so that data starts on a page */
-	uint8_t                 reserved[4084];
-
-	/*
-	 * WARNING: Ring data starts here
-	 *  !!! DO NOT place any fields below this !!!
-	 */
-	uint8_t			buffer[0];	/* doubles as interrupt mask */
-} __packed hv_vmbus_ring_buffer;
-
-typedef struct {
-	hv_vmbus_ring_buffer*	ring_buffer;
-	struct mtx		ring_lock;
-	uint32_t		ring_data_size;	/* ring_size */
-} hv_vmbus_ring_buffer_info;
+#include <dev/hyperv/vmbus/vmbus_brvar.h>
 
 struct vmbus_channel {
 	/*
@@ -81,7 +52,7 @@ struct vmbus_channel {
 	/*
 	 * RX bufring; immediately following ch_txbr.
 	 */
-	hv_vmbus_ring_buffer_info	ch_rxbr;
+	struct vmbus_rxbr		ch_rxbr;
 
 	struct taskqueue		*ch_tq;
 	struct task			ch_task;
@@ -100,7 +71,7 @@ struct vmbus_channel {
 	 * TX bufring and following MNF/evtflags do _not_ fit in
 	 * one 64B cacheline.
 	 */
-	hv_vmbus_ring_buffer_info	ch_txbr __aligned(CACHE_LINE_SIZE);
+	struct vmbus_txbr		ch_txbr __aligned(CACHE_LINE_SIZE);
 	uint32_t			ch_txflags;	/* VMBUS_CHAN_TXF_ */
 
 	/*
@@ -184,9 +155,10 @@ struct vmbus_channel {
 struct vmbus_softc;
 struct vmbus_message;
 
-void	vmbus_event_proc(struct vmbus_softc *, int);
-void	vmbus_event_proc_compat(struct vmbus_softc *, int);
-void	vmbus_chan_msgproc(struct vmbus_softc *, const struct vmbus_message *);
-void	vmbus_chan_destroy_all(struct vmbus_softc *);
+void		vmbus_event_proc(struct vmbus_softc *, int);
+void		vmbus_event_proc_compat(struct vmbus_softc *, int);
+void		vmbus_chan_msgproc(struct vmbus_softc *,
+		    const struct vmbus_message *);
+void		vmbus_chan_destroy_all(struct vmbus_softc *);
 
 #endif	/* !_VMBUS_CHANVAR_H_ */

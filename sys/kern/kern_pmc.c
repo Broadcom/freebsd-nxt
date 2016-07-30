@@ -108,7 +108,7 @@ MTX_SYSINIT(pmc_soft_mtx, &pmc_softs_mtx, "pmc-softs", MTX_SPIN);
 static void
 pmc_init_sx(void)
 {
-	sx_init_flags(&pmc_sx, "pmc-sx", SX_NOWITNESS);
+	sx_init_flags(&pmc_sx, "pmc-sx", 0);
 }
 
 SYSINIT(pmcsx, SI_SUB_LOCK, SI_ORDER_MIDDLE, pmc_init_sx, NULL);

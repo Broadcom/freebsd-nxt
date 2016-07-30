@@ -128,9 +128,11 @@ static devclass_t pcib_devclass;
 DEFINE_CLASS_0(pcib, pcib_driver, pcib_methods, sizeof(struct pcib_softc));
 DRIVER_MODULE(pcib, pci, pcib_driver, pcib_devclass, NULL, NULL);
 
-#ifdef NEW_PCIB
+#if defined(NEW_PCIB) || defined(PCI_HP)
 SYSCTL_DECL(_hw_pci);
+#endif
 
+#ifdef NEW_PCIB
 static int pci_clear_pcib;
 SYSCTL_INT(_hw_pci, OID_AUTO, clear_pcib, CTLFLAG_RDTUN, &pci_clear_pcib, 0,
     "Clear firmware-assigned resources for PCI-PCI bridge I/O windows.");
@@ -907,10 +909,18 @@ pcib_set_mem_decode(struct pcib_softc *sc)
 /*
  * PCI-express HotPlug support.
  */
+static int pci_enable_pcie_hp = 1;
+SYSCTL_INT(_hw_pci, OID_AUTO, enable_pcie_hp, CTLFLAG_RDTUN,
+    &pci_enable_pcie_hp, 0,
+    "Enable support for native PCI-express HotPlug.");
+
 static void
 pcib_probe_hotplug(struct pcib_softc *sc)
 {
 	device_t dev;
+
+	if (!pci_enable_pcie_hp)
+		return;
 
 	dev = sc->dev;
 	if (pci_find_cap(dev, PCIY_EXPRESS, NULL) != 0)
