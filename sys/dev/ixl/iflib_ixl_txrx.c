@@ -393,7 +393,6 @@ ixl_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx, int budget)
 	uint32_t status;
 	int cnt, i, mask;
 
-	mask = vsi->shared->isc_nrxd-1;
 	mask = vsi->shared->isc_nrxd[0]-1;
 	for (cnt = 0, i = idx; cnt < vsi->shared->isc_nrxd[0] && cnt <= budget;) {
 		cur = &rxr->rx_base[i];

@@ -48,8 +48,8 @@ int ixgbe_get_regs(SYSCTL_HANDLER_ARGS)
 	struct ix_rx_queue *rx_que = &adapter->rx_queues[0];
 	struct rx_ring *rxr = &rx_que->rxr;
 	struct tx_ring *txr = &tx_que->txr;
-	int ntxd = ixgbe_sctx->isc_ntxd;
-	int nrxd = ixgbe_sctx->isc_nrxd;
+	int ntxd = ixgbe_sctx->isc_ntxd[0];
+	int nrxd = ixgbe_sctx->isc_nrxd[0];
 	int j;
 #endif
 
