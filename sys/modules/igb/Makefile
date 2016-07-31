@@ -6,7 +6,7 @@ SYSDIR?=${.CURDIR}/../..
 
 
 SUBDIR = \
-        igb_legacy \
-	igb_iflib
+        igb_legacy
+#	igb_iflib
 
 .include <bsd.subdir.mk>
