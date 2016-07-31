@@ -377,7 +377,7 @@ static int igb_get_regs(SYSCTL_HANDLER_ARGS)
 	struct tx_ring *txr = &tx_que->txr; 
 	int rc, j;
 	int ntxd = scctx->isc_ntxd[0];
-	int nrxd = scctx->isc_nrxd[0]; 
+	int nrxd = scctx->isc_nrxd[0];
 
 	memset(regs_buff, 0, IGB_REGS_LEN * sizeof(u32));
 
@@ -633,7 +633,7 @@ igb_if_attach_pre(if_ctx_t ctx)
 	scctx->isc_txqsizes[0] = roundup2(scctx->isc_ntxd[0] * sizeof(union e1000_adv_tx_desc), IGB_DBA_ALIGN),
 	scctx->isc_rxqsizes[0] = roundup2(scctx->isc_nrxd[0] * sizeof(union e1000_adv_rx_desc), IGB_DBA_ALIGN);
 
-	adapter->tx_process_limit = scctx->isc_ntxd[0]; 
+	adapter->tx_process_limit = scctx->isc_ntxd[0];
 
 	hw = &adapter->hw; 
 	

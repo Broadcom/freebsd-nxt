@@ -412,7 +412,7 @@ static int igb_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx, int bu
 	u32                      staterr = 0;
 	int                      cnt, i, iter;
 
-	for (iter = cnt = 0, i = idx; iter < scctx->isc_nrxd[0] && iter < budget;) {
+	for (iter = cnt = 0, i = idx; iter < scctx->isc_nrxd[0] && iter <= budget;) {
 		rxd = &rxr->rx_base[i];
 		staterr = le32toh(rxd->wb.upper.status_error);	
 		

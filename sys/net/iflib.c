@@ -4767,7 +4767,7 @@ mp_ring_state_handler(SYSCTL_HANDLER_ARGS)
 
 enum iflib_ndesc_handler {
 	IFLIB_NTXD_HANDLER,
-	IFLIB_NRXD_HANDER,
+	IFLIB_NRXD_HANDLER,
 };
 
 static int
@@ -4780,7 +4780,7 @@ mp_ndesc_handler(SYSCTL_HANDLER_ARGS)
 	char *p, *next;
 	int nqs, rc, i;
 
-	MPASS(type == IFLIB_NTXD_HANDLER || type == IFLIB_NRXD_HANDER);
+	MPASS(type == IFLIB_NTXD_HANDLER || type == IFLIB_NRXD_HANDLER);
 
 	nqs = 8;
 	switch(type) {
@@ -4789,7 +4789,7 @@ mp_ndesc_handler(SYSCTL_HANDLER_ARGS)
 		if (ctx->ifc_sctx)
 			nqs = ctx->ifc_sctx->isc_ntxqs;
 		break;
-	case IFLIB_NRXD_HANDER:
+	case IFLIB_NRXD_HANDLER:
 		ndesc = ctx->ifc_sysctl_nrxds;
 		if (ctx->ifc_sctx)
 			nqs = ctx->ifc_sctx->isc_nrxqs;
@@ -4853,7 +4853,7 @@ iflib_add_device_sysctl_pre(if_ctx_t ctx)
                        mp_ndesc_handler, "A",
                        "list of # of tx descriptors to use, 0 = use default #");
 	SYSCTL_ADD_PROC(ctx_list, oid_list, OID_AUTO, "override_nrxds",
-		       CTLTYPE_STRING|CTLFLAG_RWTUN, ctx, IFLIB_NRXD_HANDER,
+		       CTLTYPE_STRING|CTLFLAG_RWTUN, ctx, IFLIB_NRXD_HANDLER,
                        mp_ndesc_handler, "A",
                        "list of # of rx descriptors to use, 0 = use default #");
 }

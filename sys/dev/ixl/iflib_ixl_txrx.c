@@ -367,7 +367,7 @@ ixl_isc_rxd_refill(void *arg, uint16_t rxqid, uint8_t flid __unused,
 	int			i, mask;
 	uint32_t next_pidx;
 
-	mask = vsi->shared->isc_nrxd-1;
+	mask = vsi->shared->isc_nrxd[0]-1;
 	for (i = 0, next_pidx = pidx; i < count; i++) {
 		rxr->rx_base[next_pidx].read.pkt_addr = htole64(paddrs[i]);
 		next_pidx = (next_pidx + 1) & mask;
@@ -394,7 +394,8 @@ ixl_isc_rxd_available(void *arg, uint16_t rxqid, uint32_t idx, int budget)
 	int cnt, i, mask;
 
 	mask = vsi->shared->isc_nrxd-1;
-	for (cnt = 0, i = idx; cnt < vsi->shared->isc_nrxd && cnt < budget;) {
+	mask = vsi->shared->isc_nrxd[0]-1;
+	for (cnt = 0, i = idx; cnt < vsi->shared->isc_nrxd[0] && cnt <= budget;) {
 		cur = &rxr->rx_base[i];
 		qword = le64toh(cur->wb.qword1.status_error_len);
 		status = (qword & I40E_RXD_QW1_STATUS_MASK)
