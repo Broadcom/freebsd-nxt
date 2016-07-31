@@ -1,4 +1,4 @@
-#ifndef IFLIB
+#ifndef KLD_MODULE
 #include "opt_iflib.h"
 #endif
 
