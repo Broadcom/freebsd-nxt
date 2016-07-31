@@ -400,7 +400,7 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx, int budget)
 			}
 			break;
 		}
-		if (avail >= budget)
+		if (avail > budget)
 			break;
 	}
 cmpl_invalid:
