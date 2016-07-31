@@ -139,7 +139,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 	/* Ring channel doorbell */
 	bus_space_write_4(softc->hwrm_bar.tag,
 			  softc->hwrm_bar.handle,
-			  0x100, 1);
+			  0x100, htole32(1));
 
 	/* Check if response len is updated */
 	for (i = 0; i < softc->hwrm_cmd_timeo; i++) {

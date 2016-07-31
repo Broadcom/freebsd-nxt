@@ -107,7 +107,7 @@ __FBSDID("$FreeBSD$");
 	    (ring)->softc->doorbell_bar.size, BUS_SPACE_BARRIER_WRITE);	    \
 	bus_space_write_4((ring)->softc->doorbell_bar.tag,		    \
 	    (ring)->softc->doorbell_bar.handle, (ring)->doorbell,	    \
-	    CMPL_DOORBELL_KEY_CMPL | CMPL_DOORBELL_MASK);		    \
+	    htole32(CMPL_DOORBELL_KEY_CMPL | CMPL_DOORBELL_MASK));	    \
 } while (0)
 
 #define BNXT_CP_ENABLE_DB(ring) do {					    \
@@ -119,7 +119,7 @@ __FBSDID("$FreeBSD$");
 	    (ring)->softc->doorbell_bar.size, BUS_SPACE_BARRIER_WRITE);	    \
 	bus_space_write_4((ring)->softc->doorbell_bar.tag,		    \
 	    (ring)->softc->doorbell_bar.handle, (ring)->doorbell,	    \
-	    CMPL_DOORBELL_KEY_CMPL);					    \
+	    htole32(CMPL_DOORBELL_KEY_CMPL));				    \
 } while (0)
 
 #define BNXT_CP_IDX_ENABLE_DB(ring, cons) do {				    \
@@ -128,7 +128,8 @@ __FBSDID("$FreeBSD$");
 	    BUS_SPACE_BARRIER_WRITE);					    \
 	bus_space_write_4((ring)->softc->doorbell_bar.tag,		    \
 	    (ring)->softc->doorbell_bar.handle, (ring)->doorbell,	    \
-	    CMPL_DOORBELL_KEY_CMPL | CMPL_DOORBELL_IDX_VALID | (cons));	    \
+	    htole32(CMPL_DOORBELL_KEY_CMPL | CMPL_DOORBELL_IDX_VALID |	    \
+	    (cons)));							    \
 	bus_space_barrier((ring)->softc->doorbell_bar.tag,		    \
 	    (ring)->softc->doorbell_bar.handle, 0,			    \
 	    (ring)->softc->doorbell_bar.size, BUS_SPACE_BARRIER_WRITE);	    \
@@ -140,8 +141,8 @@ __FBSDID("$FreeBSD$");
 	    BUS_SPACE_BARRIER_WRITE);					    \
 	bus_space_write_4((ring)->softc->doorbell_bar.tag,		    \
 	    (ring)->softc->doorbell_bar.handle, (ring)->doorbell,	    \
-	    CMPL_DOORBELL_KEY_CMPL | CMPL_DOORBELL_IDX_VALID |		    \
-	    CMPL_DOORBELL_MASK | (cons));				    \
+	    htole32(CMPL_DOORBELL_KEY_CMPL | CMPL_DOORBELL_IDX_VALID |	    \
+	    CMPL_DOORBELL_MASK | (cons)));				    \
 	bus_space_barrier((ring)->softc->doorbell_bar.tag,		    \
 	    (ring)->softc->doorbell_bar.handle, 0,			    \
 	    (ring)->softc->doorbell_bar.size, BUS_SPACE_BARRIER_WRITE);	    \
@@ -154,7 +155,7 @@ __FBSDID("$FreeBSD$");
 	bus_space_write_4(						    \
 	    (ring)->softc->doorbell_bar.tag,				    \
 	    (ring)->softc->doorbell_bar.handle,				    \
-	    (ring)->doorbell, TX_DOORBELL_KEY_TX | (idx));		    \
+	    (ring)->doorbell, htole32(TX_DOORBELL_KEY_TX | (idx)));	    \
 } while (0)
 
 #define BNXT_RX_DB(ring, idx) do {					    \
@@ -164,7 +165,7 @@ __FBSDID("$FreeBSD$");
 	bus_space_write_4(						    \
 	    (ring)->softc->doorbell_bar.tag,				    \
 	    (ring)->softc->doorbell_bar.handle,				    \
-	    (ring)->doorbell, RX_DOORBELL_KEY_RX | (idx));		    \
+	    (ring)->doorbell, htole32(RX_DOORBELL_KEY_RX | (idx)));	    \
 } while (0)
 
 /* Lock macros */
