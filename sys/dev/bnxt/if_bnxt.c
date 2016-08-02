@@ -368,14 +368,6 @@ bnxt_queues_free(if_ctx_t ctx)
 	free(softc->ag_rings, M_DEVBUF);
 	free(softc->rx_rings, M_DEVBUF);
 	free(softc->rx_cp_rings, M_DEVBUF);
-
-	/*
-	 * Moved here from _detach() since this is called later and
-	 * we need HWRM access
-	 */
-	bnxt_hwrm_func_drv_unrgtr(softc, false);
-	bnxt_free_hwrm_dma_mem(softc);
-	BNXT_HWRM_LOCK_DESTROY(softc);
 }
 
 static int
@@ -815,7 +807,10 @@ bnxt_detach(if_ctx_t ctx)
 	free(softc->ver_info, M_DEVBUF);
 	free(softc->nvm_info, M_DEVBUF);
 
-	/* hwrm is cleaned up in queues_free() since it's called later */
+	bnxt_hwrm_func_drv_unrgtr(softc, false);
+	bnxt_free_hwrm_dma_mem(softc);
+	BNXT_HWRM_LOCK_DESTROY(softc);
+
 	pci_disable_busmaster(softc->dev);
 	bnxt_pci_mapping_free(softc);
 
