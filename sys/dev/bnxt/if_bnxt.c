@@ -1213,6 +1213,7 @@ bnxt_media_status(if_ctx_t ctx, struct ifmediareq * ifmr)
 	else if (link_info->pause == HWRM_PORT_PHY_QCFG_OUTPUT_PAUSE_RX)
 		ifmr->ifm_active |= IFM_ETH_RXPAUSE;
 
+	bnxt_report_link(softc);
 	return;
 }
 
@@ -1300,7 +1301,6 @@ bnxt_media_change(if_ctx_t ctx)
 	}
 	rc = bnxt_hwrm_set_link_setting(softc, true, true);
 	bnxt_media_status(softc->ctx, &ifmr);
-	bnxt_report_link(softc);
 	return rc;
 }
 
@@ -2222,14 +2222,13 @@ bnxt_handle_async_event(struct bnxt_softc *softc, struct cmpl_base *cmpl)
 	switch (async_id) {
 	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_LINK_STATUS_CHANGE:
 	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_LINK_SPEED_CHANGE:
+	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_LINK_SPEED_CFG_CHANGE:
 		bnxt_media_status(softc->ctx, &ifmr);
-		bnxt_report_link(softc);
 		break;
 	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_LINK_MTU_CHANGE:
 	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_DCB_CONFIG_CHANGE:
 	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_PORT_CONN_NOT_ALLOWED:
 	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_LINK_SPEED_CFG_NOT_ALLOWED:
-	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_LINK_SPEED_CFG_CHANGE:
 	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_FUNC_DRVR_UNLOAD:
 	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_FUNC_DRVR_LOAD:
 	case HWRM_ASYNC_EVENT_CMPL_EVENT_ID_PF_DRVR_UNLOAD:
