@@ -159,6 +159,7 @@ static void bnxt_def_cp_task(void *context);
 static void bnxt_handle_async_event(struct bnxt_softc *softc,
     struct cmpl_base *cmpl);
 static uint8_t get_phy_type(struct bnxt_softc *softc);
+static uint64_t bnxt_get_baudrate(struct bnxt_link_info *link);
 
 /*
  * Device Interface Declaration
@@ -2144,7 +2145,7 @@ bnxt_report_link(struct bnxt_softc *softc)
 		    flow_ctrl);
 	} else {
 		iflib_link_state_change(softc->ctx, LINK_STATE_DOWN,
-		    IF_Gbps(100));
+		    bnxt_get_baudrate(&softc->link_info));
 		device_printf(softc->dev, "Link is Down\n");
 	}
 
@@ -2371,4 +2372,34 @@ bnxt_check_hwrm_version(struct bnxt_softc *softc)
 		}
 	}
 	return true;
+}
+
+static uint64_t
+bnxt_get_baudrate(struct bnxt_link_info *link)
+{
+	switch (link->link_speed) {
+	case HWRM_PORT_PHY_QCFG_OUTPUT_LINK_SPEED_100MB:
+		return IF_Mbps(100);
+	case HWRM_PORT_PHY_QCFG_OUTPUT_LINK_SPEED_1GB:
+		return IF_Gbps(1);
+	case HWRM_PORT_PHY_QCFG_OUTPUT_LINK_SPEED_2GB:
+		return IF_Gbps(2);
+	case HWRM_PORT_PHY_QCFG_OUTPUT_LINK_SPEED_2_5GB:
+		return IF_Mbps(2500);
+	case HWRM_PORT_PHY_QCFG_OUTPUT_LINK_SPEED_10GB:
+		return IF_Gbps(10);
+	case HWRM_PORT_PHY_QCFG_OUTPUT_LINK_SPEED_20GB:
+		return IF_Gbps(20);
+	case HWRM_PORT_PHY_QCFG_OUTPUT_LINK_SPEED_25GB:
+		return IF_Gbps(25);
+	case HWRM_PORT_PHY_QCFG_OUTPUT_LINK_SPEED_40GB:
+		return IF_Gbps(40);
+	case HWRM_PORT_PHY_QCFG_OUTPUT_LINK_SPEED_50GB:
+		return IF_Gbps(50);
+	case HWRM_PORT_PHY_QCFG_OUTPUT_LINK_SPEED_100GB:
+		return IF_Gbps(100);
+	case HWRM_PORT_PHY_QCFG_OUTPUT_LINK_SPEED_10MB:
+		return IF_Mbps(10);
+	}
+	return IF_Gbps(100);
 }
