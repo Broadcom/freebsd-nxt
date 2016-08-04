@@ -991,7 +991,8 @@ bnxt_hwrm_set_filter(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic)
 	    | HWRM_CFA_L2_FILTER_ALLOC_INPUT_ENABLES_DST_ID;
 	req.enables = htole32(enables);
 	req.dst_id = htole16(vnic->id);
-	memcpy(req.l2_addr, softc->func.mac_addr, ETHER_ADDR_LEN);
+	memcpy(req.l2_addr, if_getlladdr(iflib_get_ifp(softc->ctx)),
+	    ETHER_ADDR_LEN);
 	memset(&req.l2_addr_mask, 0xff, sizeof(req.l2_addr_mask));
 
 	BNXT_HWRM_LOCK(softc);
