@@ -47,6 +47,9 @@ static void	bnxt_hwrm_set_pause_common(struct bnxt_softc *softc,
 static void	bnxt_hwrm_set_eee(struct bnxt_softc *softc,
 		    struct hwrm_port_phy_cfg_input *req);
 
+/* NVRam stuff has a five minute timeout */
+#define BNXT_NVM_TIMEO	5 * 60 * 1000
+
 static int
 bnxt_hwrm_err_map(uint16_t err)
 {
@@ -149,7 +152,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 	}
 	if (i >= softc->hwrm_cmd_timeo) {
 		device_printf(softc->dev,
-		    "Timeout sending %s: (timeout: %d) seq: %d\n",
+		    "Timeout sending %s: (timeout: %u) seq: %d\n",
 		    GET_HWRM_REQ_TYPE(req->req_type), softc->hwrm_cmd_timeo,
 		    le16toh(req->seq_id));
 		//decode_hwrm_req(req);
@@ -164,7 +167,7 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 	}
 	if (i >= softc->hwrm_cmd_timeo) {
 		device_printf(softc->dev, "Timeout sending %s: "
-		    "(timeout: %d) msg {0x%x 0x%x} len:%d v: %d\n",
+		    "(timeout: %u) msg {0x%x 0x%x} len:%d v: %d\n",
 		    GET_HWRM_REQ_TYPE(req->req_type),
 		    softc->hwrm_cmd_timeo, le16toh(req->req_type),
 		    le16toh(req->seq_id), msg_len,
@@ -1103,7 +1106,7 @@ bnxt_hwrm_nvm_find_dir_entry(struct bnxt_softc *softc, uint16_t type,
 	struct hwrm_nvm_find_dir_entry_output *resp =
 	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	int	rc = 0;
-	uint16_t old_timeo;
+	uint32_t old_timeo;
 
 	MPASS(ordinal);
 
@@ -1120,7 +1123,7 @@ bnxt_hwrm_nvm_find_dir_entry(struct bnxt_softc *softc, uint16_t type,
 
 	BNXT_HWRM_LOCK(softc);
 	old_timeo = softc->hwrm_cmd_timeo;
-	softc->hwrm_cmd_timeo = UINT16_MAX;
+	softc->hwrm_cmd_timeo = BNXT_NVM_TIMEO;
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	softc->hwrm_cmd_timeo = old_timeo;
 	if (rc)
@@ -1147,7 +1150,7 @@ bnxt_hwrm_nvm_read(struct bnxt_softc *softc, uint16_t index, uint32_t offset,
 {
 	struct hwrm_nvm_read_input req = {0};
 	int rc;
-	uint16_t old_timeo;
+	uint32_t old_timeo;
 
 	if (length > data->idi_size) {
 		rc = EINVAL;
@@ -1160,7 +1163,7 @@ bnxt_hwrm_nvm_read(struct bnxt_softc *softc, uint16_t index, uint32_t offset,
 	req.len = htole32(length);
 	BNXT_HWRM_LOCK(softc);
 	old_timeo = softc->hwrm_cmd_timeo;
-	softc->hwrm_cmd_timeo = UINT16_MAX;
+	softc->hwrm_cmd_timeo = BNXT_NVM_TIMEO;
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	softc->hwrm_cmd_timeo = old_timeo;
 	BNXT_HWRM_UNLOCK(softc);
@@ -1181,7 +1184,7 @@ bnxt_hwrm_nvm_modify(struct bnxt_softc *softc, uint16_t index, uint32_t offset,
 	struct hwrm_nvm_modify_input req = {0};
 	struct iflib_dma_info dma_data;
 	int rc;
-	uint16_t old_timeo;
+	uint32_t old_timeo;
 
 	if (length == 0 || !data)
 		return EINVAL;
@@ -1206,7 +1209,7 @@ bnxt_hwrm_nvm_modify(struct bnxt_softc *softc, uint16_t index, uint32_t offset,
 	req.len = htole32(length);
 	BNXT_HWRM_LOCK(softc);
 	old_timeo = softc->hwrm_cmd_timeo;
-	softc->hwrm_cmd_timeo = UINT16_MAX;
+	softc->hwrm_cmd_timeo = BNXT_NVM_TIMEO;
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	softc->hwrm_cmd_timeo = old_timeo;
 	BNXT_HWRM_UNLOCK(softc);
@@ -1277,7 +1280,7 @@ bnxt_hwrm_nvm_write(struct bnxt_softc *softc, void *data, bool cpyin,
 	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	struct iflib_dma_info dma_data;
 	int rc;
-	uint16_t old_timeo;
+	uint32_t old_timeo;
 
 	if (data_length) {
 		rc = iflib_dma_alloc(softc->ctx, data_length, &dma_data,
@@ -1315,7 +1318,7 @@ bnxt_hwrm_nvm_write(struct bnxt_softc *softc, void *data, bool cpyin,
 
 	BNXT_HWRM_LOCK(softc);
 	old_timeo = softc->hwrm_cmd_timeo;
-	softc->hwrm_cmd_timeo = UINT16_MAX;
+	softc->hwrm_cmd_timeo = BNXT_NVM_TIMEO;
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	softc->hwrm_cmd_timeo = old_timeo;
 	if (rc)
@@ -1337,14 +1340,14 @@ int
 bnxt_hwrm_nvm_erase_dir_entry(struct bnxt_softc *softc, uint16_t index)
 {
 	struct hwrm_nvm_erase_dir_entry_input req = {0};
-	uint16_t old_timeo;
+	uint32_t old_timeo;
 	int rc;
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_ERASE_DIR_ENTRY, -1, -1);
 	req.dir_idx = htole16(index);
 	BNXT_HWRM_LOCK(softc);
 	old_timeo = softc->hwrm_cmd_timeo;
-	softc->hwrm_cmd_timeo = UINT16_MAX;
+	softc->hwrm_cmd_timeo = BNXT_NVM_TIMEO;
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	softc->hwrm_cmd_timeo = old_timeo;
 	BNXT_HWRM_UNLOCK(softc);
@@ -1359,13 +1362,13 @@ bnxt_hwrm_nvm_get_dir_info(struct bnxt_softc *softc, uint32_t *entries,
 	struct hwrm_nvm_get_dir_info_output *resp =
 	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	int rc;
-	uint16_t old_timeo;
+	uint32_t old_timeo;
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_GET_DIR_INFO, -1, -1);
 
 	BNXT_HWRM_LOCK(softc);
 	old_timeo = softc->hwrm_cmd_timeo;
-	softc->hwrm_cmd_timeo = UINT16_MAX;
+	softc->hwrm_cmd_timeo = BNXT_NVM_TIMEO;
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	softc->hwrm_cmd_timeo = old_timeo;
 	if (rc)
@@ -1389,7 +1392,7 @@ bnxt_hwrm_nvm_get_dir_entries(struct bnxt_softc *softc, uint32_t *entries,
 	uint32_t ent;
 	uint32_t ent_len;
 	int rc;
-	uint16_t old_timeo;
+	uint32_t old_timeo;
 
 	if (!entries)
 		entries = &ent;
@@ -1413,7 +1416,7 @@ bnxt_hwrm_nvm_get_dir_entries(struct bnxt_softc *softc, uint32_t *entries,
 	req.host_dest_addr = htole64(dma_data->idi_paddr);
 	BNXT_HWRM_LOCK(softc);
 	old_timeo = softc->hwrm_cmd_timeo;
-	softc->hwrm_cmd_timeo = UINT16_MAX;
+	softc->hwrm_cmd_timeo = BNXT_NVM_TIMEO;
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	softc->hwrm_cmd_timeo = old_timeo;
 	BNXT_HWRM_UNLOCK(softc);
@@ -1435,13 +1438,13 @@ bnxt_hwrm_nvm_get_dev_info(struct bnxt_softc *softc, uint16_t *mfg_id,
 	struct hwrm_nvm_get_dev_info_output *resp =
 	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	int rc;
-	uint16_t old_timeo;
+	uint32_t old_timeo;
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_GET_DEV_INFO, -1, -1);
 
 	BNXT_HWRM_LOCK(softc);
 	old_timeo = softc->hwrm_cmd_timeo;
-	softc->hwrm_cmd_timeo = UINT16_MAX;
+	softc->hwrm_cmd_timeo = BNXT_NVM_TIMEO;
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	softc->hwrm_cmd_timeo = old_timeo;
 	if (rc)
@@ -1474,14 +1477,14 @@ bnxt_hwrm_nvm_install_update(struct bnxt_softc *softc,
 	struct hwrm_nvm_install_update_output *resp =
 	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	int rc;
-	uint16_t old_timeo;
+	uint32_t old_timeo;
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_INSTALL_UPDATE, -1, -1);
 	req.install_type = htole32(install_type);
 
 	BNXT_HWRM_LOCK(softc);
 	old_timeo = softc->hwrm_cmd_timeo;
-	softc->hwrm_cmd_timeo = UINT16_MAX;
+	softc->hwrm_cmd_timeo = BNXT_NVM_TIMEO;
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	softc->hwrm_cmd_timeo = old_timeo;
 	if (rc)
@@ -1506,7 +1509,7 @@ bnxt_hwrm_nvm_verify_update(struct bnxt_softc *softc, uint16_t type,
     uint16_t ordinal, uint16_t ext)
 {
 	struct hwrm_nvm_verify_update_input req = {0};
-	uint16_t old_timeo;
+	uint32_t old_timeo;
 	int rc;
 
 	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_NVM_VERIFY_UPDATE, -1, -1);
@@ -1517,7 +1520,7 @@ bnxt_hwrm_nvm_verify_update(struct bnxt_softc *softc, uint16_t type,
 
 	BNXT_HWRM_LOCK(softc);
 	old_timeo = softc->hwrm_cmd_timeo;
-	softc->hwrm_cmd_timeo = UINT16_MAX;
+	softc->hwrm_cmd_timeo = BNXT_NVM_TIMEO;
 	rc = _hwrm_send_message(softc, &req, sizeof(req));
 	softc->hwrm_cmd_timeo = old_timeo;
 	BNXT_HWRM_UNLOCK(softc);

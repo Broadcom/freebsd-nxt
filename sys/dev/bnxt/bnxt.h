@@ -497,7 +497,7 @@ struct bnxt_softc {
 	struct bnxt_vf_info	vf;
 
 	uint16_t		hwrm_cmd_seq;
-	uint16_t		hwrm_cmd_timeo;	/* milliseconds */
+	uint32_t		hwrm_cmd_timeo;	/* milliseconds */
 	struct iflib_dma_info	hwrm_cmd_resp;
 	/* Interrupt info for HWRM */
 	struct if_irq		irq;
