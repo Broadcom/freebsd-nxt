@@ -48,7 +48,7 @@ static void	bnxt_hwrm_set_eee(struct bnxt_softc *softc,
 		    struct hwrm_port_phy_cfg_input *req);
 
 /* NVRam stuff has a five minute timeout */
-#define BNXT_NVM_TIMEO	5 * 60 * 1000
+#define BNXT_NVM_TIMEO	(5 * 60 * 1000)
 
 static int
 bnxt_hwrm_err_map(uint16_t err)
