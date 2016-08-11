@@ -108,8 +108,8 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 	pi->ipi_new_pidx = pi->ipi_pidx;
 	tbd = &((struct tx_bd_long *)txr->vaddr)[pi->ipi_new_pidx];
 	pi->ipi_ndescs = 0;
-	tbd->opaque = htole32(((pi->ipi_nsegs + need_hi) << 24) |
-	    pi->ipi_new_pidx);
+	/* No need to byte-swap the opaque value */
+	tbd->opaque = ((pi->ipi_nsegs + need_hi) << 24) | pi->ipi_new_pidx;
 	tbd->len = htole16(pi->ipi_segs[seg].ds_len);
 	tbd->addr = htole64(pi->ipi_segs[seg++].ds_addr);
 	flags_type = ((pi->ipi_nsegs + need_hi) <<
@@ -214,7 +214,8 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t idx, bool clear)
 			if (err)
 				device_printf(softc->dev,
 				    "TX completion error %u\n", err);
-			avail += le32toh(cmpl[cons].opaque) >> 24;
+			/* No need to byte-swap the opaque value */
+			avail += cmpl[cons].opaque >> 24;
 			/*
 			 * If we're not clearing, iflib only cares if there's
 			 * at least one buffer.  Don't scan the whole ring in
@@ -269,8 +270,9 @@ bnxt_isc_rxd_refill(void *sc, uint16_t rxqid, uint8_t flid,
 	for (i=0; i<count; i++) {
 		rxbd[pidx].flags_type = htole16(type);
 		rxbd[pidx].len = htole16(len);
-		rxbd[pidx].opaque = htole32(((rxqid & 0xff) << 24) |
-		    (flid << 16) | pidx);
+		/* No need to byte-swap the opaque value */
+		rxbd[pidx].opaque = ((rxqid & 0xff) << 24) | (flid << 16)
+		    | pidx;
 		rxbd[pidx].addr = htole64(paddrs[i]);
 		if (++pidx == rx_ring->ring_size)
 			pidx = 0;
@@ -439,8 +441,9 @@ bnxt_pkt_get_l2(struct bnxt_softc *softc, if_rxd_info_t ri,
 	ags = (rcp->agg_bufs_v1 & RX_PKT_CMPL_AGG_BUFS_MASK) >>
 	    RX_PKT_CMPL_AGG_BUFS_SFT;
 	ri->iri_nfrags = ags + 1;
-	ri->iri_frags[0].irf_flid = (le32toh(rcp->opaque) >> 16) & 0xff;
-	ri->iri_frags[0].irf_idx = le32toh(rcp->opaque) & 0xffff;
+	/* No need to byte-swap the opaque value */
+	ri->iri_frags[0].irf_flid = (rcp->opaque >> 16) & 0xff;
+	ri->iri_frags[0].irf_idx = rcp->opaque & 0xffff;
 	ri->iri_frags[0].irf_len = le16toh(rcp->len);
 	ri->iri_len = le16toh(rcp->len);
 
@@ -478,8 +481,9 @@ bnxt_pkt_get_l2(struct bnxt_softc *softc, if_rxd_info_t ri,
 		ri->iri_cidx = RING_NEXT(&cpr->ring, ri->iri_cidx);
 		acp = &((struct rx_abuf_cmpl *)cpr->ring.vaddr)[cpr->cons];
 
-		ri->iri_frags[i].irf_flid = (le32toh(acp->opaque) >> 16 & 0xff);
-		ri->iri_frags[i].irf_idx = le32toh(acp->opaque) & 0xffff;
+		/* No need to byte-swap the opaque value */
+		ri->iri_frags[i].irf_flid = (acp->opaque >> 16 & 0xff);
+		ri->iri_frags[i].irf_idx = acp->opaque & 0xffff;
 		ri->iri_frags[i].irf_len = le16toh(acp->len);
 		ri->iri_len += le16toh(acp->len);
 	}
@@ -523,8 +527,9 @@ bnxt_pkt_get_tpa(struct bnxt_softc *softc, if_rxd_info_t ri,
 	ags = (agend->agg_bufs_v1 & RX_TPA_END_CMPL_AGG_BUFS_MASK) >>
 	    RX_TPA_END_CMPL_AGG_BUFS_SFT;
 	ri->iri_nfrags = ags + 1;
-	ri->iri_frags[0].irf_flid = (le32toh(tpas->low.opaque) >> 16) & 0xff;
-	ri->iri_frags[0].irf_idx = le32toh(tpas->low.opaque) & 0xffff;
+	/* No need to byte-swap the opaque value */
+	ri->iri_frags[0].irf_flid = (tpas->low.opaque >> 16) & 0xff;
+	ri->iri_frags[0].irf_idx = tpas->low.opaque & 0xffff;
 	ri->iri_frags[0].irf_len = le16toh(tpas->low.len);
 	ri->iri_len = le16toh(tpas->low.len);
 
@@ -559,16 +564,18 @@ bnxt_pkt_get_tpa(struct bnxt_softc *softc, if_rxd_info_t ri,
 		ri->iri_cidx = RING_NEXT(&cpr->ring, ri->iri_cidx);
 		acp = &((struct rx_abuf_cmpl *)cpr->ring.vaddr)[cpr->cons];
 
-		ri->iri_frags[i].irf_flid = (le32toh(acp->opaque) >> 16) & 0xff;
-		ri->iri_frags[i].irf_idx = le32toh(acp->opaque) & 0xffff;
+		/* No need to byte-swap the opaque value */
+		ri->iri_frags[i].irf_flid = (acp->opaque >> 16) & 0xff;
+		ri->iri_frags[i].irf_idx = acp->opaque & 0xffff;
 		ri->iri_frags[i].irf_len = le16toh(acp->len);
 		ri->iri_len += le16toh(acp->len);
 	}
 
 	/* And finally, the empty BD at the end... */
 	ri->iri_nfrags++;
-	ri->iri_frags[i].irf_flid = (le32toh(agend->opaque) >> 16) % 0xff;
-	ri->iri_frags[i].irf_idx = le32toh(agend->opaque) & 0xffff;
+	/* No need to byte-swap the opaque value */
+	ri->iri_frags[i].irf_flid = (agend->opaque >> 16) % 0xff;
+	ri->iri_frags[i].irf_idx = agend->opaque & 0xffff;
 	ri->iri_frags[i].irf_len = le16toh(agend->len);
 	ri->iri_len += le16toh(agend->len);
 
