@@ -930,7 +930,6 @@ bnxt_init(if_ctx_t ctx)
 			j = 0;
 	}
 
-	/* TODO: Make the hash type configurable */
 	rc = bnxt_hwrm_rss_cfg(softc, &softc->vnic_info,
 	    softc->vnic_info.rss_hash_type);
 	if (rc)
