@@ -1035,9 +1035,7 @@ bnxt_mtu_set(if_ctx_t ctx, uint32_t mtu)
 	if (mtu > BNXT_MAX_MTU)
 		return EINVAL;
 
-	/* TODO: Should we do something about PAGE_SIZE blocks here? */
-	softc->scctx->isc_max_frame_size = mtu + ETHER_HDR_LEN +
-	    ETHER_CRC_LEN;
+	softc->scctx->isc_max_frame_size = mtu + ETHER_HDR_LEN + ETHER_CRC_LEN;
 	return 0;
 }
 
