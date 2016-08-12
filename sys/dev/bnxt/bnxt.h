@@ -260,6 +260,7 @@ struct bnxt_link_info {
 	uint8_t		auto_mode;
 #define PHY_VER_LEN		3
 	uint8_t		phy_ver[PHY_VER_LEN];
+	uint8_t		phy_type;
 	uint16_t	link_speed;
 	uint16_t	support_speeds;
 	uint16_t	auto_link_speeds;
@@ -267,20 +268,13 @@ struct bnxt_link_info {
 	uint16_t	force_link_speed;
 	uint32_t	preemphasis;
 
-	/* copy of requested setting from ethtool cmd */
+	/* copy of requested setting */
 	uint8_t		autoneg;
 #define BNXT_AUTONEG_SPEED	1
 #define BNXT_AUTONEG_FLOW_CTRL	2
 	uint8_t		req_duplex;
 	uint8_t		req_flow_ctrl;
 	uint16_t	req_link_speed;
-	uint32_t	advertising;
-	bool		force_link_chng;
-	/*
-	 * a copy of phy_qcfg output used
-	 * to report link info to VF
-	 */
-	struct hwrm_port_phy_qcfg_output phy_qcfg_resp;
 };
 
 enum bnxt_cp_type {

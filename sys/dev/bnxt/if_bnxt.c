@@ -1851,7 +1851,6 @@ bnxt_probe_phy(struct bnxt_softc *softc)
 		link_info->req_link_speed = link_info->auto_link_speed;
 	else
 		link_info->req_link_speed = link_info->force_link_speed;
-	link_info->advertising = link_info->auto_link_speeds;
 	return (rc);
 }
 
@@ -2039,54 +2038,12 @@ static int
 bnxt_update_link(struct bnxt_softc *softc, bool chng_link_state)
 {
 	struct bnxt_link_info *link_info = &softc->link_info;
-	struct hwrm_port_phy_qcfg_input req = {0};
-	struct hwrm_port_phy_qcfg_output *resp =
-	    (void *)softc->hwrm_cmd_resp.idi_vaddr;
 	uint8_t link_up = link_info->link_up;
 	int rc = 0;
 
-	BNXT_HWRM_LOCK(softc);
-	bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_PORT_PHY_QCFG, -1, -1);
-
-	rc = _hwrm_send_message(softc, &req, sizeof(req));
-	if (rc) {
-		BNXT_HWRM_UNLOCK(softc);
-		return rc;
-	}
-
-	memcpy(&link_info->phy_qcfg_resp, resp, sizeof(*resp));
-	link_info->phy_link_status = resp->link;
-	link_info->duplex =  resp->duplex;
-	link_info->pause = resp->pause;
-	link_info->auto_mode = resp->auto_mode;
-	link_info->auto_pause = resp->auto_pause;
-	link_info->force_pause = resp->force_pause;
-	link_info->duplex_setting = resp->duplex;
-	if (link_info->phy_link_status == HWRM_PORT_PHY_QCFG_OUTPUT_LINK_LINK)
-		link_info->link_speed = le16toh(resp->link_speed);
-	else
-		link_info->link_speed = 0;
-
-	link_info->force_link_speed = le16toh(resp->force_link_speed);
-	link_info->auto_link_speed = le16toh(resp->auto_link_speed);
-	link_info->support_speeds = le16toh(resp->support_speeds);
-	link_info->auto_link_speeds = le16toh(resp->auto_link_speed_mask);
-	link_info->preemphasis = le32toh(resp->preemphasis);
-	link_info->phy_ver[0] = resp->phy_maj;
-	link_info->phy_ver[1] = resp->phy_min;
-	link_info->phy_ver[2] = resp->phy_bld;
-	snprintf(softc->ver_info->phy_ver, sizeof(softc->ver_info->phy_ver),
-	    "%d.%d.%d", link_info->phy_ver[0], link_info->phy_ver[1],
-	    link_info->phy_ver[2]);
-	strlcpy(softc->ver_info->phy_vendor, resp->phy_vendor_name,
-	    BNXT_NAME_SIZE);
-	strlcpy(softc->ver_info->phy_partnumber, resp->phy_vendor_partnumber,
-	    BNXT_NAME_SIZE);
-	link_info->media_type = resp->media_type;
-	link_info->media_type = resp->media_type;
-	link_info->transceiver = resp->xcvr_pkg_type;
-	link_info->phy_addr = resp->eee_config_phy_addr &
-	    HWRM_PORT_PHY_QCFG_OUTPUT_PHY_ADDR_MASK;
+	rc = bnxt_hwrm_port_phy_qcfg(softc);
+	if (rc)
+		goto exit;
 
 	/* TODO: need to add more logic to report VF link */
 	if (chng_link_state) {
@@ -2101,8 +2058,9 @@ bnxt_update_link(struct bnxt_softc *softc, bool chng_link_state)
 		/* always link down if not require to update link state */
 		link_info->link_up = 0;
 	}
-	BNXT_HWRM_UNLOCK(softc);
-	return (0);
+
+exit:
+	return rc;
 }
 
 void
@@ -2307,7 +2265,7 @@ static uint8_t
 get_phy_type(struct bnxt_softc *softc)
 {
 	struct bnxt_link_info *link_info = &softc->link_info;
-	uint8_t phy_type = link_info->phy_qcfg_resp.phy_type;
+	uint8_t phy_type = link_info->phy_type;
 	uint16_t supported;
 
 	if (phy_type != HWRM_PORT_PHY_QCFG_OUTPUT_PHY_TYPE_UNKNOWN)
@@ -2316,10 +2274,10 @@ get_phy_type(struct bnxt_softc *softc)
 	/* Deduce the phy type from the media type and supported speeds */
 	supported = link_info->support_speeds;
 
-	if (link_info->phy_qcfg_resp.media_type ==
+	if (link_info->media_type ==
 	    HWRM_PORT_PHY_QCFG_OUTPUT_MEDIA_TYPE_TP)
 		return HWRM_PORT_PHY_QCFG_OUTPUT_PHY_TYPE_BASET;
-	if (link_info->phy_qcfg_resp.media_type ==
+	if (link_info->media_type ==
 	    HWRM_PORT_PHY_QCFG_OUTPUT_MEDIA_TYPE_DAC) {
 		if (supported & HWRM_PORT_PHY_QCFG_OUTPUT_SUPPORT_SPEEDS_2_5GB)
 			return HWRM_PORT_PHY_QCFG_OUTPUT_PHY_TYPE_BASEKX;
@@ -2327,7 +2285,7 @@ get_phy_type(struct bnxt_softc *softc)
 			return HWRM_PORT_PHY_QCFG_OUTPUT_PHY_TYPE_BASEKR;
 		return HWRM_PORT_PHY_QCFG_OUTPUT_PHY_TYPE_BASECR;
 	}
-	if (link_info->phy_qcfg_resp.media_type ==
+	if (link_info->media_type ==
 	    HWRM_PORT_PHY_QCFG_OUTPUT_MEDIA_TYPE_FIBRE)
 		return HWRM_PORT_PHY_QCFG_OUTPUT_PHY_TYPE_BASESR;
 
