@@ -1,10 +1,16 @@
-# $FreeBSD$
+#$FreeBSD$
 
-SYSDIR?=${.CURDIR}/../..
-.include "${SYSDIR}/conf/kern.opts.mk"
+.PATH:  ${.CURDIR}/../../dev/ixl
 
-SUBDIR = \
-        ixlv_iflib \
-	ixlv_legacy
+KMOD    = if_ixlv
+SRCS    = device_if.h bus_if.h pci_if.h pci_iov_if.h
+SRCS    += opt_inet.h opt_inet6.h opt_rss.h
+SRCS    += if_ixlv.c ixlvc.c ixl_txrx.c i40e_osdep.c
 
-.include <bsd.subdir.mk>
+# Shared source
+SRCS    += i40e_common.c i40e_nvm.c i40e_adminq.c
+
+# Debug messages / sysctls
+# CFLAGS += -DIXL_DEBUG
+
+.include <bsd.kmod.mk>

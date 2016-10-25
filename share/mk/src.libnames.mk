@@ -91,6 +91,7 @@ _LIBRARIES=	\
 		dtrace \
 		dwarf \
 		edit \
+		efivar \
 		elf \
 		execinfo \
 		fetch \
@@ -105,6 +106,7 @@ _LIBRARIES=	\
 		heimntlm \
 		heimsqlite \
 		hx509 \
+		ifconfig \
 		ipsec \
 		jail \
 		kadm5clnt \

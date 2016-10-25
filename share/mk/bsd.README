@@ -114,7 +114,7 @@ the tree where the file gets installed.
 
 The profiled libraries are no longer built in a different directory than
 the regular libraries.  A new suffix, ".po", is used to denote a profiled
-object.
+object, and ".pico" denotes a position-independent relocatable object.
 
 =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
@@ -331,6 +331,7 @@ PROGS_CXX	PROG and PROGS_CXX in one Makefile.  To define
 		- DEBUG_FLAGS
 		- DPADD
 		- DPSRCS
+		- INTERNALPROG (no installation)
 		- LDADD
 		- LDFLAGS
 		- LIBADD

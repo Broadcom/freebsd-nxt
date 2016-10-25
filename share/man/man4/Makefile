@@ -114,6 +114,7 @@ MAN=	aac.4 \
 	cue.4 \
 	cxgb.4 \
 	cxgbe.4 \
+	cxgbev.4 \
 	cy.4 \
 	cyapa.4 \
 	da.4 \
@@ -123,7 +124,6 @@ MAN=	aac.4 \
 	ddb.4 \
 	de.4 \
 	devctl.4 \
-	digi.4 \
 	disc.4 \
 	divert.4 \
 	${_dpms.4} \
@@ -270,7 +270,6 @@ MAN=	aac.4 \
 	mac_stub.4 \
 	mac_test.4 \
 	malo.4 \
-	mcd.4 \
 	md.4 \
 	mdio.4 \
 	me.4 \
@@ -281,6 +280,7 @@ MAN=	aac.4 \
 	mk48txx.4 \
 	mld.4 \
 	mlx.4 \
+	mlx4en.4 \
 	mlx5en.4 \
 	mly.4 \
 	mmc.4 \
@@ -434,6 +434,7 @@ MAN=	aac.4 \
 	rp.4 \
 	rtwn.4 \
 	rtwnfw.4 \
+	rtwn_pci.4 \
 	rue.4 \
 	rum.4 \
 	run.4 \
@@ -443,7 +444,6 @@ MAN=	aac.4 \
 	sbp.4 \
 	sbp_targ.4 \
 	scc.4 \
-	scd.4 \
 	sched_4bsd.4 \
 	sched_ule.4 \
 	screen.4 \
@@ -456,7 +456,6 @@ MAN=	aac.4 \
 	sf.4 \
 	${_sfxge.4} \
 	sge.4 \
-	si.4 \
 	siba.4 \
 	siftr.4 \
 	siis.4 \
@@ -500,7 +499,6 @@ MAN=	aac.4 \
 	snd_via82c686.4 \
 	snd_vibes.4 \
 	snp.4 \
-	spic.4 \
 	${_spkr.4} \
 	splash.4 \
 	sppp.4 \
@@ -609,6 +607,9 @@ MLINKS+=cxgb.4 if_cxgb.4
 MLINKS+=cxgbe.4 if_cxgbe.4 \
 	cxgbe.4 cxl.4 \
 	cxgbe.4 if_cxl.4
+MLINKS+=cxgbev.4 if_cxgbev.4 \
+	cxgbev.4 cxlv.4 \
+	cxgbev.4 if_cxlv.4
 MLINKS+=dc.4 if_dc.4
 MLINKS+=de.4 if_de.4
 MLINKS+=disc.4 if_disc.4
@@ -694,6 +695,8 @@ MLINKS+=pms.4 pmspcv.4
 MLINKS+=ral.4 if_ral.4
 MLINKS+=re.4 if_re.4
 MLINKS+=rl.4 if_rl.4
+MLINKS+=rtwn.4 if_rtwn.4
+MLINKS+=rtwn_pci.4 if_rtwn_pci.4
 MLINKS+=rue.4 if_rue.4
 MLINKS+=rum.4 if_rum.4
 MLINKS+=run.4 if_run.4
@@ -888,6 +891,7 @@ MAN+=	\
 	otusfw.4 \
 	rsu.4 \
 	rsufw.4 \
+	rtwn_usb.4 \
 	u3g.4 \
 	uark.4 \
 	uart.4 \
@@ -930,8 +934,6 @@ MAN+=	\
 	urio.4 \
 	urndis.4 \
 	${_urtw.4} \
-	urtwn.4 \
-	urtwnfw.4 \
 	usb.4 \
 	usb_quirk.4 \
 	usb_template.4 \
@@ -943,6 +945,7 @@ MAN+=	\
 
 MLINKS+=otus.4 if_otus.4
 MLINKS+=rsu.4 if_rsu.4
+MLINKS+=rtwn_usb.4 if_rtwn_usb.4
 MLINKS+=u3g.4 u3gstub.4
 MLINKS+=uath.4 if_uath.4
 MLINKS+=udav.4 if_udav.4
@@ -950,7 +953,6 @@ MLINKS+=upgt.4 if_upgt.4
 MLINKS+=ural.4 if_ural.4
 MLINKS+=urndis.4 if_urndis.4
 MLINKS+=${_urtw.4} ${_if_urtw.4}
-MLINKS+=urtwn.4 if_urtwn.4
 .endif
 
 .include <bsd.prog.mk>

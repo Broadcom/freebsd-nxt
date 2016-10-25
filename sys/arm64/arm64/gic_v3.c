@@ -408,8 +408,8 @@ arm_gic_v3_intr(void *arg)
 #ifdef SMP
 			intr_ipi_dispatch(sgi_to_ipi[gi->gi_irq], tf);
 #else
-			device_printf(sc->dev, "SGI %u on UP system detected\n",
-			    active_irq - GIC_FIRST_SGI);
+			device_printf(sc->dev, "SGI %ju on UP system detected\n",
+			    (uintmax_t)(active_irq - GIC_FIRST_SGI));
 #endif
 		} else if (active_irq >= GIC_FIRST_PPI &&
 		    active_irq <= GIC_LAST_SPI) {
@@ -503,12 +503,33 @@ gic_map_fdt(device_t dev, u_int ncells, pcell_t *cells, u_int *irqp,
 #endif
 
 static int
+gic_map_msi(device_t dev, struct intr_map_data_msi *msi_data, u_int *irqp,
+    enum intr_polarity *polp, enum intr_trigger *trigp)
+{
+	struct gic_v3_irqsrc *gi;
+
+	/* SPI-mapped MSI */
+	gi = (struct gic_v3_irqsrc *)msi_data->isrc;
+	if (gi == NULL)
+		return (ENXIO);
+
+	*irqp = gi->gi_irq;
+
+	/* MSI/MSI-X interrupts are always edge triggered with high polarity */
+	*polp = INTR_POLARITY_HIGH;
+	*trigp = INTR_TRIGGER_EDGE;
+
+	return (0);
+}
+
+static int
 do_gic_v3_map_intr(device_t dev, struct intr_map_data *data, u_int *irqp,
     enum intr_polarity *polp, enum intr_trigger *trigp)
 {
 	struct gic_v3_softc *sc;
 	enum intr_polarity pol;
 	enum intr_trigger trig;
+	struct intr_map_data_msi *dam;
 #ifdef FDT
 	struct intr_map_data_fdt *daf;
 #endif
@@ -525,6 +546,12 @@ do_gic_v3_map_intr(device_t dev, struct intr_map_data *data, u_int *irqp,
 			return (EINVAL);
 		break;
 #endif
+	case INTR_MAP_DATA_MSI:
+		/* SPI-mapped MSI */
+		dam = (struct intr_map_data_msi *)data;
+		if (gic_map_msi(dev, dam, &irq, &pol, &trig) != 0)
+			return (EINVAL);
+		break;
 	default:
 		return (EINVAL);
 	}

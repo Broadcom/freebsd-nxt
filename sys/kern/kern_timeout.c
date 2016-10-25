@@ -15,7 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -984,7 +984,7 @@ callout_when(sbintime_t sbt, sbintime_t precision, int flags,
 		if ((flags & C_HARDCLOCK) == 0)
 			to_sbt += tick_sbt;
 	} else
-		  to_sbt = sbinuptime();
+		to_sbt = sbinuptime();
 	if (SBT_MAX - to_sbt < sbt)
 		to_sbt = SBT_MAX;
 	else
@@ -1061,7 +1061,7 @@ callout_reset_sbt_on(struct callout *c, sbintime_t sbt, sbintime_t prec,
 		 */
 		if (c->c_lock != NULL && !cc_exec_cancel(cc, direct))
 			cancelled = cc_exec_cancel(cc, direct) = true;
-		if (cc_exec_waiting(cc, direct)) {
+		if (cc_exec_waiting(cc, direct) || cc_exec_drain(cc, direct)) {
 			/*
 			 * Someone has called callout_drain to kill this
 			 * callout.  Don't reschedule.

@@ -21,7 +21,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -1302,6 +1302,7 @@ vn_truncate(struct file *fp, off_t length, struct ucred *active_cred,
 	if (error)
 		goto out1;
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+	AUDIT_ARG_VNODE1(vp);
 	if (vp->v_type == VDIR) {
 		error = EISDIR;
 		goto out;

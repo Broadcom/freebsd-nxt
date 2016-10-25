@@ -49,7 +49,7 @@ __FBSDID("$FreeBSD$");
 
 #include <dt-bindings/clock/sun4i-a10-pll2.h>
 
-#include <arm/allwinner/allwinner_machdep.h>
+#include <arm/allwinner/aw_machdep.h>
 
 #include "clkdev_if.h"
 
@@ -110,14 +110,14 @@ __FBSDID("$FreeBSD$");
 #define	A13_PLL2_PRE_DIV		(0x1f << 0)
 #define	A13_PLL2_PRE_DIV_SHIFT		0
 
+#define	A23_PLL1_FACTOR_P		(0x3 << 16)
+#define	A23_PLL1_FACTOR_P_SHIFT		16
 #define	A23_PLL1_FACTOR_N		(0x1f << 8)
 #define	A23_PLL1_FACTOR_N_SHIFT		8
 #define	A23_PLL1_FACTOR_K		(0x3 << 4)
 #define	A23_PLL1_FACTOR_K_SHIFT		4
 #define	A23_PLL1_FACTOR_M		(0x3 << 0)
 #define	A23_PLL1_FACTOR_M_SHIFT		0
-#define	A23_PLL1_FACTOR_P		(0x3 << 16)
-#define	A23_PLL1_FACTOR_P_SHIFT		16
 
 #define	A31_PLL1_LOCK			(1 << 28)
 #define	A31_PLL1_CPU_SIGMA_DELTA_EN	(1 << 24)
@@ -142,11 +142,31 @@ __FBSDID("$FreeBSD$");
 #define	A31_PLL6_DEFAULT_K		0x1
 #define	A31_PLL6_TIMEOUT		10
 
+#define	A64_PLLHSIC_LOCK		(1 << 28)
+#define	A64_PLLHSIC_FRAC_CLK_OUT	(1 << 25)
+#define	A64_PLLHSIC_PLL_MODE_SEL	(1 << 24)
+#define	A64_PLLHSIC_PLL_SDM_EN		(1 << 20)
+#define	A64_PLLHSIC_FACTOR_N		(0x7f << 8)
+#define	A64_PLLHSIC_FACTOR_N_SHIFT	8
+#define	A64_PLLHSIC_PRE_DIV_M		(0xf << 0)
+#define	A64_PLLHSIC_PRE_DIV_M_SHIFT	0
+
 #define	A80_PLL4_CLK_OUT_EN		(1 << 20)
 #define	A80_PLL4_PLL_DIV2		(1 << 18)
 #define	A80_PLL4_PLL_DIV1		(1 << 16)
 #define	A80_PLL4_FACTOR_N		(0xff << 8)
 #define	A80_PLL4_FACTOR_N_SHIFT		8
+
+#define	A83T_PLLCPUX_LOCK_TIME		(0x7 << 24)
+#define	A83T_PLLCPUX_LOCK_TIME_SHIFT	24
+#define	A83T_PLLCPUX_CLOCK_OUTPUT_DIS	(1 << 20)
+#define	A83T_PLLCPUX_OUT_EXT_DIVP	(1 << 16)
+#define	A83T_PLLCPUX_FACTOR_N		(0xff << 8)
+#define	A83T_PLLCPUX_FACTOR_N_SHIFT	8
+#define	A83T_PLLCPUX_FACTOR_N_MIN	12
+#define	A83T_PLLCPUX_FACTOR_N_MAX	125
+#define	A83T_PLLCPUX_POSTDIV_M		(0x3 << 0)
+#define	A83T_PLLCPUX_POSTDIV_M_SHIFT	0
 
 #define	CLKID_A10_PLL3_1X		0
 #define	CLKID_A10_PLL3_2X		1
@@ -162,6 +182,89 @@ __FBSDID("$FreeBSD$");
 #define	CLKID_A31_PLL6			0
 #define	CLKID_A31_PLL6_X2		1
 
+struct aw_pll_factor {
+	unsigned int		n;
+	unsigned int		k;
+	unsigned int		m;
+	unsigned int		p;
+	uint64_t		freq;
+};
+#define	PLLFACTOR(_n, _k, _m, _p, _freq)	\
+	{ .n = (_n), .k = (_k), .m = (_m), .p = (_p), .freq = (_freq) }
+
+static struct aw_pll_factor aw_a23_pll1_factors[] = {
+	PLLFACTOR(9, 0, 0, 2, 60000000),
+	PLLFACTOR(10, 0, 0, 2, 66000000),
+	PLLFACTOR(11, 0, 0, 2, 72000000),
+	PLLFACTOR(12, 0, 0, 2, 78000000),
+	PLLFACTOR(13, 0, 0, 2, 84000000),
+	PLLFACTOR(14, 0, 0, 2, 90000000),
+	PLLFACTOR(15, 0, 0, 2, 96000000),
+	PLLFACTOR(16, 0, 0, 2, 102000000),
+	PLLFACTOR(17, 0, 0, 2, 108000000),
+	PLLFACTOR(18, 0, 0, 2, 114000000),
+	PLLFACTOR(9, 0, 0, 1, 120000000),
+	PLLFACTOR(10, 0, 0, 1, 132000000),
+	PLLFACTOR(11, 0, 0, 1, 144000000),
+	PLLFACTOR(12, 0, 0, 1, 156000000),
+	PLLFACTOR(13, 0, 0, 1, 168000000),
+	PLLFACTOR(14, 0, 0, 1, 180000000),
+	PLLFACTOR(15, 0, 0, 1, 192000000),
+	PLLFACTOR(16, 0, 0, 1, 204000000),
+	PLLFACTOR(17, 0, 0, 1, 216000000),
+	PLLFACTOR(18, 0, 0, 1, 228000000),
+	PLLFACTOR(9, 0, 0, 0, 240000000),
+	PLLFACTOR(10, 0, 0, 0, 264000000),
+	PLLFACTOR(11, 0, 0, 0, 288000000),
+	PLLFACTOR(12, 0, 0, 0, 312000000),
+	PLLFACTOR(13, 0, 0, 0, 336000000),
+	PLLFACTOR(14, 0, 0, 0, 360000000),
+	PLLFACTOR(15, 0, 0, 0, 384000000),
+	PLLFACTOR(16, 0, 0, 0, 408000000),
+	PLLFACTOR(17, 0, 0, 0, 432000000),
+	PLLFACTOR(18, 0, 0, 0, 456000000),
+	PLLFACTOR(19, 0, 0, 0, 480000000),
+	PLLFACTOR(20, 0, 0, 0, 504000000),
+	PLLFACTOR(21, 0, 0, 0, 528000000),
+	PLLFACTOR(22, 0, 0, 0, 552000000),
+	PLLFACTOR(23, 0, 0, 0, 576000000),
+	PLLFACTOR(24, 0, 0, 0, 600000000),
+	PLLFACTOR(25, 0, 0, 0, 624000000),
+	PLLFACTOR(26, 0, 0, 0, 648000000),
+	PLLFACTOR(27, 0, 0, 0, 672000000),
+	PLLFACTOR(28, 0, 0, 0, 696000000),
+	PLLFACTOR(29, 0, 0, 0, 720000000),
+	PLLFACTOR(15, 1, 0, 0, 768000000),
+	PLLFACTOR(10, 2, 0, 0, 792000000),
+	PLLFACTOR(16, 1, 0, 0, 816000000),
+	PLLFACTOR(17, 1, 0, 0, 864000000),
+	PLLFACTOR(18, 1, 0, 0, 912000000),
+	PLLFACTOR(12, 2, 0, 0, 936000000),
+	PLLFACTOR(19, 1, 0, 0, 960000000),
+	PLLFACTOR(20, 1, 0, 0, 1008000000),
+	PLLFACTOR(21, 1, 0, 0, 1056000000),
+	PLLFACTOR(14, 2, 0, 0, 1080000000),
+	PLLFACTOR(22, 1, 0, 0, 1104000000),
+	PLLFACTOR(23, 1, 0, 0, 1152000000),
+	PLLFACTOR(24, 1, 0, 0, 1200000000),
+	PLLFACTOR(16, 2, 0, 0, 1224000000),
+	PLLFACTOR(25, 1, 0, 0, 1248000000),
+	PLLFACTOR(26, 1, 0, 0, 1296000000),
+	PLLFACTOR(27, 1, 0, 0, 1344000000),
+	PLLFACTOR(18, 2, 0, 0, 1368000000),
+	PLLFACTOR(28, 1, 0, 0, 1392000000),
+	PLLFACTOR(29, 1, 0, 0, 1440000000),
+	PLLFACTOR(20, 2, 0, 0, 1512000000),
+	PLLFACTOR(15, 3, 0, 0, 1536000000),
+	PLLFACTOR(21, 2, 0, 0, 1584000000),
+	PLLFACTOR(16, 3, 0, 0, 1632000000),
+	PLLFACTOR(22, 2, 0, 0, 1656000000),
+	PLLFACTOR(23, 2, 0, 0, 1728000000),
+	PLLFACTOR(24, 2, 0, 0, 1800000000),
+	PLLFACTOR(18, 3, 0, 0, 1824000000),
+	PLLFACTOR(25, 2, 0, 0, 1872000000),
+};
+
 enum aw_pll_type {
 	AWPLL_A10_PLL1 = 1,
 	AWPLL_A10_PLL2,
@@ -172,7 +275,10 @@ enum aw_pll_type {
 	AWPLL_A23_PLL1,
 	AWPLL_A31_PLL1,
 	AWPLL_A31_PLL6,
+	AWPLL_A64_PLLHSIC,
 	AWPLL_A80_PLL4,
+	AWPLL_A83T_PLLCPUX,
+	AWPLL_H3_PLL1,
 };
 
 struct aw_pll_sc {
@@ -547,6 +653,39 @@ a13_pll2_set_freq(struct aw_pll_sc *sc, uint64_t fin, uint64_t *fout,
 }
 
 static int
+a23_pll1_set_freq(struct aw_pll_sc *sc, uint64_t fin, uint64_t *fout,
+    int flags)
+{
+	struct aw_pll_factor *f;
+	uint32_t val;
+	int n;
+
+	f = NULL;
+	for (n = 0; n < nitems(aw_a23_pll1_factors); n++) {
+		if (aw_a23_pll1_factors[n].freq == *fout) {
+			f = &aw_a23_pll1_factors[n];
+			break;
+		}
+	}
+	if (f == NULL)
+		return (EINVAL);
+
+	DEVICE_LOCK(sc);
+	PLL_READ(sc, &val);
+	val &= ~(A23_PLL1_FACTOR_N|A23_PLL1_FACTOR_K|A23_PLL1_FACTOR_M|
+		 A23_PLL1_FACTOR_P);
+	val |= (f->n << A23_PLL1_FACTOR_N_SHIFT);
+	val |= (f->k << A23_PLL1_FACTOR_K_SHIFT);
+	val |= (f->m << A23_PLL1_FACTOR_M_SHIFT);
+	val |= (f->p << A23_PLL1_FACTOR_P_SHIFT);
+	PLL_WRITE(sc, val);
+	DEVICE_UNLOCK(sc);
+
+	return (0);
+	
+}
+
+static int
 a23_pll1_recalc(struct aw_pll_sc *sc, uint64_t *freq)
 {
 	uint32_t val, m, n, k, p;
@@ -563,6 +702,72 @@ a23_pll1_recalc(struct aw_pll_sc *sc, uint64_t *freq)
 	*freq = (*freq * n * k) / (m * p);
 
 	return (0);
+}
+
+static int
+h3_pll1_set_freq(struct aw_pll_sc *sc, uint64_t fin, uint64_t *fout,
+    int flags)
+{
+	struct aw_pll_factor *f;
+	uint32_t val, n, k, m, p;
+	int i;
+
+	f = NULL;
+	for (i = 0; i < nitems(aw_a23_pll1_factors); i++) {
+		if (aw_a23_pll1_factors[i].freq == *fout) {
+			f = &aw_a23_pll1_factors[i];
+			break;
+		}
+	}
+	if (f == NULL)
+		return (EINVAL);
+
+	DEVICE_LOCK(sc);
+	PLL_READ(sc, &val);
+
+	n = (val & A23_PLL1_FACTOR_N) >> A23_PLL1_FACTOR_N_SHIFT;
+	k = (val & A23_PLL1_FACTOR_K) >> A23_PLL1_FACTOR_K_SHIFT;
+	m = (val & A23_PLL1_FACTOR_M) >> A23_PLL1_FACTOR_M_SHIFT;
+	p = (val & A23_PLL1_FACTOR_P) >> A23_PLL1_FACTOR_P_SHIFT;
+
+	if (p < f->p) {
+		val &= ~A23_PLL1_FACTOR_P;
+		val |= (f->p << A23_PLL1_FACTOR_P_SHIFT);
+		PLL_WRITE(sc, val);
+		DELAY(2000);
+	}
+
+	if (m < f->m) {
+		val &= ~A23_PLL1_FACTOR_M;
+		val |= (f->m << A23_PLL1_FACTOR_M_SHIFT);
+		PLL_WRITE(sc, val);
+		DELAY(2000);
+	}
+
+	val &= ~(A23_PLL1_FACTOR_N|A23_PLL1_FACTOR_K);
+	val |= (f->n << A23_PLL1_FACTOR_N_SHIFT);
+	val |= (f->k << A23_PLL1_FACTOR_K_SHIFT);
+	PLL_WRITE(sc, val);
+	DELAY(2000);
+
+	if (m > f->m) {
+		val &= ~A23_PLL1_FACTOR_M;
+		val |= (f->m << A23_PLL1_FACTOR_M_SHIFT);
+		PLL_WRITE(sc, val);
+		DELAY(2000);
+	}
+
+	if (p > f->p) {
+		val &= ~A23_PLL1_FACTOR_P;
+		val |= (f->p << A23_PLL1_FACTOR_P_SHIFT);
+		PLL_WRITE(sc, val);
+		DELAY(2000);
+	}
+
+	DEVICE_UNLOCK(sc);
+
+	return (0);
+	
 }
 
 static int
@@ -601,6 +806,7 @@ a31_pll6_init(device_t dev, bus_addr_t reg, struct clknode_init_def *def)
 	val &= ~(A31_PLL6_FACTOR_N | A31_PLL6_FACTOR_K | A31_PLL6_BYPASS_EN);
 	val |= (A31_PLL6_DEFAULT_N << A31_PLL6_FACTOR_N_SHIFT);
 	val |= (A31_PLL6_DEFAULT_K << A31_PLL6_FACTOR_K_SHIFT);
+	val |= AW_PLL_ENABLE;
 	CLKDEV_WRITE_4(dev, reg, val);
 
 	/* Wait for PLL to become stable */
@@ -612,9 +818,6 @@ a31_pll6_init(device_t dev, bus_addr_t reg, struct clknode_init_def *def)
 	}
 
 	CLKDEV_DEVICE_UNLOCK(dev);
-
-	if (retry == 0)
-		return (ETIMEDOUT);
 
 	return (0);
 }
@@ -663,6 +866,80 @@ a80_pll4_recalc(struct aw_pll_sc *sc, uint64_t *freq)
 	return (0);
 }
 
+static int
+a64_pllhsic_recalc(struct aw_pll_sc *sc, uint64_t *freq)
+{
+	uint32_t val, n, m;
+
+	DEVICE_LOCK(sc);
+	PLL_READ(sc, &val);
+	DEVICE_UNLOCK(sc);
+
+	n = ((val & A64_PLLHSIC_FACTOR_N) >> A64_PLLHSIC_FACTOR_N_SHIFT) + 1;
+	m = ((val & A64_PLLHSIC_PRE_DIV_M) >> A64_PLLHSIC_PRE_DIV_M_SHIFT) + 1;
+
+	*freq = (*freq * n) / m;
+
+	return (0);
+}
+
+static int
+a64_pllhsic_init(device_t dev, bus_addr_t reg, struct clknode_init_def *def)
+{
+	uint32_t val;
+
+	/*
+	 * PLL_HSIC default is 480MHz, just enable it.
+	 */
+	CLKDEV_DEVICE_LOCK(dev);
+	CLKDEV_READ_4(dev, reg, &val);
+	val |= AW_PLL_ENABLE;
+	CLKDEV_WRITE_4(dev, reg, val);
+	CLKDEV_DEVICE_UNLOCK(dev);
+
+	return (0);
+}
+
+static int
+a83t_pllcpux_recalc(struct aw_pll_sc *sc, uint64_t *freq)
+{
+	uint32_t val, n, p;
+
+	DEVICE_LOCK(sc);
+	PLL_READ(sc, &val);
+	DEVICE_UNLOCK(sc);
+
+	n = (val & A83T_PLLCPUX_FACTOR_N) >> A83T_PLLCPUX_FACTOR_N_SHIFT;
+	p = (val & A83T_PLLCPUX_OUT_EXT_DIVP) ? 4 : 1;
+
+	*freq = (*freq * n) / p;
+
+	return (0);
+}
+
+static int
+a83t_pllcpux_set_freq(struct aw_pll_sc *sc, uint64_t fin, uint64_t *fout,
+    int flags)
+{
+	uint32_t val;
+	u_int n;
+
+	n = *fout / fin;
+
+	if (n < A83T_PLLCPUX_FACTOR_N_MIN || n > A83T_PLLCPUX_FACTOR_N_MAX)
+		return (EINVAL);
+
+	DEVICE_LOCK(sc);
+	PLL_READ(sc, &val);
+	val &= ~A83T_PLLCPUX_FACTOR_N;
+	val |= (n << A83T_PLLCPUX_FACTOR_N_SHIFT);
+	val &= ~A83T_PLLCPUX_CLOCK_OUTPUT_DIS;
+	PLL_WRITE(sc, val);
+	DEVICE_UNLOCK(sc);
+
+	return (0);
+}
+
 #define	PLL(_type, _recalc, _set_freq, _init)	\
 	[(_type)] = {				\
 		.recalc = (_recalc),		\
@@ -677,10 +954,13 @@ static struct aw_pll_funcs aw_pll_func[] = {
 	PLL(AWPLL_A10_PLL5, a10_pll5_recalc, NULL, NULL),
 	PLL(AWPLL_A10_PLL6, a10_pll6_recalc, a10_pll6_set_freq, a10_pll6_init),
 	PLL(AWPLL_A13_PLL2, a13_pll2_recalc, a13_pll2_set_freq, NULL),
-	PLL(AWPLL_A23_PLL1, a23_pll1_recalc, NULL, NULL),
+	PLL(AWPLL_A23_PLL1, a23_pll1_recalc, a23_pll1_set_freq, NULL),
 	PLL(AWPLL_A31_PLL1, a31_pll1_recalc, NULL, NULL),
 	PLL(AWPLL_A31_PLL6, a31_pll6_recalc, NULL, a31_pll6_init),
 	PLL(AWPLL_A80_PLL4, a80_pll4_recalc, NULL, NULL),
+	PLL(AWPLL_A83T_PLLCPUX, a83t_pllcpux_recalc, a83t_pllcpux_set_freq, NULL),
+	PLL(AWPLL_A64_PLLHSIC, a64_pllhsic_recalc, NULL, a64_pllhsic_init),
+	PLL(AWPLL_H3_PLL1, a23_pll1_recalc, h3_pll1_set_freq, NULL),
 };
 
 static struct ofw_compat_data compat_data[] = {
@@ -693,7 +973,10 @@ static struct ofw_compat_data compat_data[] = {
 	{ "allwinner,sun6i-a31-pll1-clk",	AWPLL_A31_PLL1 },
 	{ "allwinner,sun6i-a31-pll6-clk",	AWPLL_A31_PLL6 },
 	{ "allwinner,sun8i-a23-pll1-clk",	AWPLL_A23_PLL1 },
+	{ "allwinner,sun8i-a83t-pllcpux-clk",	AWPLL_A83T_PLLCPUX },
+	{ "allwinner,sun8i-h3-pll1-clk",	AWPLL_H3_PLL1 },
 	{ "allwinner,sun9i-a80-pll4-clk",	AWPLL_A80_PLL4 },
+	{ "allwinner,sun50i-a64-pllhsic-clk",	AWPLL_A64_PLLHSIC },
 	{ NULL, 0 }
 };
 

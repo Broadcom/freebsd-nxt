@@ -459,7 +459,7 @@ systrace_args(int sysnum, void *params, uint64_t *uarg, int *n_args)
 	/* mprotect */
 	case 74: {
 		struct mprotect_args *p = params;
-		uarg[0] = (intptr_t) p->addr; /* const void * */
+		uarg[0] = (intptr_t) p->addr; /* void * */
 		uarg[1] = p->len; /* size_t */
 		iarg[2] = p->prot; /* int */
 		*n_args = 3;
@@ -1320,15 +1320,6 @@ systrace_args(int sysnum, void *params, uint64_t *uarg, int *n_args)
 		struct rfork_args *p = params;
 		iarg[0] = p->flags; /* int */
 		*n_args = 1;
-		break;
-	}
-	/* openbsd_poll */
-	case 252: {
-		struct openbsd_poll_args *p = params;
-		uarg[0] = (intptr_t) p->fds; /* struct pollfd * */
-		uarg[1] = p->nfds; /* u_int */
-		iarg[2] = p->timeout; /* int */
-		*n_args = 3;
 		break;
 	}
 	/* issetugid */
@@ -3326,6 +3317,13 @@ systrace_args(int sysnum, void *params, uint64_t *uarg, int *n_args)
 		*n_args = 3;
 		break;
 	}
+	/* fdatasync */
+	case 550: {
+		struct fdatasync_args *p = params;
+		iarg[0] = p->fd; /* int */
+		*n_args = 1;
+		break;
+	}
 	default:
 		*n_args = 0;
 		break;
@@ -3359,7 +3357,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 2:
 			p = "size_t";
@@ -3375,7 +3373,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "const void *";
+			p = "userland const void *";
 			break;
 		case 2:
 			p = "size_t";
@@ -3388,7 +3386,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 5:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "int";
@@ -3417,13 +3415,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "int *";
+			p = "userland int *";
 			break;
 		case 2:
 			p = "int";
 			break;
 		case 3:
-			p = "struct rusage *";
+			p = "userland struct rusage *";
 			break;
 		default:
 			break;
@@ -3433,10 +3431,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 9:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -3446,7 +3444,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 10:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -3456,7 +3454,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 12:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -3476,7 +3474,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 14:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "int";
@@ -3492,7 +3490,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 15:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "int";
@@ -3505,7 +3503,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 16:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "int";
@@ -3521,7 +3519,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 17:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -3534,10 +3532,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 21:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
 			p = "int";
@@ -3553,7 +3551,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 22:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "int";
@@ -3604,7 +3602,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct msghdr *";
+			p = "userland struct msghdr *";
 			break;
 		case 2:
 			p = "int";
@@ -3620,7 +3618,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct msghdr *";
+			p = "userland struct msghdr *";
 			break;
 		case 2:
 			p = "int";
@@ -3645,10 +3643,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 4:
-			p = "struct sockaddr *";
+			p = "userland struct sockaddr *";
 			break;
 		case 5:
-			p = "__socklen_t *";
+			p = "userland __socklen_t *";
 			break;
 		default:
 			break;
@@ -3661,10 +3659,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct sockaddr *";
+			p = "userland struct sockaddr *";
 			break;
 		case 2:
-			p = "__socklen_t *";
+			p = "userland __socklen_t *";
 			break;
 		default:
 			break;
@@ -3677,10 +3675,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct sockaddr *";
+			p = "userland struct sockaddr *";
 			break;
 		case 2:
-			p = "__socklen_t *";
+			p = "userland __socklen_t *";
 			break;
 		default:
 			break;
@@ -3693,10 +3691,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct sockaddr *";
+			p = "userland struct sockaddr *";
 			break;
 		case 2:
-			p = "__socklen_t *";
+			p = "userland __socklen_t *";
 			break;
 		default:
 			break;
@@ -3706,7 +3704,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 33:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "int";
@@ -3719,7 +3717,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 34:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "u_long";
@@ -3796,7 +3794,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 45:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "int";
@@ -3818,7 +3816,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 49:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "u_int";
@@ -3831,7 +3829,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 50:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -3841,7 +3839,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 51:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -3851,10 +3849,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 53:
 		switch(ndx) {
 		case 0:
-			p = "stack_t *";
+			p = "userland stack_t *";
 			break;
 		case 1:
-			p = "stack_t *";
+			p = "userland stack_t *";
 			break;
 		default:
 			break;
@@ -3890,7 +3888,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 56:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -3900,10 +3898,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 57:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -3913,10 +3911,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 58:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
 			p = "size_t";
@@ -3929,13 +3927,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 59:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
-			p = "char **";
+			p = "userland char **";
 			break;
 		case 2:
-			p = "char **";
+			p = "userland char **";
 			break;
 		default:
 			break;
@@ -3955,7 +3953,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 61:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -3965,7 +3963,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 65:
 		switch(ndx) {
 		case 0:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 1:
 			p = "size_t";
@@ -4014,7 +4012,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 73:
 		switch(ndx) {
 		case 0:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 1:
 			p = "size_t";
@@ -4027,7 +4025,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 74:
 		switch(ndx) {
 		case 0:
-			p = "const void *";
+			p = "userland void *";
 			break;
 		case 1:
 			p = "size_t";
@@ -4043,7 +4041,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 75:
 		switch(ndx) {
 		case 0:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 1:
 			p = "size_t";
@@ -4059,13 +4057,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 78:
 		switch(ndx) {
 		case 0:
-			p = "const void *";
+			p = "userland const void *";
 			break;
 		case 1:
 			p = "size_t";
 			break;
 		case 2:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -4078,7 +4076,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "u_int";
 			break;
 		case 1:
-			p = "gid_t *";
+			p = "userland gid_t *";
 			break;
 		default:
 			break;
@@ -4091,7 +4089,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "u_int";
 			break;
 		case 1:
-			p = "gid_t *";
+			p = "userland gid_t *";
 			break;
 		default:
 			break;
@@ -4120,10 +4118,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "u_int";
 			break;
 		case 1:
-			p = "struct itimerval *";
+			p = "userland struct itimerval *";
 			break;
 		case 2:
-			p = "struct itimerval *";
+			p = "userland struct itimerval *";
 			break;
 		default:
 			break;
@@ -4133,7 +4131,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 85:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -4146,7 +4144,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "u_int";
 			break;
 		case 1:
-			p = "struct itimerval *";
+			p = "userland struct itimerval *";
 			break;
 		default:
 			break;
@@ -4191,16 +4189,16 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "fd_set *";
+			p = "userland fd_set *";
 			break;
 		case 2:
-			p = "fd_set *";
+			p = "userland fd_set *";
 			break;
 		case 3:
-			p = "fd_set *";
+			p = "userland fd_set *";
 			break;
 		case 4:
-			p = "struct timeval *";
+			p = "userland struct timeval *";
 			break;
 		default:
 			break;
@@ -4332,10 +4330,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 116:
 		switch(ndx) {
 		case 0:
-			p = "struct timeval *";
+			p = "userland struct timeval *";
 			break;
 		case 1:
-			p = "struct timezone *";
+			p = "userland struct timezone *";
 			break;
 		default:
 			break;
@@ -4348,7 +4346,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct rusage *";
+			p = "userland struct rusage *";
 			break;
 		default:
 			break;
@@ -4370,7 +4368,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "caddr_t";
 			break;
 		case 4:
-			p = "int *";
+			p = "userland int *";
 			break;
 		default:
 			break;
@@ -4383,7 +4381,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct iovec *";
+			p = "userland struct iovec *";
 			break;
 		case 2:
 			p = "u_int";
@@ -4399,7 +4397,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct iovec *";
+			p = "userland struct iovec *";
 			break;
 		case 2:
 			p = "u_int";
@@ -4412,10 +4410,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 122:
 		switch(ndx) {
 		case 0:
-			p = "struct timeval *";
+			p = "userland struct timeval *";
 			break;
 		case 1:
-			p = "struct timezone *";
+			p = "userland struct timezone *";
 			break;
 		default:
 			break;
@@ -4480,10 +4478,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 128:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -4506,7 +4504,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 132:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "int";
@@ -4566,7 +4564,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 3:
-			p = "int *";
+			p = "userland int *";
 			break;
 		default:
 			break;
@@ -4576,7 +4574,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 136:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "int";
@@ -4589,7 +4587,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 137:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -4599,10 +4597,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 138:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
-			p = "struct timeval *";
+			p = "userland struct timeval *";
 			break;
 		default:
 			break;
@@ -4612,10 +4610,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 140:
 		switch(ndx) {
 		case 0:
-			p = "struct timeval *";
+			p = "userland struct timeval *";
 			break;
 		case 1:
-			p = "struct timeval *";
+			p = "userland struct timeval *";
 			break;
 		default:
 			break;
@@ -4628,7 +4626,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 148:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "int";
@@ -4656,7 +4654,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 3:
-			p = "char **";
+			p = "userland char **";
 			break;
 		default:
 			break;
@@ -4679,10 +4677,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 160:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
-			p = "struct fhandle *";
+			p = "userland struct fhandle *";
 			break;
 		default:
 			break;
@@ -4692,10 +4690,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 161:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
-			p = "struct fhandle *";
+			p = "userland struct fhandle *";
 			break;
 		default:
 			break;
@@ -4708,7 +4706,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -4724,7 +4722,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "pid_t";
 			break;
 		case 2:
-			p = "struct rtprio *";
+			p = "userland struct rtprio *";
 			break;
 		default:
 			break;
@@ -4810,7 +4808,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 176:
 		switch(ndx) {
 		case 0:
-			p = "struct timex *";
+			p = "userland struct timex *";
 			break;
 		default:
 			break;
@@ -4850,10 +4848,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 188:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
-			p = "struct stat *";
+			p = "userland struct stat *";
 			break;
 		default:
 			break;
@@ -4866,7 +4864,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct stat *";
+			p = "userland struct stat *";
 			break;
 		default:
 			break;
@@ -4876,10 +4874,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 190:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
-			p = "struct stat *";
+			p = "userland struct stat *";
 			break;
 		default:
 			break;
@@ -4889,7 +4887,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 191:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "int";
@@ -4918,7 +4916,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "u_int";
 			break;
 		case 1:
-			p = "struct rlimit *";
+			p = "userland struct rlimit *";
 			break;
 		default:
 			break;
@@ -4931,7 +4929,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "u_int";
 			break;
 		case 1:
-			p = "struct rlimit *";
+			p = "userland struct rlimit *";
 			break;
 		default:
 			break;
@@ -4944,13 +4942,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
 			p = "u_int";
 			break;
 		case 3:
-			p = "long *";
+			p = "userland long *";
 			break;
 		default:
 			break;
@@ -4963,19 +4961,19 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 202:
 		switch(ndx) {
 		case 0:
-			p = "int *";
+			p = "userland int *";
 			break;
 		case 1:
 			p = "u_int";
 			break;
 		case 2:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 3:
-			p = "size_t *";
+			p = "userland size_t *";
 			break;
 		case 4:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 5:
 			p = "size_t";
@@ -4988,7 +4986,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 203:
 		switch(ndx) {
 		case 0:
-			p = "const void *";
+			p = "userland const void *";
 			break;
 		case 1:
 			p = "size_t";
@@ -5001,7 +4999,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 204:
 		switch(ndx) {
 		case 0:
-			p = "const void *";
+			p = "userland const void *";
 			break;
 		case 1:
 			p = "size_t";
@@ -5014,7 +5012,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 205:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -5027,7 +5025,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct timeval *";
+			p = "userland struct timeval *";
 			break;
 		default:
 			break;
@@ -5047,7 +5045,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 209:
 		switch(ndx) {
 		case 0:
-			p = "struct pollfd *";
+			p = "userland struct pollfd *";
 			break;
 		case 1:
 			p = "u_int";
@@ -5112,7 +5110,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct sembuf *";
+			p = "userland struct sembuf *";
 			break;
 		case 2:
 			p = "size_t";
@@ -5141,7 +5139,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "const void *";
+			p = "userland const void *";
 			break;
 		case 2:
 			p = "size_t";
@@ -5160,7 +5158,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 2:
 			p = "size_t";
@@ -5182,7 +5180,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "const void *";
+			p = "userland const void *";
 			break;
 		case 2:
 			p = "int";
@@ -5195,7 +5193,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 230:
 		switch(ndx) {
 		case 0:
-			p = "const void *";
+			p = "userland const void *";
 			break;
 		default:
 			break;
@@ -5224,7 +5222,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "clockid_t";
 			break;
 		case 1:
-			p = "struct timespec *";
+			p = "userland struct timespec *";
 			break;
 		default:
 			break;
@@ -5237,7 +5235,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "clockid_t";
 			break;
 		case 1:
-			p = "const struct timespec *";
+			p = "userland const struct timespec *";
 			break;
 		default:
 			break;
@@ -5250,7 +5248,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "clockid_t";
 			break;
 		case 1:
-			p = "struct timespec *";
+			p = "userland struct timespec *";
 			break;
 		default:
 			break;
@@ -5263,10 +5261,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "clockid_t";
 			break;
 		case 1:
-			p = "struct sigevent *";
+			p = "userland struct sigevent *";
 			break;
 		case 2:
-			p = "int *";
+			p = "userland int *";
 			break;
 		default:
 			break;
@@ -5292,10 +5290,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 2:
-			p = "const struct itimerspec *";
+			p = "userland const struct itimerspec *";
 			break;
 		case 3:
-			p = "struct itimerspec *";
+			p = "userland struct itimerspec *";
 			break;
 		default:
 			break;
@@ -5308,7 +5306,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct itimerspec *";
+			p = "userland struct itimerspec *";
 			break;
 		default:
 			break;
@@ -5328,10 +5326,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 240:
 		switch(ndx) {
 		case 0:
-			p = "const struct timespec *";
+			p = "userland const struct timespec *";
 			break;
 		case 1:
-			p = "struct timespec *";
+			p = "userland struct timespec *";
 			break;
 		default:
 			break;
@@ -5341,7 +5339,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 241:
 		switch(ndx) {
 		case 0:
-			p = "ffcounter *";
+			p = "userland ffcounter *";
 			break;
 		default:
 			break;
@@ -5351,7 +5349,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 242:
 		switch(ndx) {
 		case 0:
-			p = "struct ffclock_estimate *";
+			p = "userland struct ffclock_estimate *";
 			break;
 		default:
 			break;
@@ -5361,7 +5359,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 243:
 		switch(ndx) {
 		case 0:
-			p = "struct ffclock_estimate *";
+			p = "userland struct ffclock_estimate *";
 			break;
 		default:
 			break;
@@ -5377,7 +5375,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 2:
-			p = "clockid_t *";
+			p = "userland clockid_t *";
 			break;
 		default:
 			break;
@@ -5387,7 +5385,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 248:
 		switch(ndx) {
 		case 0:
-			p = "struct ntptimeval *";
+			p = "userland struct ntptimeval *";
 			break;
 		default:
 			break;
@@ -5397,7 +5395,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 250:
 		switch(ndx) {
 		case 0:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 1:
 			p = "size_t";
@@ -5419,22 +5417,6 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			break;
 		};
 		break;
-	/* openbsd_poll */
-	case 252:
-		switch(ndx) {
-		case 0:
-			p = "struct pollfd *";
-			break;
-		case 1:
-			p = "u_int";
-			break;
-		case 2:
-			p = "int";
-			break;
-		default:
-			break;
-		};
-		break;
 	/* issetugid */
 	case 253:
 		break;
@@ -5442,7 +5424,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 254:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "int";
@@ -5458,7 +5440,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 255:
 		switch(ndx) {
 		case 0:
-			p = "struct aiocb *";
+			p = "userland struct aiocb *";
 			break;
 		default:
 			break;
@@ -5468,7 +5450,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 256:
 		switch(ndx) {
 		case 0:
-			p = "struct aiocb *";
+			p = "userland struct aiocb *";
 			break;
 		default:
 			break;
@@ -5481,13 +5463,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct aiocb *const *";
+			p = "userland struct aiocb *const *";
 			break;
 		case 2:
 			p = "int";
 			break;
 		case 3:
-			p = "struct sigevent *";
+			p = "userland struct sigevent *";
 			break;
 		default:
 			break;
@@ -5500,7 +5482,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
 			p = "size_t";
@@ -5513,7 +5495,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 274:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "mode_t";
@@ -5526,7 +5508,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 275:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "uid_t";
@@ -5542,10 +5524,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 276:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
-			p = "struct timeval *";
+			p = "userland struct timeval *";
 			break;
 		default:
 			break;
@@ -5555,7 +5537,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 277:
 		switch(ndx) {
 		case 0:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 1:
 			p = "size_t";
@@ -5571,10 +5553,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 278:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
-			p = "struct nstat *";
+			p = "userland struct nstat *";
 			break;
 		default:
 			break;
@@ -5587,7 +5569,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct nstat *";
+			p = "userland struct nstat *";
 			break;
 		default:
 			break;
@@ -5597,10 +5579,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 280:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
-			p = "struct nstat *";
+			p = "userland struct nstat *";
 			break;
 		default:
 			break;
@@ -5613,7 +5595,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct iovec *";
+			p = "userland struct iovec *";
 			break;
 		case 2:
 			p = "u_int";
@@ -5632,7 +5614,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct iovec *";
+			p = "userland struct iovec *";
 			break;
 		case 2:
 			p = "u_int";
@@ -5648,7 +5630,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 298:
 		switch(ndx) {
 		case 0:
-			p = "const struct fhandle *";
+			p = "userland const struct fhandle *";
 			break;
 		case 1:
 			p = "int";
@@ -5661,10 +5643,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 299:
 		switch(ndx) {
 		case 0:
-			p = "const struct fhandle *";
+			p = "userland const struct fhandle *";
 			break;
 		case 1:
-			p = "struct stat *";
+			p = "userland struct stat *";
 			break;
 		default:
 			break;
@@ -5687,7 +5669,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct module_stat *";
+			p = "userland struct module_stat *";
 			break;
 		default:
 			break;
@@ -5707,7 +5689,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 303:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		default:
 			break;
@@ -5717,7 +5699,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 304:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		default:
 			break;
@@ -5737,7 +5719,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 306:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		default:
 			break;
@@ -5760,7 +5742,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct kld_file_stat *";
+			p = "userland struct kld_file_stat *";
 			break;
 		default:
 			break;
@@ -5822,7 +5804,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 314:
 		switch(ndx) {
 		case 0:
-			p = "struct aiocb *";
+			p = "userland struct aiocb *";
 			break;
 		default:
 			break;
@@ -5832,13 +5814,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 315:
 		switch(ndx) {
 		case 0:
-			p = "struct aiocb *const *";
+			p = "userland struct aiocb *const *";
 			break;
 		case 1:
 			p = "int";
 			break;
 		case 2:
-			p = "const struct timespec *";
+			p = "userland const struct timespec *";
 			break;
 		default:
 			break;
@@ -5851,7 +5833,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct aiocb *";
+			p = "userland struct aiocb *";
 			break;
 		default:
 			break;
@@ -5861,7 +5843,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 317:
 		switch(ndx) {
 		case 0:
-			p = "struct aiocb *";
+			p = "userland struct aiocb *";
 			break;
 		default:
 			break;
@@ -5887,7 +5869,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 326:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "u_int";
@@ -5903,7 +5885,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "pid_t";
 			break;
 		case 1:
-			p = "const struct sched_param *";
+			p = "userland const struct sched_param *";
 			break;
 		default:
 			break;
@@ -5916,7 +5898,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "pid_t";
 			break;
 		case 1:
-			p = "struct sched_param *";
+			p = "userland struct sched_param *";
 			break;
 		default:
 			break;
@@ -5932,7 +5914,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 2:
-			p = "const struct sched_param *";
+			p = "userland const struct sched_param *";
 			break;
 		default:
 			break;
@@ -5978,7 +5960,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "pid_t";
 			break;
 		case 1:
-			p = "struct timespec *";
+			p = "userland struct timespec *";
 			break;
 		default:
 			break;
@@ -5988,7 +5970,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 335:
 		switch(ndx) {
 		case 0:
-			p = "const void *";
+			p = "userland const void *";
 			break;
 		case 1:
 			p = "size_t";
@@ -6007,7 +5989,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 2:
-			p = "void *";
+			p = "userland void *";
 			break;
 		default:
 			break;
@@ -6017,7 +5999,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 338:
 		switch(ndx) {
 		case 0:
-			p = "struct jail *";
+			p = "userland struct jail *";
 			break;
 		default:
 			break;
@@ -6030,13 +6012,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
 			p = "int";
 			break;
 		case 3:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 4:
 			p = "int";
@@ -6052,10 +6034,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "const sigset_t *";
+			p = "userland const sigset_t *";
 			break;
 		case 2:
-			p = "sigset_t *";
+			p = "userland sigset_t *";
 			break;
 		default:
 			break;
@@ -6065,7 +6047,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 341:
 		switch(ndx) {
 		case 0:
-			p = "const sigset_t *";
+			p = "userland const sigset_t *";
 			break;
 		default:
 			break;
@@ -6075,7 +6057,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 343:
 		switch(ndx) {
 		case 0:
-			p = "sigset_t *";
+			p = "userland sigset_t *";
 			break;
 		default:
 			break;
@@ -6085,13 +6067,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 345:
 		switch(ndx) {
 		case 0:
-			p = "const sigset_t *";
+			p = "userland const sigset_t *";
 			break;
 		case 1:
-			p = "siginfo_t *";
+			p = "userland siginfo_t *";
 			break;
 		case 2:
-			p = "const struct timespec *";
+			p = "userland const struct timespec *";
 			break;
 		default:
 			break;
@@ -6101,10 +6083,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 346:
 		switch(ndx) {
 		case 0:
-			p = "const sigset_t *";
+			p = "userland const sigset_t *";
 			break;
 		case 1:
-			p = "siginfo_t *";
+			p = "userland siginfo_t *";
 			break;
 		default:
 			break;
@@ -6114,13 +6096,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 347:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "acl_type_t";
 			break;
 		case 2:
-			p = "struct acl *";
+			p = "userland struct acl *";
 			break;
 		default:
 			break;
@@ -6130,13 +6112,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 348:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "acl_type_t";
 			break;
 		case 2:
-			p = "struct acl *";
+			p = "userland struct acl *";
 			break;
 		default:
 			break;
@@ -6152,7 +6134,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "acl_type_t";
 			break;
 		case 2:
-			p = "struct acl *";
+			p = "userland struct acl *";
 			break;
 		default:
 			break;
@@ -6168,7 +6150,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "acl_type_t";
 			break;
 		case 2:
-			p = "struct acl *";
+			p = "userland struct acl *";
 			break;
 		default:
 			break;
@@ -6178,7 +6160,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 351:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "acl_type_t";
@@ -6204,13 +6186,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 353:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "acl_type_t";
 			break;
 		case 2:
-			p = "struct acl *";
+			p = "userland struct acl *";
 			break;
 		default:
 			break;
@@ -6226,7 +6208,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "acl_type_t";
 			break;
 		case 2:
-			p = "struct acl *";
+			p = "userland struct acl *";
 			break;
 		default:
 			break;
@@ -6236,19 +6218,19 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 355:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "int";
 			break;
 		case 2:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 3:
 			p = "int";
 			break;
 		case 4:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		default:
 			break;
@@ -6258,16 +6240,16 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 356:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "int";
 			break;
 		case 2:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 3:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 4:
 			p = "size_t";
@@ -6280,16 +6262,16 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 357:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "int";
 			break;
 		case 2:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 3:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 4:
 			p = "size_t";
@@ -6302,13 +6284,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 358:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "int";
 			break;
 		case 2:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		default:
 			break;
@@ -6318,10 +6300,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 359:
 		switch(ndx) {
 		case 0:
-			p = "struct aiocb **";
+			p = "userland struct aiocb **";
 			break;
 		case 1:
-			p = "struct timespec *";
+			p = "userland struct timespec *";
 			break;
 		default:
 			break;
@@ -6331,13 +6313,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 360:
 		switch(ndx) {
 		case 0:
-			p = "uid_t *";
+			p = "userland uid_t *";
 			break;
 		case 1:
-			p = "uid_t *";
+			p = "userland uid_t *";
 			break;
 		case 2:
-			p = "uid_t *";
+			p = "userland uid_t *";
 			break;
 		default:
 			break;
@@ -6347,13 +6329,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 361:
 		switch(ndx) {
 		case 0:
-			p = "gid_t *";
+			p = "userland gid_t *";
 			break;
 		case 1:
-			p = "gid_t *";
+			p = "userland gid_t *";
 			break;
 		case 2:
-			p = "gid_t *";
+			p = "userland gid_t *";
 			break;
 		default:
 			break;
@@ -6369,19 +6351,19 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct kevent *";
+			p = "userland struct kevent *";
 			break;
 		case 2:
 			p = "int";
 			break;
 		case 3:
-			p = "struct kevent *";
+			p = "userland struct kevent *";
 			break;
 		case 4:
 			p = "int";
 			break;
 		case 5:
-			p = "const struct timespec *";
+			p = "userland const struct timespec *";
 			break;
 		default:
 			break;
@@ -6397,10 +6379,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 2:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 3:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 4:
 			p = "size_t";
@@ -6419,10 +6401,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 2:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 3:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 4:
 			p = "size_t";
@@ -6441,7 +6423,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 2:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		default:
 			break;
@@ -6461,7 +6443,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 376:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "int";
@@ -6502,7 +6484,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 378:
 		switch(ndx) {
 		case 0:
-			p = "struct iovec *";
+			p = "userland struct iovec *";
 			break;
 		case 1:
 			p = "unsigned int";
@@ -6518,7 +6500,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 384:
 		switch(ndx) {
 		case 0:
-			p = "struct mac *";
+			p = "userland struct mac *";
 			break;
 		default:
 			break;
@@ -6528,7 +6510,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 385:
 		switch(ndx) {
 		case 0:
-			p = "struct mac *";
+			p = "userland struct mac *";
 			break;
 		default:
 			break;
@@ -6541,7 +6523,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct mac *";
+			p = "userland struct mac *";
 			break;
 		default:
 			break;
@@ -6551,10 +6533,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 387:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
-			p = "struct mac *";
+			p = "userland struct mac *";
 			break;
 		default:
 			break;
@@ -6567,7 +6549,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct mac *";
+			p = "userland struct mac *";
 			break;
 		default:
 			break;
@@ -6577,10 +6559,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 389:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
-			p = "struct mac *";
+			p = "userland struct mac *";
 			break;
 		default:
 			break;
@@ -6593,10 +6575,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 2:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 3:
 			p = "int";
@@ -6609,7 +6591,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 391:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "u_long";
@@ -6622,7 +6604,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 392:
 		switch(ndx) {
 		case 0:
-			p = "struct uuid *";
+			p = "userland struct uuid *";
 			break;
 		case 1:
 			p = "int";
@@ -6647,10 +6629,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "size_t";
 			break;
 		case 4:
-			p = "struct sf_hdtr *";
+			p = "userland struct sf_hdtr *";
 			break;
 		case 5:
-			p = "off_t *";
+			p = "userland off_t *";
 			break;
 		case 6:
 			p = "int";
@@ -6663,13 +6645,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 394:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "int";
 			break;
 		case 2:
-			p = "void *";
+			p = "userland void *";
 			break;
 		default:
 			break;
@@ -6679,7 +6661,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 395:
 		switch(ndx) {
 		case 0:
-			p = "struct statfs *";
+			p = "userland struct statfs *";
 			break;
 		case 1:
 			p = "long";
@@ -6695,10 +6677,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 396:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
-			p = "struct statfs *";
+			p = "userland struct statfs *";
 			break;
 		default:
 			break;
@@ -6711,7 +6693,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct statfs *";
+			p = "userland struct statfs *";
 			break;
 		default:
 			break;
@@ -6721,10 +6703,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 398:
 		switch(ndx) {
 		case 0:
-			p = "const struct fhandle *";
+			p = "userland const struct fhandle *";
 			break;
 		case 1:
-			p = "struct statfs *";
+			p = "userland struct statfs *";
 			break;
 		default:
 			break;
@@ -6774,7 +6756,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 404:
 		switch(ndx) {
 		case 0:
-			p = "semid_t *";
+			p = "userland semid_t *";
 			break;
 		case 1:
 			p = "unsigned int";
@@ -6787,10 +6769,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 405:
 		switch(ndx) {
 		case 0:
-			p = "semid_t *";
+			p = "userland semid_t *";
 			break;
 		case 1:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 2:
 			p = "int";
@@ -6809,7 +6791,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 406:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		default:
 			break;
@@ -6822,7 +6804,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "semid_t";
 			break;
 		case 1:
-			p = "int *";
+			p = "userland int *";
 			break;
 		default:
 			break;
@@ -6845,7 +6827,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "pid_t";
 			break;
 		case 1:
-			p = "struct mac *";
+			p = "userland struct mac *";
 			break;
 		default:
 			break;
@@ -6855,10 +6837,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 410:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
-			p = "struct mac *";
+			p = "userland struct mac *";
 			break;
 		default:
 			break;
@@ -6868,10 +6850,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 411:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
-			p = "struct mac *";
+			p = "userland struct mac *";
 			break;
 		default:
 			break;
@@ -6881,16 +6863,16 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 412:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "int";
 			break;
 		case 2:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 3:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 4:
 			p = "size_t";
@@ -6903,16 +6885,16 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 413:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "int";
 			break;
 		case 2:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 3:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 4:
 			p = "size_t";
@@ -6925,13 +6907,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 414:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "int";
 			break;
 		case 2:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		default:
 			break;
@@ -6941,16 +6923,16 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 415:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
-			p = "char **";
+			p = "userland char **";
 			break;
 		case 2:
-			p = "char **";
+			p = "userland char **";
 			break;
 		case 3:
-			p = "struct mac *";
+			p = "userland struct mac *";
 			break;
 		default:
 			break;
@@ -6963,10 +6945,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "const struct sigaction *";
+			p = "userland const struct sigaction *";
 			break;
 		case 2:
-			p = "struct sigaction *";
+			p = "userland struct sigaction *";
 			break;
 		default:
 			break;
@@ -6976,7 +6958,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 417:
 		switch(ndx) {
 		case 0:
-			p = "const struct __ucontext *";
+			p = "userland const struct __ucontext *";
 			break;
 		default:
 			break;
@@ -6986,7 +6968,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 421:
 		switch(ndx) {
 		case 0:
-			p = "struct __ucontext *";
+			p = "userland struct __ucontext *";
 			break;
 		default:
 			break;
@@ -6996,7 +6978,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 422:
 		switch(ndx) {
 		case 0:
-			p = "const struct __ucontext *";
+			p = "userland const struct __ucontext *";
 			break;
 		default:
 			break;
@@ -7006,10 +6988,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 423:
 		switch(ndx) {
 		case 0:
-			p = "struct __ucontext *";
+			p = "userland struct __ucontext *";
 			break;
 		case 1:
-			p = "const struct __ucontext *";
+			p = "userland const struct __ucontext *";
 			break;
 		default:
 			break;
@@ -7019,7 +7001,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 424:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		default:
 			break;
@@ -7029,13 +7011,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 425:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "acl_type_t";
 			break;
 		case 2:
-			p = "struct acl *";
+			p = "userland struct acl *";
 			break;
 		default:
 			break;
@@ -7045,13 +7027,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 426:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "acl_type_t";
 			break;
 		case 2:
-			p = "struct acl *";
+			p = "userland struct acl *";
 			break;
 		default:
 			break;
@@ -7061,7 +7043,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 427:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "acl_type_t";
@@ -7074,13 +7056,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 428:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "acl_type_t";
 			break;
 		case 2:
-			p = "struct acl *";
+			p = "userland struct acl *";
 			break;
 		default:
 			break;
@@ -7090,10 +7072,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 429:
 		switch(ndx) {
 		case 0:
-			p = "const sigset_t *";
+			p = "userland const sigset_t *";
 			break;
 		case 1:
-			p = "int *";
+			p = "userland int *";
 			break;
 		default:
 			break;
@@ -7103,10 +7085,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 430:
 		switch(ndx) {
 		case 0:
-			p = "ucontext_t *";
+			p = "userland ucontext_t *";
 			break;
 		case 1:
-			p = "long *";
+			p = "userland long *";
 			break;
 		case 2:
 			p = "int";
@@ -7119,7 +7101,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 431:
 		switch(ndx) {
 		case 0:
-			p = "long *";
+			p = "userland long *";
 			break;
 		default:
 			break;
@@ -7129,7 +7111,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 432:
 		switch(ndx) {
 		case 0:
-			p = "long *";
+			p = "userland long *";
 			break;
 		default:
 			break;
@@ -7168,7 +7150,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 2:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 3:
 			p = "size_t";
@@ -7181,13 +7163,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 438:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "int";
 			break;
 		case 2:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 3:
 			p = "size_t";
@@ -7200,13 +7182,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 439:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "int";
 			break;
 		case 2:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 3:
 			p = "size_t";
@@ -7222,7 +7204,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "semid_t";
 			break;
 		case 1:
-			p = "const struct timespec *";
+			p = "userland const struct timespec *";
 			break;
 		default:
 			break;
@@ -7232,7 +7214,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 442:
 		switch(ndx) {
 		case 0:
-			p = "const struct timespec *";
+			p = "userland const struct timespec *";
 			break;
 		default:
 			break;
@@ -7265,7 +7247,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 445:
 		switch(ndx) {
 		case 0:
-			p = "const void *";
+			p = "userland const void *";
 			break;
 		case 1:
 			p = "u_int";
@@ -7281,7 +7263,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 2:
 			p = "u_int";
@@ -7294,7 +7276,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 447:
 		switch(ndx) {
 		case 0:
-			p = "uid_t *";
+			p = "userland uid_t *";
 			break;
 		default:
 			break;
@@ -7304,7 +7286,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 448:
 		switch(ndx) {
 		case 0:
-			p = "uid_t *";
+			p = "userland uid_t *";
 			break;
 		default:
 			break;
@@ -7314,7 +7296,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 449:
 		switch(ndx) {
 		case 0:
-			p = "struct auditinfo *";
+			p = "userland struct auditinfo *";
 			break;
 		default:
 			break;
@@ -7324,7 +7306,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 450:
 		switch(ndx) {
 		case 0:
-			p = "struct auditinfo *";
+			p = "userland struct auditinfo *";
 			break;
 		default:
 			break;
@@ -7334,7 +7316,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 451:
 		switch(ndx) {
 		case 0:
-			p = "struct auditinfo_addr *";
+			p = "userland struct auditinfo_addr *";
 			break;
 		case 1:
 			p = "u_int";
@@ -7347,7 +7329,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 452:
 		switch(ndx) {
 		case 0:
-			p = "struct auditinfo_addr *";
+			p = "userland struct auditinfo_addr *";
 			break;
 		case 1:
 			p = "u_int";
@@ -7360,7 +7342,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 453:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -7370,7 +7352,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 454:
 		switch(ndx) {
 		case 0:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 1:
 			p = "int";
@@ -7379,10 +7361,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "u_long";
 			break;
 		case 3:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 4:
-			p = "void *";
+			p = "userland void *";
 			break;
 		default:
 			break;
@@ -7392,7 +7374,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 455:
 		switch(ndx) {
 		case 0:
-			p = "struct thr_param *";
+			p = "userland struct thr_param *";
 			break;
 		case 1:
 			p = "int";
@@ -7411,7 +7393,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 2:
-			p = "void *";
+			p = "userland void *";
 			break;
 		default:
 			break;
@@ -7421,7 +7403,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 457:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "int";
@@ -7430,7 +7412,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "mode_t";
 			break;
 		case 3:
-			p = "const struct mq_attr *";
+			p = "userland const struct mq_attr *";
 			break;
 		default:
 			break;
@@ -7443,10 +7425,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "const struct mq_attr *";
+			p = "userland const struct mq_attr *";
 			break;
 		case 2:
-			p = "struct mq_attr *";
+			p = "userland struct mq_attr *";
 			break;
 		default:
 			break;
@@ -7459,16 +7441,16 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
 			p = "size_t";
 			break;
 		case 3:
-			p = "unsigned *";
+			p = "userland unsigned *";
 			break;
 		case 4:
-			p = "const struct timespec *";
+			p = "userland const struct timespec *";
 			break;
 		default:
 			break;
@@ -7481,7 +7463,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 2:
 			p = "size_t";
@@ -7490,7 +7472,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "unsigned";
 			break;
 		case 4:
-			p = "const struct timespec *";
+			p = "userland const struct timespec *";
 			break;
 		default:
 			break;
@@ -7503,7 +7485,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "const struct sigevent *";
+			p = "userland const struct sigevent *";
 			break;
 		default:
 			break;
@@ -7513,7 +7495,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 462:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		default:
 			break;
@@ -7523,13 +7505,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 463:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "int";
 			break;
 		case 2:
-			p = "void **";
+			p = "userland void **";
 			break;
 		default:
 			break;
@@ -7542,7 +7524,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "long";
 			break;
 		case 1:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		default:
 			break;
@@ -7555,7 +7537,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct aiocb *";
+			p = "userland struct aiocb *";
 			break;
 		default:
 			break;
@@ -7571,7 +7553,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "lwpid_t";
 			break;
 		case 2:
-			p = "struct rtprio *";
+			p = "userland struct rtprio *";
 			break;
 		default:
 			break;
@@ -7609,7 +7591,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "__socklen_t";
 			break;
 		case 5:
-			p = "struct sctp_sndrcvinfo *";
+			p = "userland struct sctp_sndrcvinfo *";
 			break;
 		case 6:
 			p = "int";
@@ -7625,7 +7607,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct iovec *";
+			p = "userland struct iovec *";
 			break;
 		case 2:
 			p = "int";
@@ -7637,7 +7619,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "__socklen_t";
 			break;
 		case 5:
-			p = "struct sctp_sndrcvinfo *";
+			p = "userland struct sctp_sndrcvinfo *";
 			break;
 		case 6:
 			p = "int";
@@ -7653,22 +7635,22 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct iovec *";
+			p = "userland struct iovec *";
 			break;
 		case 2:
 			p = "int";
 			break;
 		case 3:
-			p = "struct sockaddr *";
+			p = "userland struct sockaddr *";
 			break;
 		case 4:
-			p = "__socklen_t *";
+			p = "userland __socklen_t *";
 			break;
 		case 5:
-			p = "struct sctp_sndrcvinfo *";
+			p = "userland struct sctp_sndrcvinfo *";
 			break;
 		case 6:
-			p = "int *";
+			p = "userland int *";
 			break;
 		default:
 			break;
@@ -7681,7 +7663,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 2:
 			p = "size_t";
@@ -7700,7 +7682,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "const void *";
+			p = "userland const void *";
 			break;
 		case 2:
 			p = "size_t";
@@ -7757,7 +7739,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 479:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "off_t";
@@ -7799,7 +7781,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 482:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 1:
 			p = "int";
@@ -7815,7 +7797,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 483:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		default:
 			break;
@@ -7825,7 +7807,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 484:
 		switch(ndx) {
 		case 0:
-			p = "cpusetid_t *";
+			p = "userland cpusetid_t *";
 			break;
 		default:
 			break;
@@ -7860,7 +7842,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "id_t";
 			break;
 		case 3:
-			p = "cpusetid_t *";
+			p = "userland cpusetid_t *";
 			break;
 		default:
 			break;
@@ -7882,7 +7864,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "size_t";
 			break;
 		case 4:
-			p = "cpuset_t *";
+			p = "userland cpuset_t *";
 			break;
 		default:
 			break;
@@ -7904,7 +7886,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "size_t";
 			break;
 		case 4:
-			p = "const cpuset_t *";
+			p = "userland const cpuset_t *";
 			break;
 		default:
 			break;
@@ -7917,7 +7899,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
 			p = "int";
@@ -7936,7 +7918,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
 			p = "mode_t";
@@ -7955,7 +7937,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
 			p = "uid_t";
@@ -7977,10 +7959,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char **";
+			p = "userland char **";
 			break;
 		case 2:
-			p = "char **";
+			p = "userland char **";
 			break;
 		default:
 			break;
@@ -7993,10 +7975,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
-			p = "struct stat *";
+			p = "userland struct stat *";
 			break;
 		case 3:
 			p = "int";
@@ -8012,10 +7994,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
-			p = "struct timeval *";
+			p = "userland struct timeval *";
 			break;
 		default:
 			break;
@@ -8028,13 +8010,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
 			p = "int";
 			break;
 		case 3:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 4:
 			p = "int";
@@ -8050,7 +8032,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
 			p = "mode_t";
@@ -8066,7 +8048,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
 			p = "mode_t";
@@ -8082,7 +8064,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
 			p = "mode_t";
@@ -8101,7 +8083,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
 			p = "int";
@@ -8120,10 +8102,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 3:
 			p = "size_t";
@@ -8139,13 +8121,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
 			p = "int";
 			break;
 		case 3:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -8155,13 +8137,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 502:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "int";
 			break;
 		case 2:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -8174,7 +8156,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
 			p = "int";
@@ -8197,7 +8179,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 505:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		default:
 			break;
@@ -8207,7 +8189,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 506:
 		switch(ndx) {
 		case 0:
-			p = "struct iovec *";
+			p = "userland struct iovec *";
 			break;
 		case 1:
 			p = "unsigned int";
@@ -8223,7 +8205,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 507:
 		switch(ndx) {
 		case 0:
-			p = "struct iovec *";
+			p = "userland struct iovec *";
 			break;
 		case 1:
 			p = "unsigned int";
@@ -8268,7 +8250,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 3:
-			p = "union semun *";
+			p = "userland union semun *";
 			break;
 		default:
 			break;
@@ -8284,7 +8266,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 2:
-			p = "struct msqid_ds *";
+			p = "userland struct msqid_ds *";
 			break;
 		default:
 			break;
@@ -8300,7 +8282,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 2:
-			p = "struct shmid_ds *";
+			p = "userland struct shmid_ds *";
 			break;
 		default:
 			break;
@@ -8310,7 +8292,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 513:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "int";
@@ -8329,7 +8311,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 2:
-			p = "cap_rights_t *";
+			p = "userland cap_rights_t *";
 			break;
 		default:
 			break;
@@ -8342,7 +8324,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 517:
 		switch(ndx) {
 		case 0:
-			p = "u_int *";
+			p = "userland u_int *";
 			break;
 		default:
 			break;
@@ -8352,7 +8334,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 518:
 		switch(ndx) {
 		case 0:
-			p = "int *";
+			p = "userland int *";
 			break;
 		case 1:
 			p = "int";
@@ -8381,7 +8363,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "pid_t *";
+			p = "userland pid_t *";
 			break;
 		default:
 			break;
@@ -8394,19 +8376,19 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "fd_set *";
+			p = "userland fd_set *";
 			break;
 		case 2:
-			p = "fd_set *";
+			p = "userland fd_set *";
 			break;
 		case 3:
-			p = "fd_set *";
+			p = "userland fd_set *";
 			break;
 		case 4:
-			p = "const struct timespec *";
+			p = "userland const struct timespec *";
 			break;
 		case 5:
-			p = "const sigset_t *";
+			p = "userland const sigset_t *";
 			break;
 		default:
 			break;
@@ -8416,7 +8398,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 523:
 		switch(ndx) {
 		case 0:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 1:
 			p = "size_t";
@@ -8429,7 +8411,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 524:
 		switch(ndx) {
 		case 0:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		default:
 			break;
@@ -8439,13 +8421,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 525:
 		switch(ndx) {
 		case 0:
-			p = "const void *";
+			p = "userland const void *";
 			break;
 		case 1:
 			p = "size_t";
 			break;
 		case 2:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 3:
 			p = "size_t";
@@ -8458,13 +8440,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 526:
 		switch(ndx) {
 		case 0:
-			p = "const void *";
+			p = "userland const void *";
 			break;
 		case 1:
 			p = "size_t";
 			break;
 		case 2:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 3:
 			p = "size_t";
@@ -8477,13 +8459,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 527:
 		switch(ndx) {
 		case 0:
-			p = "const void *";
+			p = "userland const void *";
 			break;
 		case 1:
 			p = "size_t";
 			break;
 		case 2:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 3:
 			p = "size_t";
@@ -8496,13 +8478,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 528:
 		switch(ndx) {
 		case 0:
-			p = "const void *";
+			p = "userland const void *";
 			break;
 		case 1:
 			p = "size_t";
 			break;
 		case 2:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 3:
 			p = "size_t";
@@ -8515,13 +8497,13 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 529:
 		switch(ndx) {
 		case 0:
-			p = "const void *";
+			p = "userland const void *";
 			break;
 		case 1:
 			p = "size_t";
 			break;
 		case 2:
-			p = "void *";
+			p = "userland void *";
 			break;
 		case 3:
 			p = "size_t";
@@ -8575,16 +8557,16 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "id_t";
 			break;
 		case 2:
-			p = "int *";
+			p = "userland int *";
 			break;
 		case 3:
 			p = "int";
 			break;
 		case 4:
-			p = "struct __wrusage *";
+			p = "userland struct __wrusage *";
 			break;
 		case 5:
-			p = "siginfo_t *";
+			p = "userland siginfo_t *";
 			break;
 		default:
 			break;
@@ -8597,7 +8579,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "cap_rights_t *";
+			p = "userland cap_rights_t *";
 			break;
 		default:
 			break;
@@ -8610,7 +8592,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "const u_long *";
+			p = "userland const u_long *";
 			break;
 		case 2:
 			p = "size_t";
@@ -8626,7 +8608,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "u_long *";
+			p = "userland u_long *";
 			break;
 		case 2:
 			p = "size_t";
@@ -8655,7 +8637,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "uint32_t *";
+			p = "userland uint32_t *";
 			break;
 		default:
 			break;
@@ -8706,7 +8688,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "const char *";
+			p = "userland const char *";
 			break;
 		case 2:
 			p = "u_long";
@@ -8725,10 +8707,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct sockaddr *";
+			p = "userland struct sockaddr *";
 			break;
 		case 2:
-			p = "__socklen_t *";
+			p = "userland __socklen_t *";
 			break;
 		case 3:
 			p = "int";
@@ -8741,7 +8723,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 542:
 		switch(ndx) {
 		case 0:
-			p = "int *";
+			p = "userland int *";
 			break;
 		case 1:
 			p = "int";
@@ -8754,7 +8736,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 543:
 		switch(ndx) {
 		case 0:
-			p = "struct aiocb *";
+			p = "userland struct aiocb *";
 			break;
 		default:
 			break;
@@ -8773,7 +8755,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 3:
-			p = "void *";
+			p = "userland void *";
 			break;
 		default:
 			break;
@@ -8783,16 +8765,16 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 	case 545:
 		switch(ndx) {
 		case 0:
-			p = "struct pollfd *";
+			p = "userland struct pollfd *";
 			break;
 		case 1:
 			p = "u_int";
 			break;
 		case 2:
-			p = "const struct timespec *";
+			p = "userland const struct timespec *";
 			break;
 		case 3:
-			p = "const sigset_t *";
+			p = "userland const sigset_t *";
 			break;
 		default:
 			break;
@@ -8805,7 +8787,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "struct timespec *";
+			p = "userland struct timespec *";
 			break;
 		default:
 			break;
@@ -8818,10 +8800,10 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "int";
 			break;
 		case 1:
-			p = "char *";
+			p = "userland char *";
 			break;
 		case 2:
-			p = "struct timespec *";
+			p = "userland struct timespec *";
 			break;
 		case 3:
 			p = "int";
@@ -8840,7 +8822,7 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "id_t";
 			break;
 		case 2:
-			p = "struct vm_domain_policy_entry *";
+			p = "userland struct vm_domain_policy_entry *";
 			break;
 		default:
 			break;
@@ -8856,7 +8838,17 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "id_t";
 			break;
 		case 2:
-			p = "const struct vm_domain_policy_entry *";
+			p = "userland const struct vm_domain_policy_entry *";
+			break;
+		default:
+			break;
+		};
+		break;
+	/* fdatasync */
+	case 550:
+		switch(ndx) {
+		case 0:
+			p = "int";
 			break;
 		default:
 			break;
@@ -9631,11 +9623,6 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		if (ndx == 0 || ndx == 1)
 			p = "int";
 		break;
-	/* openbsd_poll */
-	case 252:
-		if (ndx == 0 || ndx == 1)
-			p = "int";
-		break;
 	/* issetugid */
 	case 253:
 	/* lchown */
@@ -10775,6 +10762,11 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		break;
 	/* numa_setaffinity */
 	case 549:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* fdatasync */
+	case 550:
 		if (ndx == 0 || ndx == 1)
 			p = "int";
 		break;

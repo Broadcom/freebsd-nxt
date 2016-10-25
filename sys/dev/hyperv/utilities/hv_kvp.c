@@ -54,18 +54,16 @@ __FBSDID("$FreeBSD$");
 #include <sys/un.h>
 #include <sys/endian.h>
 #include <sys/_null.h>
+#include <sys/sema.h>
 #include <sys/signal.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>
 #include <sys/mutex.h>
 
-#include <net/if.h>
-#include <net/if_arp.h>
-#include <net/if_var.h>
-
 #include <dev/hyperv/include/hyperv.h>
-#include <dev/hyperv/netvsc/hv_net_vsc.h>
+#include <dev/hyperv/include/vmbus.h>
 #include <dev/hyperv/utilities/hv_utilreg.h>
+#include <dev/hyperv/utilities/vmbus_icreg.h>
 
 #include "hv_util.h"
 #include "unicode.h"
@@ -77,6 +75,12 @@ __FBSDID("$FreeBSD$");
 #define KVP_SUCCESS	0
 #define KVP_ERROR	1
 #define kvp_hdr		hdr.kvp_hdr
+
+#define KVP_FWVER_MAJOR		3
+#define KVP_FWVER		VMBUS_IC_VERSION(KVP_FWVER_MAJOR, 0)
+
+#define KVP_MSGVER_MAJOR	4
+#define KVP_MSGVER		VMBUS_IC_VERSION(KVP_MSGVER_MAJOR, 0)
 
 /* hv_kvp debug control */
 static int hv_kvp_log = 0;
@@ -91,9 +95,15 @@ static int hv_kvp_log = 0;
 		log(LOG_INFO, "hv_kvp: " __VA_ARGS__);		\
 } while (0)
 
-static const struct hyperv_guid service_guid = { .hv_guid =
-	{0xe7, 0xf4, 0xa0, 0xa9, 0x45, 0x5a, 0x96, 0x4d,
-	0xb8, 0x27, 0x8a, 0x84, 0x1e, 0x8c, 0x3,  0xe6} };
+static const struct vmbus_ic_desc vmbus_kvp_descs[] = {
+	{
+		.ic_guid = { .hv_guid = {
+		    0xe7, 0xf4, 0xa0, 0xa9, 0x45, 0x5a, 0x96, 0x4d,
+		    0xb8, 0x27, 0x8a, 0x84, 0x1e, 0x8c, 0x3,  0xe6 } },
+		.ic_desc = "Hyper-V KVP"
+	},
+	VMBUS_IC_DESC_END
+};
 
 /* character device prototypes */
 static d_open_t		hv_kvp_dev_open;
@@ -206,52 +216,9 @@ hv_kvp_transaction_init(hv_kvp_sc *sc, uint32_t rcv_len,
 	sc->host_msg_id = request_id;
 	sc->rcv_buf = rcv_buf;
 	sc->host_kvp_msg = (struct hv_kvp_msg *)&rcv_buf[
-		sizeof(struct hv_vmbus_pipe_hdr) +
-		sizeof(struct hv_vmbus_icmsg_hdr)];
+	    sizeof(struct hv_vmbus_pipe_hdr) +
+	    sizeof(struct hv_vmbus_icmsg_hdr)];
 }
-
-
-/*
- * hv_kvp - version neogtiation function
- */
-static void
-hv_kvp_negotiate_version(struct hv_vmbus_icmsg_hdr *icmsghdrp,
-			 struct hv_vmbus_icmsg_negotiate *negop,
-			 uint8_t *buf)
-{
-	int icframe_vercnt;
-	int icmsg_vercnt;
-
-	icmsghdrp->icmsgsize = 0x10;
-
-	negop = (struct hv_vmbus_icmsg_negotiate *)&buf[
-		sizeof(struct hv_vmbus_pipe_hdr) +
-		sizeof(struct hv_vmbus_icmsg_hdr)];
-	icframe_vercnt = negop->icframe_vercnt;
-	icmsg_vercnt = negop->icmsg_vercnt;
-
-	/*
-	 * Select the framework version number we will support
-	 */
-	if ((icframe_vercnt >= 2) && (negop->icversion_data[1].major == 3)) {
-		icframe_vercnt = 3;
-		if (icmsg_vercnt > 2)
-			icmsg_vercnt = 4;
-		else
-			icmsg_vercnt = 3;
-	} else {
-		icframe_vercnt = 1;
-		icmsg_vercnt = 1;
-	}
-
-	negop->icframe_vercnt = 1;
-	negop->icmsg_vercnt = 1;
-	negop->icversion_data[0].major = icframe_vercnt;
-	negop->icversion_data[0].minor = 0;
-	negop->icversion_data[1].major = icmsg_vercnt;
-	negop->icversion_data[1].minor = 0;
-}
-
 
 /*
  * Convert ip related info in umsg from utf8 to utf16 and store in hmsg
@@ -331,24 +298,25 @@ hv_kvp_convert_utf16_ipinfo_to_utf8(struct hv_kvp_ip_msg *host_ip_msg,
 
 	if (devclass_get_devices(devclass_find("hn"), &devs, &devcnt) == 0) {
 		for (devcnt = devcnt - 1; devcnt >= 0; devcnt--) {
-			/* XXX access other driver's softc?  are you kidding? */
 			device_t dev = devs[devcnt];
-			struct hn_softc *sc = device_get_softc(dev);
 			struct vmbus_channel *chan;
 			char buf[HYPERV_GUID_STRLEN];
+			int n;
+
+			chan = vmbus_get_channel(dev);
+			n = hyperv_guid2str(vmbus_chan_guid_inst(chan), buf,
+			    sizeof(buf));
 
 			/*
-			 * Trying to find GUID of Network Device
-			 * TODO: need vmbus interface.
+			 * The string in the 'kvp_ip_val.adapter_id' has
+			 * braces around the GUID; skip the leading brace
+			 * in 'kvp_ip_val.adapter_id'.
 			 */
-			chan = vmbus_get_channel(dev);
-			hyperv_guid2str(vmbus_chan_guid_inst(chan),
-			    buf, sizeof(buf));
-
-			if (strncmp(buf, (char *)umsg->body.kvp_ip_val.adapter_id,
-			    HYPERV_GUID_STRLEN - 1) == 0) {
+			if (strncmp(buf,
+			    ((char *)&umsg->body.kvp_ip_val.adapter_id) + 1,
+			    n) == 0) {
 				strlcpy((char *)umsg->body.kvp_ip_val.adapter_id,
-				    sc->hn_ifp->if_xname, MAX_ADAPTER_ID_SIZE);
+				    device_get_nameunit(dev), MAX_ADAPTER_ID_SIZE);
 				break;
 			}
 		}
@@ -576,7 +544,8 @@ hv_kvp_respond_host(hv_kvp_sc *sc, int error)
 		error = HV_KVP_E_FAIL;
 
 	hv_icmsg_hdrp->status = error;
-	hv_icmsg_hdrp->icflags = HV_ICMSGHDRFLAG_TRANSACTION | HV_ICMSGHDRFLAG_RESPONSE;
+	hv_icmsg_hdrp->icflags = HV_ICMSGHDRFLAG_TRANSACTION |
+	    HV_ICMSGHDRFLAG_RESPONSE;
 
 	error = vmbus_chan_send(vmbus_get_channel(sc->dev),
 	    VMBUS_CHANPKT_TYPE_INBAND, 0, sc->rcv_buf, sc->host_msg_len,
@@ -620,8 +589,8 @@ hv_kvp_process_request(void *context, int pending)
 	uint32_t recvlen = 0;
 	uint64_t requestid;
 	struct hv_vmbus_icmsg_hdr *icmsghdrp;
-	int ret = 0;
-	hv_kvp_sc		*sc;
+	int ret = 0, error;
+	hv_kvp_sc *sc;
 
 	hv_kvp_log_info("%s: entering hv_kvp_process_request\n", __func__);
 
@@ -629,20 +598,21 @@ hv_kvp_process_request(void *context, int pending)
 	kvp_buf = sc->util_sc.receive_buffer;
 	channel = vmbus_get_channel(sc->dev);
 
-	recvlen = 2 * PAGE_SIZE;
+	recvlen = sc->util_sc.ic_buflen;
 	ret = vmbus_chan_recv(channel, kvp_buf, &recvlen, &requestid);
 	KASSERT(ret != ENOBUFS, ("hvkvp recvbuf is not large enough"));
 	/* XXX check recvlen to make sure that it contains enough data */
 
 	while ((ret == 0) && (recvlen > 0)) {
-
 		icmsghdrp = (struct hv_vmbus_icmsg_hdr *)
-			&kvp_buf[sizeof(struct hv_vmbus_pipe_hdr)];
+		    &kvp_buf[sizeof(struct hv_vmbus_pipe_hdr)];
 
 		hv_kvp_transaction_init(sc, recvlen, requestid, kvp_buf);
 		if (icmsghdrp->icmsgtype == HV_ICMSGTYPE_NEGOTIATE) {
-			hv_kvp_negotiate_version(icmsghdrp, NULL, kvp_buf);
-			hv_kvp_respond_host(sc, ret);
+			error = vmbus_ic_negomsg(&sc->util_sc,
+			    kvp_buf, &recvlen, KVP_FWVER, KVP_MSGVER);
+			/* XXX handle vmbus_ic_negomsg failure. */
+			hv_kvp_respond_host(sc, error);
 
 			/*
 			 * It is ok to not acquire the mutex before setting
@@ -696,7 +666,7 @@ hv_kvp_process_request(void *context, int pending)
 		/*
 		 * Try reading next buffer
 		 */
-		recvlen = 2 * PAGE_SIZE;
+		recvlen = sc->util_sc.ic_buflen;
 		ret = vmbus_chan_recv(channel, kvp_buf, &recvlen, &requestid);
 		KASSERT(ret != ENOBUFS, ("hvkvp recvbuf is not large enough"));
 		/* XXX check recvlen to make sure that it contains enough data */
@@ -873,14 +843,8 @@ hv_kvp_dev_daemon_poll(struct cdev *dev, int events, struct thread *td)
 static int
 hv_kvp_probe(device_t dev)
 {
-	if (resource_disabled("hvkvp", 0))
-		return ENXIO;
 
-	if (VMBUS_PROBE_GUID(device_get_parent(dev), dev, &service_guid) == 0) {
-		device_set_desc(dev, "Hyper-V KVP Service");
-		return BUS_PROBE_DEFAULT;
-	}
-	return ENXIO;
+	return (vmbus_ic_probe(dev, vmbus_kvp_descs));
 }
 
 static int
@@ -892,7 +856,6 @@ hv_kvp_attach(device_t dev)
 
 	hv_kvp_sc *sc = (hv_kvp_sc*)device_get_softc(dev);
 
-	sc->util_sc.callback = hv_kvp_callback;
 	sc->dev = dev;
 	sema_init(&sc->dev_sema, 0, "hv_kvp device semaphore");
 	mtx_init(&sc->pending_mutex, "hv-kvp pending mutex",
@@ -920,7 +883,7 @@ hv_kvp_attach(device_t dev)
 		return (error);
 	sc->hv_kvp_dev->si_drv1 = sc;
 
-	return hv_util_attach(dev);
+	return hv_util_attach(dev, hv_kvp_callback);
 }
 
 static int

@@ -55,6 +55,10 @@ extern char bootprog_rev[];
 extern char bootprog_date[];
 extern char bootprog_maker[];
 
+/* Force a reference to bring in EFI support from the library */
+extern int efi_variable_support;
+int *dummy1 = &efi_variable_support;
+
 struct arch_switch archsw;	/* MI/MD interface boundary */
 
 EFI_GUID acpi = ACPI_TABLE_GUID;
@@ -235,6 +239,7 @@ main(int argc, CHAR16 *argv[])
 	uint64_t pool_guid;
 	UINTN k;
 	int has_kbd;
+	char buf[40];
 
 	archsw.arch_autoload = efi_autoload;
 	archsw.arch_getdev = efi_getdev;
@@ -447,6 +452,9 @@ main(int argc, CHAR16 *argv[])
 	for (k = 0; k < ST->NumberOfTableEntries; k++) {
 		guid = &ST->ConfigurationTable[k].VendorGuid;
 		if (!memcmp(guid, &smbios, sizeof(EFI_GUID))) {
+			snprintf(buf, sizeof(buf), "%p",
+			    ST->ConfigurationTable[k].VendorTable);
+			setenv("hint.smbios.0.mem", buf, 1);
 			smbios_detect(ST->ConfigurationTable[k].VendorTable);
 			break;
 		}
@@ -603,7 +611,8 @@ command_configuration(int argc, char *argv[])
 		else if (!memcmp(guid, &acpi20, sizeof(EFI_GUID)))
 			printf("ACPI 2.0 Table");
 		else if (!memcmp(guid, &smbios, sizeof(EFI_GUID)))
-			printf("SMBIOS Table");
+			printf("SMBIOS Table %p",
+			    ST->ConfigurationTable[i].VendorTable);
 		else if (!memcmp(guid, &dxe, sizeof(EFI_GUID)))
 			printf("DXE Table");
 		else if (!memcmp(guid, &hoblist, sizeof(EFI_GUID)))
@@ -814,8 +823,10 @@ command_efi_show(int argc, char *argv[])
 	EFI_GUID	varguid = { 0,0,0,{0,0,0,0,0,0,0,0} };
 	EFI_GUID	matchguid = { 0,0,0,{0,0,0,0,0,0,0,0} };
 	uint32_t	uuid_status;
-	CHAR16		varname[128];
+	CHAR16		*varname;
+	CHAR16		*newnm;
 	CHAR16		varnamearg[128];
+	UINTN		varalloc;
 	UINTN		varsz;
 
 	while ((ch = getopt(argc, argv, "ag:lv:")) != -1) {
@@ -899,8 +910,8 @@ command_efi_show(int argc, char *argv[])
 		return (rv);
 	}
 
-	if (argc != 0) {
-		printf("Too many args\n");
+	if (argc > 0) {
+		printf("Too many args %d\n", argc);
 		pager_close();
 		return (CMD_ERROR);
 	}
@@ -910,10 +921,33 @@ command_efi_show(int argc, char *argv[])
 	 * to specify the initial call must be a poiner to a NULL
 	 * character.
 	 */
-	varsz = nitems(varname);
+	varalloc = 1024;
+	varname = malloc(varalloc);
+	if (varname == NULL) {
+		printf("Can't allocate memory to get variables\n");
+		pager_close();
+		return (CMD_ERROR);
+	}
 	varname[0] = 0;
-	while ((status = RS->GetNextVariableName(&varsz, varname, &varguid)) !=
-	    EFI_NOT_FOUND) {
+	while (1) {
+		varsz = varalloc;
+		status = RS->GetNextVariableName(&varsz, varname, &varguid);
+		if (status == EFI_BUFFER_TOO_SMALL) {
+			varalloc = varsz;
+			newnm = malloc(varalloc);
+			if (newnm == NULL) {
+				printf("Can't allocate memory to get variables\n");
+				free(varname);
+				pager_close();
+				return (CMD_ERROR);
+			}
+			memcpy(newnm, varname, varsz);
+			free(varname);
+			varname = newnm;
+			continue; /* Try again with bigger buffer */
+		}
+		if (status != EFI_SUCCESS)
+			break;
 		if (aflag) {
 			if (efi_print_var(varname, &varguid, lflag) != CMD_OK)
 				break;
@@ -934,6 +968,7 @@ command_efi_show(int argc, char *argv[])
 			}
 		}
 	}
+	free(varname);
 	pager_close();
 
 	return (CMD_OK);

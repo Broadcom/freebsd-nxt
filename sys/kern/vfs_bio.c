@@ -1479,7 +1479,6 @@ buf_alloc(void)
 	bp->b_npages = 0;
 	bp->b_dirtyoff = bp->b_dirtyend = 0;
 	bp->b_bufobj = NULL;
-	bp->b_pin_count = 0;
 	bp->b_data = bp->b_kvabase = unmapped_buf;
 	bp->b_fsprivate1 = NULL;
 	bp->b_fsprivate2 = NULL;
@@ -1907,9 +1906,6 @@ bufwrite(struct buf *bp)
 	oldflags = bp->b_flags;
 
 	BUF_ASSERT_HELD(bp);
-
-	if (bp->b_pin_count > 0)
-		bunpin_wait(bp);
 
 	KASSERT(!(bp->b_vflags & BV_BKGRDINPROG),
 	    ("FFS background buffer should not get here %p", bp));
@@ -2637,7 +2633,7 @@ vfs_vmio_invalidate(struct buf *bp)
 		while (vm_page_xbusied(m)) {
 			vm_page_lock(m);
 			VM_OBJECT_WUNLOCK(obj);
-			vm_page_busy_sleep(m, "mbncsh");
+			vm_page_busy_sleep(m, "mbncsh", true);
 			VM_OBJECT_WLOCK(obj);
 		}
 		if (pmap_page_wired_mappings(m) == 0)
@@ -3117,16 +3113,13 @@ flushbufqueues(struct vnode *lvp, int target, int flushdeps)
 		if (bp->b_qindex == QUEUE_SENTINEL || (lvp != NULL &&
 		    bp->b_vp != lvp)) {
 			mtx_unlock(&bqlocks[queue]);
- 			continue;
+			continue;
 		}
 		error = BUF_LOCK(bp, LK_EXCLUSIVE | LK_NOWAIT, NULL);
 		mtx_unlock(&bqlocks[queue]);
 		if (error != 0)
 			continue;
-		if (bp->b_pin_count > 0) {
-			BUF_UNLOCK(bp);
-			continue;
-		}
+
 		/*
 		 * BKGRDINPROG can only be set with the buf and bufobj
 		 * locks both held.  We tolerate a race to clear it here.
@@ -3546,19 +3539,6 @@ loop:
 			if ((bp->b_flags & B_VMIO) == 0 ||
 			    (size > bp->b_kvasize)) {
 				if (bp->b_flags & B_DELWRI) {
-					/*
-					 * If buffer is pinned and caller does
-					 * not want sleep  waiting for it to be
-					 * unpinned, bail out
-					 * */
-					if (bp->b_pin_count > 0) {
-						if (flags & GB_LOCK_NOWAIT) {
-							bqrelse(bp);
-							return (NULL);
-						} else {
-							bunpin_wait(bp);
-						}
-					}
 					bp->b_flags |= B_NOCACHE;
 					bwrite(bp);
 				} else {
@@ -4202,7 +4182,7 @@ vfs_drain_busy_pages(struct buf *bp)
 			while (vm_page_xbusied(m)) {
 				vm_page_lock(m);
 				VM_OBJECT_WUNLOCK(bp->b_bufobj->bo_object);
-				vm_page_busy_sleep(m, "vbpage");
+				vm_page_busy_sleep(m, "vbpage", true);
 				VM_OBJECT_WLOCK(bp->b_bufobj->bo_object);
 			}
 		}
@@ -4564,7 +4544,7 @@ int
 bufsync(struct bufobj *bo, int waitfor)
 {
 
-	return (VOP_FSYNC(bo->__bo_vnode, waitfor, curthread));
+	return (VOP_FSYNC(bo2vnode(bo), waitfor, curthread));
 }
 
 void
@@ -4630,41 +4610,6 @@ bufobj_wwait(struct bufobj *bo, int slpflag, int timeo)
 			break;
 	}
 	return (error);
-}
-
-void
-bpin(struct buf *bp)
-{
-	struct mtx *mtxp;
-
-	mtxp = mtx_pool_find(mtxpool_sleep, bp);
-	mtx_lock(mtxp);
-	bp->b_pin_count++;
-	mtx_unlock(mtxp);
-}
-
-void
-bunpin(struct buf *bp)
-{
-	struct mtx *mtxp;
-
-	mtxp = mtx_pool_find(mtxpool_sleep, bp);
-	mtx_lock(mtxp);
-	if (--bp->b_pin_count == 0)
-		wakeup(bp);
-	mtx_unlock(mtxp);
-}
-
-void
-bunpin_wait(struct buf *bp)
-{
-	struct mtx *mtxp;
-
-	mtxp = mtx_pool_find(mtxpool_sleep, bp);
-	mtx_lock(mtxp);
-	while (bp->b_pin_count > 0)
-		msleep(bp, mtxp, PRIBIO, "bwunpin", 0);
-	mtx_unlock(mtxp);
 }
 
 /*

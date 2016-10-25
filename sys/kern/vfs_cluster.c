@@ -12,7 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -836,12 +836,6 @@ cluster_wbuild(struct vnode *vp, long size, daddr_t start_lbn, int len,
 			--len;
 			continue;
 		}
-		if (tbp->b_pin_count >  0) {
-			BUF_UNLOCK(tbp);
-			++start_lbn;
-			--len;
-			continue;
-		}
 		bremfree(tbp);
 		tbp->b_flags &= ~B_DONE;
 
@@ -949,14 +943,6 @@ cluster_wbuild(struct vnode *vp, long size, daddr_t start_lbn, int len,
 				    tbp->b_blkno) ||
 				  ((tbp->b_npages + bp->b_npages) >
 				    (vp->v_mount->mnt_iosize_max / PAGE_SIZE))) {
-					BUF_UNLOCK(tbp);
-					break;
-				}
-
-				/*
-				 * Do not pull in pinned buffers.
-				 */
-				if (tbp->b_pin_count > 0) {
 					BUF_UNLOCK(tbp);
 					break;
 				}

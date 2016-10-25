@@ -741,8 +741,11 @@ dofault:
 				}
 				goto err;
 			}
-			ucode = ftype;
-			i = ((rv == KERN_PROTECTION_FAILURE) ? SIGBUS : SIGSEGV);
+			i = SIGSEGV;
+			if (rv == KERN_PROTECTION_FAILURE)
+				ucode = SEGV_ACCERR;
+			else
+				ucode = SEGV_MAPERR;
 			addr = trapframe->pc;
 
 			msg = "BAD_PAGE_FAULT";
@@ -849,7 +852,7 @@ dofault:
 			}
 			/*
 			 * The restoration of the original instruction and
-			 * the clearing of the berakpoint will be done later
+			 * the clearing of the breakpoint will be done later
 			 * by the call to ptrace_clear_single_step() in
 			 * issignal() when SIGTRAP is processed.
 			 */
@@ -909,12 +912,7 @@ dofault:
 					if (inst.RType.rd == 29) {
 						frame_regs = &(trapframe->zero);
 						frame_regs[inst.RType.rt] = (register_t)(intptr_t)td->td_md.md_tls;
-#if defined(__mips_n64) && defined(COMPAT_FREEBSD32)
-						if (SV_PROC_FLAG(td->td_proc, SV_ILP32))
-							frame_regs[inst.RType.rt] += TLS_TP_OFFSET + TLS_TCB_SIZE32;
-						else
-#endif
-						frame_regs[inst.RType.rt] += TLS_TP_OFFSET + TLS_TCB_SIZE;
+						frame_regs[inst.RType.rt] += td->td_md.md_tls_tcb_offset;
 						trapframe->pc += sizeof(int);
 						goto out;
 					}

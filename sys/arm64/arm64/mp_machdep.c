@@ -52,6 +52,7 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_kern.h>
 
 #include <machine/debug_monitor.h>
+#include <machine/machdep.h>
 #include <machine/intr.h>
 #include <machine/smp.h>
 #ifdef VFP
@@ -89,13 +90,6 @@ static void intr_pic_ipi_setup(u_int, const char *, intr_ipi_handler_t *,
 boolean_t ofw_cpu_reg(phandle_t node, u_int, cell_t *);
 
 extern struct pcpu __pcpu[];
-
-static enum {
-	CPUS_UNKNOWN,
-#ifdef FDT
-	CPUS_FDT,
-#endif
-} cpu_enum_method;
 
 static device_identify_t arm64_cpu_identify;
 static device_probe_t arm64_cpu_probe;
@@ -207,7 +201,7 @@ arm64_cpu_attach(device_t dev)
 static void
 release_aps(void *dummy __unused)
 {
-	int cpu, i;
+	int i;
 
 	intr_pic_ipi_setup(IPI_AST, "ast", ipi_ast, NULL);
 	intr_pic_ipi_setup(IPI_PREEMPT, "preempt", ipi_preempt, NULL);
@@ -223,14 +217,8 @@ release_aps(void *dummy __unused)
 	printf("Release APs\n");
 
 	for (i = 0; i < 2000; i++) {
-		if (smp_started) {
-			for (cpu = 0; cpu <= mp_maxid; cpu++) {
-				if (CPU_ABSENT(cpu))
-					continue;
-				print_cpu_features(cpu);
-			}
+		if (smp_started)
 			return;
-		}
 		DELAY(1000);
 	}
 
@@ -499,14 +487,14 @@ cpu_mp_start(void)
 
 	CPU_SET(0, &all_cpus);
 
-	switch(cpu_enum_method) {
+	switch(arm64_bus_method) {
 #ifdef FDT
-	case CPUS_FDT:
+	case ARM64_BUS_FDT:
 		KASSERT(cpu0 >= 0, ("Current CPU was not found"));
 		ofw_cpu_early_foreach(cpu_init_fdt, true);
 		break;
 #endif
-	case CPUS_UNKNOWN:
+	default:
 		break;
 	}
 }
@@ -544,15 +532,17 @@ cpu_mp_setmaxid(void)
 #ifdef FDT
 	int cores;
 
-	cores = ofw_cpu_early_foreach(cpu_find_cpu0_fdt, false);
-	if (cores > 0) {
-		cores = MIN(cores, MAXCPU);
-		if (bootverbose)
-			printf("Found %d CPUs in the device tree\n", cores);
-		mp_ncpus = cores;
-		mp_maxid = cores - 1;
-		cpu_enum_method = CPUS_FDT;
-		return;
+	if (arm64_bus_method == ARM64_BUS_FDT) {
+		cores = ofw_cpu_early_foreach(cpu_find_cpu0_fdt, false);
+		if (cores > 0) {
+			cores = MIN(cores, MAXCPU);
+			if (bootverbose)
+				printf("Found %d CPUs in the device tree\n",
+				    cores);
+			mp_ncpus = cores;
+			mp_maxid = cores - 1;
+			return;
+		}
 	}
 #endif
 

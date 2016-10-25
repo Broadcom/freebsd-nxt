@@ -15,7 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -497,7 +497,7 @@ do_fork(struct thread *td, struct fork_req *fr, struct proc *p2, struct thread *
 	 * Increase reference counts on shared objects.
 	 */
 	p2->p_flag = P_INMEM;
-	p2->p_flag2 = p1->p_flag2 & (P2_NOTRACE | P2_NOTRACE_EXEC);
+	p2->p_flag2 = p1->p_flag2 & (P2_NOTRACE | P2_NOTRACE_EXEC | P2_TRAPCAP);
 	p2->p_swtick = ticks;
 	if (p1->p_flag & P_PROFIL)
 		startprofclock(p2);
@@ -1055,9 +1055,9 @@ fork_exit(void (*callout)(void *, struct trapframe *), void *arg,
 
 /*
  * Simplified back end of syscall(), used when returning from fork()
- * directly into user mode.  Giant is not held on entry, and must not
- * be held on return.  This function is passed in to fork_exit() as the
- * first parameter and is called when returning to a new userland process.
+ * directly into user mode.  This function is passed in to fork_exit()
+ * as the first parameter and is called when returning to a new
+ * userland process.
  */
 void
 fork_return(struct thread *td, struct trapframe *frame)
@@ -1074,7 +1074,7 @@ fork_return(struct thread *td, struct trapframe *frame)
 			 * parent's children, do it now.
 			 */
 			dbg = p->p_pptr->p_pptr;
-			proc_set_traced(p);
+			proc_set_traced(p, true);
 			CTR2(KTR_PTRACE,
 		    "fork_return: attaching to new child pid %d: oppid %d",
 			    p->p_pid, p->p_oppid);

@@ -77,6 +77,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/priv.h>
 #include <sys/rwlock.h>
 #include <sys/stat.h>
+#include <sys/sysctl.h>
 #include <sys/vmmeter.h>
 #include <sys/vnode.h>
 
@@ -86,6 +87,7 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_object.h>
 #include <vm/vm_page.h>
 #include <vm/vm_pager.h>
+#include <vm/vm_pageout.h>
 #include <vm/vnode_pager.h>
 
 #include <ufs/ufs/extattr.h>
@@ -102,7 +104,9 @@ __FBSDID("$FreeBSD$");
 #ifdef DIRECTIO
 extern int	ffs_rawread(struct vnode *vp, struct uio *uio, int *workdone);
 #endif
+static vop_fdatasync_t	ffs_fdatasync;
 static vop_fsync_t	ffs_fsync;
+static vop_getpages_t	ffs_getpages;
 static vop_lock1_t	ffs_lock;
 static vop_read_t	ffs_read;
 static vop_write_t	ffs_write;
@@ -118,12 +122,12 @@ static vop_openextattr_t	ffs_openextattr;
 static vop_setextattr_t	ffs_setextattr;
 static vop_vptofh_t	ffs_vptofh;
 
-
 /* Global vfs data structures for ufs. */
 struct vop_vector ffs_vnodeops1 = {
 	.vop_default =		&ufs_vnodeops,
 	.vop_fsync =		ffs_fsync,
-	.vop_getpages =		vnode_pager_local_getpages,
+	.vop_fdatasync =	ffs_fdatasync,
+	.vop_getpages =		ffs_getpages,
 	.vop_getpages_async =	vnode_pager_local_getpages_async,
 	.vop_lock1 =		ffs_lock,
 	.vop_read =		ffs_read,
@@ -135,6 +139,7 @@ struct vop_vector ffs_vnodeops1 = {
 struct vop_vector ffs_fifoops1 = {
 	.vop_default =		&ufs_fifoops,
 	.vop_fsync =		ffs_fsync,
+	.vop_fdatasync =	ffs_fdatasync,
 	.vop_reallocblks =	ffs_reallocblks, /* XXX: really ??? */
 	.vop_vptofh =		ffs_vptofh,
 };
@@ -143,7 +148,8 @@ struct vop_vector ffs_fifoops1 = {
 struct vop_vector ffs_vnodeops2 = {
 	.vop_default =		&ufs_vnodeops,
 	.vop_fsync =		ffs_fsync,
-	.vop_getpages =		vnode_pager_local_getpages,
+	.vop_fdatasync =	ffs_fdatasync,
+	.vop_getpages =		ffs_getpages,
 	.vop_getpages_async =	vnode_pager_local_getpages_async,
 	.vop_lock1 =		ffs_lock,
 	.vop_read =		ffs_read,
@@ -161,6 +167,7 @@ struct vop_vector ffs_vnodeops2 = {
 struct vop_vector ffs_fifoops2 = {
 	.vop_default =		&ufs_fifoops,
 	.vop_fsync =		ffs_fsync,
+	.vop_fdatasync =	ffs_fdatasync,
 	.vop_lock1 =		ffs_lock,
 	.vop_reallocblks =	ffs_reallocblks,
 	.vop_strategy =		ffsext_strategy,
@@ -216,10 +223,10 @@ ffs_syncvnode(struct vnode *vp, int waitfor, int flags)
 {
 	struct inode *ip;
 	struct bufobj *bo;
-	struct buf *bp;
-	struct buf *nbp;
+	struct buf *bp, *nbp;
 	ufs_lbn_t lbn;
-	int error, wait, passes;
+	int error, passes;
+	bool still_dirty, wait;
 
 	ip = VTOI(vp);
 	ip->i_flag &= ~IN_NEEDSYNC;
@@ -238,8 +245,8 @@ ffs_syncvnode(struct vnode *vp, int waitfor, int flags)
 	 */
 	error = 0;
 	passes = 0;
-	wait = 0;	/* Always do an async pass first. */
-	lbn = lblkno(ip->i_fs, (ip->i_size + ip->i_fs->fs_bsize - 1));
+	wait = false;	/* Always do an async pass first. */
+	lbn = lblkno(ITOFS(ip), (ip->i_size + ITOFS(ip)->fs_bsize - 1));
 	BO_LOCK(bo);
 loop:
 	TAILQ_FOREACH(bp, &bo->bo_dirty.bv_hd, b_bobufs)
@@ -254,15 +261,23 @@ loop:
 		if ((bp->b_vflags & BV_SCANNED) != 0)
 			continue;
 		bp->b_vflags |= BV_SCANNED;
-		/* Flush indirects in order. */
+		/*
+		 * Flush indirects in order, if requested.
+		 *
+		 * Note that if only datasync is requested, we can
+		 * skip indirect blocks when softupdates are not
+		 * active.  Otherwise we must flush them with data,
+		 * since dependencies prevent data block writes.
+		 */
 		if (waitfor == MNT_WAIT && bp->b_lblkno <= -NDADDR &&
-		    lbn_level(bp->b_lblkno) >= passes)
+		    (lbn_level(bp->b_lblkno) >= passes ||
+		    ((flags & DATA_ONLY) != 0 && !DOINGSOFTDEP(vp))))
 			continue;
 		if (bp->b_lblkno > lbn)
 			panic("ffs_syncvnode: syncing truncated data.");
 		if (BUF_LOCK(bp, LK_EXCLUSIVE | LK_NOWAIT, NULL) == 0) {
 			BO_UNLOCK(bo);
-		} else if (wait != 0) {
+		} else if (wait) {
 			if (BUF_LOCK(bp,
 			    LK_EXCLUSIVE | LK_SLEEPFAIL | LK_INTERLOCK,
 			    BO_LOCKPTR(bo)) != 0) {
@@ -330,28 +345,56 @@ next:
 	 * these will be done with one sync and one async pass.
 	 */
 	if (bo->bo_dirty.bv_cnt > 0) {
-		/* Write the inode after sync passes to flush deps. */
-		if (wait && DOINGSOFTDEP(vp) && (flags & NO_INO_UPDT) == 0) {
-			BO_UNLOCK(bo);
-			ffs_update(vp, 1);
-			BO_LOCK(bo);
+		if ((flags & DATA_ONLY) == 0) {
+			still_dirty = true;
+		} else {
+			/*
+			 * For data-only sync, dirty indirect buffers
+			 * are ignored.
+			 */
+			still_dirty = false;
+			TAILQ_FOREACH(bp, &bo->bo_dirty.bv_hd, b_bobufs) {
+				if (bp->b_lblkno > -NDADDR) {
+					still_dirty = true;
+					break;
+				}
+			}
 		}
-		/* switch between sync/async. */
-		wait = !wait;
-		if (wait == 1 || ++passes < NIADDR + 2)
-			goto loop;
+
+		if (still_dirty) {
+			/* Write the inode after sync passes to flush deps. */
+			if (wait && DOINGSOFTDEP(vp) &&
+			    (flags & NO_INO_UPDT) == 0) {
+				BO_UNLOCK(bo);
+				ffs_update(vp, 1);
+				BO_LOCK(bo);
+			}
+			/* switch between sync/async. */
+			wait = !wait;
+			if (wait || ++passes < NIADDR + 2)
+				goto loop;
 #ifdef INVARIANTS
-		if (!vn_isdisk(vp, NULL))
-			vprint("ffs_fsync: dirty", vp);
+			if (!vn_isdisk(vp, NULL))
+				vn_printf(vp, "ffs_fsync: dirty ");
 #endif
+		}
 	}
 	BO_UNLOCK(bo);
 	error = 0;
-	if ((flags & NO_INO_UPDT) == 0)
-		error = ffs_update(vp, 1);
-	if (DOINGSUJ(vp))
-		softdep_journal_fsync(VTOI(vp));
+	if ((flags & DATA_ONLY) == 0) {
+		if ((flags & NO_INO_UPDT) == 0)
+			error = ffs_update(vp, 1);
+		if (DOINGSUJ(vp))
+			softdep_journal_fsync(VTOI(vp));
+	}
 	return (error);
+}
+
+static int
+ffs_fdatasync(struct vop_fdatasync_args *ap)
+{
+
+	return (ffs_syncvnode(ap->a_vp, MNT_WAIT, DATA_ONLY));
 }
 
 static int
@@ -477,7 +520,7 @@ ffs_read(ap)
 	if (orig_resid == 0)
 		return (0);
 	KASSERT(uio->uio_offset >= 0, ("ffs_read: uio->uio_offset < 0"));
-	fs = ip->i_fs;
+	fs = ITOFS(ip);
 	if (uio->uio_offset < ip->i_size &&
 	    uio->uio_offset >= fs->fs_maxfilesize)
 		return (EOVERFLOW);
@@ -700,7 +743,7 @@ ffs_write(ap)
 
 	KASSERT(uio->uio_resid >= 0, ("ffs_write: uio->uio_resid < 0"));
 	KASSERT(uio->uio_offset >= 0, ("ffs_write: uio->uio_offset < 0"));
-	fs = ip->i_fs;
+	fs = ITOFS(ip);
 	if ((uoff_t)uio->uio_offset + uio->uio_resid > fs->fs_maxfilesize)
 		return (EFBIG);
 	/*
@@ -716,7 +759,7 @@ ffs_write(ap)
 		flags = BA_SEQMAX << BA_SEQSHIFT;
 	else
 		flags = seqcount << BA_SEQSHIFT;
-	if ((ioflag & IO_SYNC) && !DOINGASYNC(vp))
+	if (ioflag & IO_SYNC)
 		flags |= IO_SYNC;
 	flags |= BA_UNMAPPED;
 
@@ -864,7 +907,7 @@ ffs_extread(struct vnode *vp, struct uio *uio, int ioflag)
 	int error;
 
 	ip = VTOI(vp);
-	fs = ip->i_fs;
+	fs = ITOFS(ip);
 	dp = ip->i_din2;
 
 #ifdef INVARIANTS
@@ -1018,7 +1061,7 @@ ffs_extwrite(struct vnode *vp, struct uio *uio, int ioflag, struct ucred *ucred)
 	int blkoffset, error, flags, size, xfersize;
 
 	ip = VTOI(vp);
-	fs = ip->i_fs;
+	fs = ITOFS(ip);
 	dp = ip->i_din2;
 
 #ifdef INVARIANTS
@@ -1036,7 +1079,7 @@ ffs_extwrite(struct vnode *vp, struct uio *uio, int ioflag, struct ucred *ucred)
 	resid = uio->uio_resid;
 	osize = dp->di_extsize;
 	flags = IO_EXT;
-	if ((ioflag & IO_SYNC) && !DOINGASYNC(vp))
+	if (ioflag & IO_SYNC)
 		flags |= IO_SYNC;
 
 	for (error = 0; uio->uio_resid > 0;) {
@@ -1190,7 +1233,7 @@ ffs_rdextattr(u_char **p, struct vnode *vp, struct thread *td, int extra)
 	u_char *eae;
 
 	ip = VTOI(vp);
-	fs = ip->i_fs;
+	fs = ITOFS(ip);
 	dp = ip->i_din2;
 	easize = dp->di_extsize;
 	if ((uoff_t)easize + extra > NXADDR * fs->fs_bsize)
@@ -1344,8 +1387,7 @@ struct vop_strategy_args {
 
 	vp = ap->a_vp;
 	lbn = ap->a_bp->b_lblkno;
-	if (VTOI(vp)->i_fs->fs_magic == FS_UFS2_MAGIC &&
-	    lbn < 0 && lbn >= -NXADDR)
+	if (I_IS_UFS2(VTOI(vp)) && lbn < 0 && lbn >= -NXADDR)
 		return (VOP_STRATEGY_APV(&ufs_vnodeops, ap));
 	if (vp->v_type == VFIFO)
 		return (VOP_STRATEGY_APV(&ufs_fifoops, ap));
@@ -1421,7 +1463,7 @@ vop_deleteextattr {
 	u_char *eae, *p;
 
 	ip = VTOI(ap->a_vp);
-	fs = ip->i_fs;
+	fs = ITOFS(ip);
 
 	if (ap->a_vp->v_type == VCHR || ap->a_vp->v_type == VBLK)
 		return (EOPNOTSUPP);
@@ -1624,7 +1666,7 @@ vop_setextattr {
 	u_char *eae, *p;
 
 	ip = VTOI(ap->a_vp);
-	fs = ip->i_fs;
+	fs = ITOFS(ip);
 
 	if (ap->a_vp->v_type == VCHR || ap->a_vp->v_type == VBLK)
 		return (EOPNOTSUPP);
@@ -1743,4 +1785,166 @@ vop_vptofh {
 	ufhp->ufid_ino = ip->i_number;
 	ufhp->ufid_gen = ip->i_gen;
 	return (0);
+}
+
+SYSCTL_DECL(_vfs_ffs);
+static int use_buf_pager = 1;
+SYSCTL_INT(_vfs_ffs, OID_AUTO, use_buf_pager, CTLFLAG_RWTUN, &use_buf_pager, 0,
+    "Always use buffer pager instead of bmap");
+static int buf_pager_relbuf;
+SYSCTL_INT(_vfs_ffs, OID_AUTO, buf_pager_relbuf, CTLFLAG_RWTUN,
+    &buf_pager_relbuf, 0,
+    "Make buffer pager release buffers after reading");
+
+/*
+ * The FFS pager.  It uses buffer reads to validate pages.
+ *
+ * In contrast to the generic local pager from vm/vnode_pager.c, this
+ * pager correctly and easily handles volumes where the underlying
+ * device block size is greater than the machine page size.  The
+ * buffer cache transparently extends the requested page run to be
+ * aligned at the block boundary, and does the necessary bogus page
+ * replacements in the addends to avoid obliterating already valid
+ * pages.
+ *
+ * The only non-trivial issue is that the exclusive busy state for
+ * pages, which is assumed by the vm_pager_getpages() interface, is
+ * incompatible with the VMIO buffer cache's desire to share-busy the
+ * pages.  This function performs a trivial downgrade of the pages'
+ * state before reading buffers, and a less trivial upgrade from the
+ * shared-busy to excl-busy state after the read.
+ */
+static int
+ffs_getpages(struct vop_getpages_args *ap)
+{
+	struct vnode *vp;
+	vm_page_t *ma, m;
+	vm_object_t object;
+	struct buf *bp;
+	struct ufsmount *um;
+	ufs_lbn_t lbn, lbnp;
+	vm_ooffset_t la, lb;
+	long bsize;
+	int bo_bs, count, error, i;
+	bool redo, lpart;
+
+	vp = ap->a_vp;
+	ma = ap->a_m;
+	count = ap->a_count;
+
+	um = VFSTOUFS(ap->a_vp->v_mount);
+	bo_bs = um->um_devvp->v_bufobj.bo_bsize;
+	if (!use_buf_pager && bo_bs <= PAGE_SIZE)
+		return (vnode_pager_generic_getpages(vp, ma, count,
+		    ap->a_rbehind, ap->a_rahead, NULL, NULL));
+
+	object = vp->v_object;
+	la = IDX_TO_OFF(ma[count - 1]->pindex);
+	if (la >= object->un_pager.vnp.vnp_size)
+		return (VM_PAGER_BAD);
+	lpart = la + PAGE_SIZE > object->un_pager.vnp.vnp_size;
+	if (ap->a_rbehind != NULL) {
+		lb = IDX_TO_OFF(ma[0]->pindex);
+		*ap->a_rbehind = OFF_TO_IDX(lb - rounddown2(lb, bo_bs));
+	}
+	if (ap->a_rahead != NULL) {
+		*ap->a_rahead = OFF_TO_IDX(roundup2(la, bo_bs) - la);
+		if (la + IDX_TO_OFF(*ap->a_rahead) >=
+		    object->un_pager.vnp.vnp_size) {
+			*ap->a_rahead = OFF_TO_IDX(roundup2(object->un_pager.
+			    vnp.vnp_size, PAGE_SIZE) - la);
+		}
+	}
+	VM_OBJECT_WLOCK(object);
+again:
+	for (i = 0; i < count; i++)
+		vm_page_busy_downgrade(ma[i]);
+	VM_OBJECT_WUNLOCK(object);
+
+	lbnp = -1;
+	for (i = 0; i < count; i++) {
+		m = ma[i];
+
+		/*
+		 * Pages are shared busy and the object lock is not
+		 * owned, which together allow for the pages'
+		 * invalidation.  The racy test for validity avoids
+		 * useless creation of the buffer for the most typical
+		 * case when invalidation is not used in redo or for
+		 * parallel read.  The shared->excl upgrade loop at
+		 * the end of the function catches the race in a
+		 * reliable way (protected by the object lock).
+		 */
+		if (m->valid == VM_PAGE_BITS_ALL)
+			continue;
+
+		lbn = lblkno(um->um_fs, IDX_TO_OFF(m->pindex));
+		if (lbn != lbnp) {
+			bsize = blksize(um->um_fs, VTOI(vp), lbn);
+			error = bread_gb(vp, lbn, bsize, NOCRED, GB_UNMAPPED,
+			    &bp);
+			if (error != 0)
+				break;
+			KASSERT(1 /* racy, enable for debugging */ ||
+			    m->valid == VM_PAGE_BITS_ALL || i == count - 1,
+			    ("buf %d %p invalid", i, m));
+			if (i == count - 1 && lpart) {
+				VM_OBJECT_WLOCK(object);
+				if (m->valid != 0 &&
+				    m->valid != VM_PAGE_BITS_ALL)
+					vm_page_zero_invalid(m, TRUE);
+				VM_OBJECT_WUNLOCK(object);
+			}
+			if (LIST_EMPTY(&bp->b_dep)) {
+				/*
+				 * Invalidation clears m->valid, but
+				 * may leave B_CACHE flag if the
+				 * buffer existed at the invalidation
+				 * time.  In this case, recycle the
+				 * buffer to do real read on next
+				 * bread() after redo.
+				 *
+				 * Otherwise B_RELBUF is not strictly
+				 * necessary, enable to reduce buf
+				 * cache pressure.
+				 */
+				if (buf_pager_relbuf ||
+				    m->valid != VM_PAGE_BITS_ALL)
+					bp->b_flags |= B_RELBUF;
+
+				bp->b_flags &= ~B_NOCACHE;
+				brelse(bp);
+			} else {
+				bqrelse(bp);
+			}
+			lbnp = lbn;
+		}
+	}
+
+	VM_OBJECT_WLOCK(object);
+	redo = false;
+	for (i = 0; i < count; i++) {
+		vm_page_sunbusy(ma[i]);
+		ma[i] = vm_page_grab(object, ma[i]->pindex, VM_ALLOC_NORMAL);
+
+		/*
+		 * Since the pages were only sbusy while neither the
+		 * buffer nor the object lock was held by us, or
+		 * reallocated while vm_page_grab() slept for busy
+		 * relinguish, they could have been invalidated.
+		 * Recheck the valid bits and re-read as needed.
+		 *
+		 * Note that the last page is made fully valid in the
+		 * read loop, and partial validity for the page at
+		 * index count - 1 could mean that the page was
+		 * invalidated or removed, so we must restart for
+		 * safety as well.
+		 */
+		if (ma[i]->valid != VM_PAGE_BITS_ALL)
+			redo = true;
+	}
+	if (redo && error == 0)
+		goto again;
+	VM_OBJECT_WUNLOCK(object);
+	return (error != 0 ? VM_PAGER_ERROR : VM_PAGER_OK);
 }
