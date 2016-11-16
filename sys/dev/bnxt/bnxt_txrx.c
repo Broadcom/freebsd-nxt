@@ -7,7 +7,6 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
- *
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright
@@ -104,6 +103,9 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 	if ((pi->ipi_csum_flags & (CSUM_OFFLOAD | CSUM_TSO | CSUM_IP)) ||
 	    pi->ipi_mflags & M_VLANTAG)
 		need_hi = true;
+
+	/* TODO: Devices before Cu+B1 need to not mix long and short BDs */
+	need_hi = true;
 
 	pi->ipi_new_pidx = pi->ipi_pidx;
 	tbd = &((struct tx_bd_long *)txr->vaddr)[pi->ipi_new_pidx];
@@ -430,9 +432,9 @@ bnxt_pkt_get_l2(struct bnxt_softc *softc, if_rxd_info_t ri,
 		/*
 		 * TODO: Extract something useful from rcp->rss_hash_type
 		 * (undocumented)
+		 * May be documented in the "LSI ES"
+		 * also check the firmware code.
 		 */
-		// May be documented in the "LSI ES"
-		// also check the firmware code.
 		ri->iri_rsstype = M_HASHTYPE_OPAQUE;
 	}
 	else {
@@ -516,9 +518,9 @@ bnxt_pkt_get_tpa(struct bnxt_softc *softc, if_rxd_info_t ri,
 		/*
 		 * TODO: Extract something useful from tpas->low.rss_hash_type
 		 * (undocumented)
+		 * May be documented in the "LSI ES"
+		 * also check the firmware code.
 		 */
-		// May be documented in the "LSI ES"
-		// also check the firmware code.
 		ri->iri_rsstype = M_HASHTYPE_OPAQUE;
 	}
 	else {

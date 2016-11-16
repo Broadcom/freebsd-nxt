@@ -1,5 +1,10 @@
 #!/usr/bin/env perl
 
+# This script cleans up the "official" Broadcom hsi_struct_defs.h file as distributed
+# to something somewhat more programmer friendly.
+#
+# $FreeBSD$
+
 my $do_decode = 0;
 
 if (! -f $ARGV[0]) {
@@ -25,22 +30,18 @@ print OUT <<END_OF_NOTICE;
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2014-2015 Broadcom Corporation.
- *   All rights reserved.
+ *   Copyright (c) 2016 Broadcom, All Rights Reserved.
+ *   The term Broadcom refers to Broadcom Limited and/or its subsidiaries
  *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
  *   are met:
- *
  *     * Redistributions of source code must retain the above copyright
  *       notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in
  *       the documentation and/or other materials provided with the
  *       distribution.
- *     * Neither the name of Broadcom Corporation nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
  *
  *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
@@ -54,6 +55,9 @@ print OUT <<END_OF_NOTICE;
  *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__FBSDID("\$FreeBSD\$");
 
 END_OF_NOTICE
 
@@ -103,22 +107,18 @@ if ($do_decode) {
 	/*-
 	 *   BSD LICENSE
 	 *
-	 *   Copyright(c) 2014-2015 Broadcom Corporation.
-	 *   All rights reserved.
+	 *   Copyright (c) 2016 Broadcom, All Rights Reserved.
+	 *   The term Broadcom refers to Broadcom Limited and/or its subsidiaries
 	 *
 	 *   Redistribution and use in source and binary forms, with or without
 	 *   modification, are permitted provided that the following conditions
 	 *   are met:
-	 *
 	 *     * Redistributions of source code must retain the above copyright
 	 *       notice, this list of conditions and the following disclaimer.
 	 *     * Redistributions in binary form must reproduce the above copyright
 	 *       notice, this list of conditions and the following disclaimer in
 	 *       the documentation and/or other materials provided with the
 	 *       distribution.
-	 *     * Neither the name of Broadcom Corporation nor the names of its
-	 *       contributors may be used to endorse or promote products derived
-	 *       from this software without specific prior written permission.
 	 *
 	 *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
 	 *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
@@ -132,6 +132,9 @@ if ($do_decode) {
 	 *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 	 *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	 */
+
+	#include <sys/cdefs.h>
+	__FBSDID("\$FreeBSD\$");
 
 END_OF_NOTICE
 

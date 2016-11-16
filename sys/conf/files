@@ -1242,10 +1242,10 @@ dev/bktr/bktr_i2c.c		optional bktr pci smbus
 dev/bktr/bktr_os.c		optional bktr pci
 dev/bktr/bktr_tuner.c		optional bktr pci
 dev/bktr/msp34xx.c		optional bktr pci
-dev/bnxt/if_bnxt.c		optional bnxt iflib pci
 dev/bnxt/bnxt_hwrm.c		optional bnxt iflib pci
 dev/bnxt/bnxt_sysctl.c		optional bnxt iflib pci
 dev/bnxt/bnxt_txrx.c		optional bnxt iflib pci
+dev/bnxt/if_bnxt.c		optional bnxt iflib pci
 dev/buslogic/bt.c		optional bt
 dev/buslogic/bt_eisa.c		optional bt eisa
 dev/buslogic/bt_isa.c		optional bt isa
@@ -1277,6 +1277,7 @@ dev/cfi/cfi_bus_nexus.c		optional cfi
 dev/cfi/cfi_core.c		optional cfi
 dev/cfi/cfi_dev.c		optional cfi
 dev/cfi/cfi_disk.c		optional cfid
+dev/chromebook_platform/chromebook_platform.c	optional chromebook_platform
 dev/ciss/ciss.c			optional ciss
 dev/cm/smc90cx6.c		optional cm
 dev/cmx/cmx.c			optional cmx
@@ -1285,30 +1286,30 @@ dev/cpufreq/ichss.c		optional cpufreq pci
 dev/cs/if_cs.c			optional cs
 dev/cs/if_cs_isa.c		optional cs isa
 dev/cs/if_cs_pccard.c		optional cs pccard
-#dev/cxgb/cxgb_main.c		optional cxgb pci \
-#	compile-with "${NORMAL_C} -I$S/dev/cxgb"
-#dev/cxgb/cxgb_sge.c		optional cxgb pci \
-#	compile-with "${NORMAL_C} -I$S/dev/cxgb"
-#dev/cxgb/common/cxgb_mc5.c	optional cxgb pci \
-#	compile-with "${NORMAL_C} -I$S/dev/cxgb"
-#dev/cxgb/common/cxgb_vsc7323.c	optional cxgb pci \
-#	compile-with "${NORMAL_C} -I$S/dev/cxgb"
-#dev/cxgb/common/cxgb_vsc8211.c	optional cxgb pci \
-#	compile-with "${NORMAL_C} -I$S/dev/cxgb"
-#dev/cxgb/common/cxgb_ael1002.c	optional cxgb pci \
-#	compile-with "${NORMAL_C} -I$S/dev/cxgb"
-#dev/cxgb/common/cxgb_aq100x.c	optional cxgb pci \
-#	compile-with "${NORMAL_C} -I$S/dev/cxgb"
-#dev/cxgb/common/cxgb_mv88e1xxx.c	optional cxgb pci \
-#	compile-with "${NORMAL_C} -I$S/dev/cxgb"
-#dev/cxgb/common/cxgb_xgmac.c	optional cxgb pci \
-#	compile-with "${NORMAL_C} -I$S/dev/cxgb"
-#dev/cxgb/common/cxgb_t3_hw.c	optional cxgb pci \
-#	compile-with "${NORMAL_C} -I$S/dev/cxgb"
-#dev/cxgb/common/cxgb_tn1010.c	optional cxgb pci \
-#	compile-with "${NORMAL_C} -I$S/dev/cxgb"
-#dev/cxgb/sys/uipc_mvec.c	optional cxgb pci \
-#	compile-with "${NORMAL_C} -I$S/dev/cxgb"
+dev/cxgb/cxgb_main.c		optional cxgb pci \
+	compile-with "${NORMAL_C} -I$S/dev/cxgb"
+dev/cxgb/cxgb_sge.c		optional cxgb pci \
+	compile-with "${NORMAL_C} -I$S/dev/cxgb"
+dev/cxgb/common/cxgb_mc5.c	optional cxgb pci \
+	compile-with "${NORMAL_C} -I$S/dev/cxgb"
+dev/cxgb/common/cxgb_vsc7323.c	optional cxgb pci \
+	compile-with "${NORMAL_C} -I$S/dev/cxgb"
+dev/cxgb/common/cxgb_vsc8211.c	optional cxgb pci \
+	compile-with "${NORMAL_C} -I$S/dev/cxgb"
+dev/cxgb/common/cxgb_ael1002.c	optional cxgb pci \
+	compile-with "${NORMAL_C} -I$S/dev/cxgb"
+dev/cxgb/common/cxgb_aq100x.c	optional cxgb pci \
+	compile-with "${NORMAL_C} -I$S/dev/cxgb"
+dev/cxgb/common/cxgb_mv88e1xxx.c	optional cxgb pci \
+	compile-with "${NORMAL_C} -I$S/dev/cxgb"
+dev/cxgb/common/cxgb_xgmac.c	optional cxgb pci \
+	compile-with "${NORMAL_C} -I$S/dev/cxgb"
+dev/cxgb/common/cxgb_t3_hw.c	optional cxgb pci \
+	compile-with "${NORMAL_C} -I$S/dev/cxgb"
+dev/cxgb/common/cxgb_tn1010.c	optional cxgb pci \
+	compile-with "${NORMAL_C} -I$S/dev/cxgb"
+dev/cxgb/sys/uipc_mvec.c	optional cxgb pci \
+	compile-with "${NORMAL_C} -I$S/dev/cxgb"
 dev/cxgb/cxgb_t3fw.c		optional cxgb cxgb_t3fw \
 	compile-with "${NORMAL_C} -I$S/dev/cxgb"
 dev/cxgbe/t4_if.m		optional cxgbe pci
@@ -1393,7 +1394,7 @@ t5fw.fw			optional cxgbe					\
 dev/cy/cy.c			optional cy
 dev/cy/cy_isa.c			optional cy isa
 dev/cy/cy_pci.c			optional cy pci
-dev/cyapa/cyapa.c		optional cyapa smbus
+dev/cyapa/cyapa.c		optional cyapa iicbus
 dev/dc/if_dc.c			optional dc pci
 dev/dc/dcphy.c			optional dc pci
 dev/dc/pnphy.c			optional dc pci
@@ -1469,6 +1470,49 @@ dev/drm/via_map.c		optional viadrm
 dev/drm/via_mm.c		optional viadrm
 dev/drm/via_verifier.c		optional viadrm
 dev/drm/via_video.c		optional viadrm
+dev/drm2/drm_agpsupport.c	optional drm2
+dev/drm2/drm_auth.c		optional drm2
+dev/drm2/drm_bufs.c		optional drm2
+dev/drm2/drm_buffer.c		optional drm2
+dev/drm2/drm_context.c		optional drm2
+dev/drm2/drm_crtc.c		optional drm2
+dev/drm2/drm_crtc_helper.c	optional drm2
+dev/drm2/drm_dma.c		optional drm2
+dev/drm2/drm_dp_helper.c	optional drm2
+dev/drm2/drm_dp_iic_helper.c	optional drm2
+dev/drm2/drm_drv.c		optional drm2
+dev/drm2/drm_edid.c		optional drm2
+dev/drm2/drm_fb_helper.c	optional drm2
+dev/drm2/drm_fops.c		optional drm2
+dev/drm2/drm_gem.c		optional drm2
+dev/drm2/drm_gem_names.c	optional drm2
+dev/drm2/drm_global.c		optional drm2
+dev/drm2/drm_hashtab.c		optional drm2
+dev/drm2/drm_ioctl.c		optional drm2
+dev/drm2/drm_irq.c		optional drm2
+dev/drm2/drm_linux_list_sort.c	optional drm2
+dev/drm2/drm_lock.c		optional drm2
+dev/drm2/drm_memory.c		optional drm2
+dev/drm2/drm_mm.c		optional drm2
+dev/drm2/drm_modes.c		optional drm2
+dev/drm2/drm_pci.c		optional drm2
+dev/drm2/drm_scatter.c		optional drm2
+dev/drm2/drm_stub.c		optional drm2
+dev/drm2/drm_sysctl.c		optional drm2
+dev/drm2/drm_vm.c		optional drm2
+dev/drm2/drm_os_freebsd.c	optional drm2
+dev/drm2/ttm/ttm_agp_backend.c	optional drm2
+dev/drm2/ttm/ttm_lock.c		optional drm2
+dev/drm2/ttm/ttm_object.c	optional drm2
+dev/drm2/ttm/ttm_tt.c		optional drm2
+dev/drm2/ttm/ttm_bo_util.c	optional drm2
+dev/drm2/ttm/ttm_bo.c		optional drm2
+dev/drm2/ttm/ttm_bo_manager.c	optional drm2
+dev/drm2/ttm/ttm_execbuf_util.c	optional drm2
+dev/drm2/ttm/ttm_memory.c	optional drm2
+dev/drm2/ttm/ttm_page_alloc.c	optional drm2
+dev/drm2/ttm/ttm_bo_vm.c	optional drm2
+dev/drm2/ati_pcigart.c		optional drm2 agp pci
 dev/ed/if_ed.c			optional ed
 dev/ed/if_ed_novell.c		optional ed
 dev/ed/if_ed_rtl80x9.c		optional ed
@@ -1479,13 +1523,9 @@ dev/eisa/eisa_if.m		standard
 dev/eisa/eisaconf.c		optional eisa
 dev/e1000/if_em.c		optional em \
 	compile-with "${NORMAL_C} -I$S/dev/e1000"
-dev/e1000/em_txrx.c		optional em iflib \
-	compile-with "${NORMAL_C} -I$S/dev/e1000"
-dev/e1000/if_lem.c		optional em !iflib \
+dev/e1000/if_lem.c		optional em \
 	compile-with "${NORMAL_C} -I$S/dev/e1000"
 dev/e1000/if_igb.c		optional igb \
-	compile-with "${NORMAL_C} -I$S/dev/e1000"
-dev/e1000/igb_txrx.c		optional igb iflib \
 	compile-with "${NORMAL_C} -I$S/dev/e1000"
 dev/e1000/e1000_80003es2lan.c	optional em | igb \
 	compile-with "${NORMAL_C} -I$S/dev/e1000"
@@ -1619,7 +1659,8 @@ dev/gpio/gpiobus.c		optional gpio				\
 dev/gpio/gpioc.c		optional gpio				\
 	dependency	"gpio_if.h"
 dev/gpio/gpioiic.c		optional gpioiic
-dev/gpio/gpioled.c		optional gpioled
+dev/gpio/gpioled.c		optional gpioled !fdt
+dev/gpio/gpioled_fdt.c		optional gpioled fdt
 dev/gpio/gpioregulator.c	optional gpioregulator fdt ext_resources
 dev/gpio/gpiospi.c		optional gpiospi
 dev/gpio/gpio_if.m		optional gpio
@@ -1639,8 +1680,8 @@ dev/hptiop/hptiop.c		optional hptiop scbus
 dev/hwpmc/hwpmc_logging.c	optional hwpmc
 dev/hwpmc/hwpmc_mod.c		optional hwpmc
 dev/hwpmc/hwpmc_soft.c		optional hwpmc
-dev/ichiic/ig4_iic.c		optional ig4 smbus
-dev/ichiic/ig4_pci.c		optional ig4 pci smbus
+dev/ichiic/ig4_iic.c		optional ig4 iicbus
+dev/ichiic/ig4_pci.c		optional ig4 pci iicbus
 dev/ichsmb/ichsmb.c		optional ichsmb
 dev/ichsmb/ichsmb_pci.c		optional ichsmb pci
 dev/ida/ida.c			optional ida
@@ -1734,7 +1775,7 @@ dev/iscsi_initiator/isc_soc.c	optional iscsi_initiator scbus
 dev/iscsi_initiator/isc_sm.c	optional iscsi_initiator scbus
 dev/iscsi_initiator/isc_subr.c	optional iscsi_initiator scbus
 dev/ismt/ismt.c			optional ismt
-dev/isl/isl.c			optional isl smbus
+dev/isl/isl.c			optional isl iicbus
 dev/isp/isp.c			optional isp
 dev/isp/isp_freebsd.c		optional isp
 dev/isp/isp_library.c		optional isp
@@ -2045,8 +2086,6 @@ dev/ixgbe/if_ixv.c		optional ixv inet \
 dev/ixgbe/ix_txrx.c		optional ix inet | ixv inet \
 	compile-with "${NORMAL_C} -I$S/dev/ixgbe"
 dev/ixgbe/ixgbe_osdep.c		optional ix inet | ixv inet \
-	compile-with "${NORMAL_C} -I$S/dev/ixgbe"
-dev/ixgbe/ixgbe_sysctl.c	optional ix inet | ixv inet \
 	compile-with "${NORMAL_C} -I$S/dev/ixgbe"
 dev/ixgbe/ixgbe_phy.c		optional ix inet | ixv inet \
 	compile-with "${NORMAL_C} -I$S/dev/ixgbe"
@@ -3192,6 +3231,7 @@ dev/xen/xenstore/xenstore_dev.c	optional xenhvm
 dev/xen/xenstore/xenstored_dev.c	optional xenhvm
 dev/xen/evtchn/evtchn_dev.c	optional xenhvm
 dev/xen/privcmd/privcmd.c	optional xenhvm
+dev/xen/gntdev/gntdev.c		optional xenhvm
 dev/xen/debug/debug.c		optional xenhvm
 dev/xl/if_xl.c			optional xl pci
 dev/xl/xlphy.c			optional xl pci
@@ -3593,7 +3633,6 @@ kern/subr_sleepqueue.c		standard
 kern/subr_smp.c			standard
 kern/subr_stack.c		optional ddb | stack | ktr
 kern/subr_taskqueue.c		standard
-kern/subr_gtaskqueue.c		standard
 kern/subr_terminal.c		optional vt
 kern/subr_trap.c		standard
 kern/subr_turnstile.c		standard
@@ -3633,7 +3672,6 @@ kern/uipc_sockbuf.c		standard
 kern/uipc_socket.c		standard
 kern/uipc_syscalls.c		standard
 kern/uipc_usrreq.c		standard
-kern/uipc_mvec.c		standard
 kern/vfs_acl.c			standard
 kern/vfs_aio.c			standard
 kern/vfs_bio.c			standard
@@ -3811,9 +3849,9 @@ net/if_tun.c			optional tun
 net/if_tap.c			optional tap
 net/if_vlan.c			optional vlan
 net/if_vxlan.c			optional vxlan inet | vxlan inet6
-net/ifdi_if.m			optional ether pci
-net/iflib.c			optional ether pci
-net/mp_ring.c			optional ether
+net/ifdi_if.m                  optional ether pci
+net/iflib.c                    optional ether pci
+net/mp_ring.c                  optional ether
 net/mppcc.c			optional netgraph_mppc_compression
 net/mppcd.c			optional netgraph_mppc_compression
 net/netisr.c			standard

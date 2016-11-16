@@ -1,22 +1,18 @@
 /*-
  *   BSD LICENSE
  *
- *   Copyright(c) 2014-2015 Broadcom Corporation.
- *   All rights reserved.
+ *   Copyright (c) 2016 Broadcom, All Rights Reserved.
+ *   The term Broadcom refers to Broadcom Limited and/or its subsidiaries
  *
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions
  *   are met:
- *
  *     * Redistributions of source code must retain the above copyright
  *       notice, this list of conditions and the following disclaimer.
  *     * Redistributions in binary form must reproduce the above copyright
  *       notice, this list of conditions and the following disclaimer in
  *       the documentation and/or other materials provided with the
  *       distribution.
- *     * Neither the name of Broadcom Corporation nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
  *
  *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
@@ -31,15 +27,10 @@
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__FBSDID("$FreeBSD$");
+
 /****************************************************************************
- * Copyright(c) 2001-2016 Broadcom Corporation, all rights reserved
- * Proprietary and Confidential Information.
- *
- * This source file is the property of Broadcom Corporation, and
- * may not be copied or distributed in any isomorphic form without
- * the prior written consent of Broadcom Corporation.
- *
- * Name:  hsi_struct_def_external.h
  *
  * Description: Definition of HSI data structures
  *
@@ -16904,7 +16895,7 @@ struct hwrm_nvm_write_input {
 	 * allocated item length, which may be greater than the requested item
 	 * length. The purpose for allocating more than the required number of
 	 * bytes for an item's data is to pre-allocate extra storage (padding)
-	 * to accomodate the potential future growth of an item (e.g. upgraded
+	 * to accommodate the potential future growth of an item (e.g. upgraded
 	 * firmware with a size increase, log growth, expanded configuration
 	 * data).
 	 */

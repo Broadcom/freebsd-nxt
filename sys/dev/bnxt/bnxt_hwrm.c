@@ -7,7 +7,6 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
- *
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright
@@ -35,7 +34,6 @@ __FBSDID("$FreeBSD$");
 #include "bnxt.h"
 #include "bnxt_hwrm.h"
 #include "hsi_struct_def.h"
-//#include "decode_hsi.h"
 
 static int bnxt_hwrm_err_map(uint16_t err);
 static inline int _is_valid_ether_addr(uint8_t *);
@@ -158,7 +156,6 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 		    "Timeout sending %s: (timeout: %u) seq: %d\n",
 		    GET_HWRM_REQ_TYPE(req->req_type), softc->hwrm_cmd_timeo,
 		    le16toh(req->seq_id));
-		//decode_hwrm_req(req);
 		return ETIMEDOUT;
 	}
 	/* Last byte of resp contains the valid key */
@@ -175,7 +172,6 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 		    softc->hwrm_cmd_timeo, le16toh(req->req_type),
 		    le16toh(req->seq_id), msg_len,
 		    *valid);
-		//decode_hwrm_req(req);
 		return ETIMEDOUT;
 	}
 
@@ -188,8 +184,6 @@ _hwrm_send_message(struct bnxt_softc *softc, void *msg, uint32_t msg_len)
 			    GET_HWRM_REQ_TYPE(req->req_type),
 			    GET_HWRM_ERROR_CODE(err));
 		}
-		//decode_hwrm_req(req);
-		//decode_hwrm_resp(resp);
 		return bnxt_hwrm_err_map(err);
 	}
 
@@ -510,11 +504,11 @@ bnxt_hwrm_set_pause_common(struct bnxt_softc *softc,
 }
 
 
-//JFV this needs interface connection
+/* JFV this needs interface connection */
 static void
 bnxt_hwrm_set_eee(struct bnxt_softc *softc, struct hwrm_port_phy_cfg_input *req)
 {
-	//struct ethtool_eee *eee = &softc->eee;
+	/* struct ethtool_eee *eee = &softc->eee; */
 	bool	eee_enabled = false;
 
 	if (eee_enabled) {
@@ -938,8 +932,10 @@ bnxt_hwrm_vnic_tpa_cfg(struct bnxt_softc *softc, struct bnxt_vnic_info *vnic,
 	req.max_agg_segs = htole16(3);
 	/* Base this in the allocated TPA start size... */
 	req.max_aggs = htole16(2);
-	/* TODO: max_agg_timer? */
-	// req.mag_agg_timer = htole32(XXX);
+	/*
+	 * TODO: max_agg_timer?
+	 * req.mag_agg_timer = htole32(XXX);
+	 */
 	req.min_agg_len = htole32(0);
 
 	return hwrm_send_message(softc, &req, sizeof(req));

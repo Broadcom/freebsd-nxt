@@ -7,7 +7,6 @@
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
- *
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright
@@ -401,8 +400,8 @@ struct bnxt_ring {
 	vm_offset_t		doorbell;
 	caddr_t			vaddr;
 	struct bnxt_softc	*softc;
-	uint32_t		ring_size;	// Must be a power of two
-	uint16_t		id;		// Logical ID
+	uint32_t		ring_size;	/* Must be a power of two */
+	uint16_t		id;		/* Logical ID */
 	uint16_t		phys_id;
 };
 
@@ -410,7 +409,7 @@ struct bnxt_cp_ring {
 	struct bnxt_ring	ring;
 	struct if_irq		irq;
 	uint32_t		cons;
-	bool			v_bit;		// Value of valid bit
+	bool			v_bit;		/* Value of valid bit */
 	struct ctx_hw_stats	*stats;
 	uint32_t		stats_ctx_id;
 	uint32_t		last_idx;	/* Used by RX rings only

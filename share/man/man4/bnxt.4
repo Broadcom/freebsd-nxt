@@ -89,99 +89,116 @@ Broadcom BCM57304 NetXtreme-C Virtual Function
 Broadcom BCM57404 NetXtreme-E Virtual Function
 .El
 .Sh SYSCTL VARIABLES
-The following variables must be set before loading the driver, either via 
-.Xr loader.conf 5 or throug the use of
-.Xr kenv 1 .  These are provided by the
-.Xr iflib 9 framework, and may be better documented there.
+These variables must be set before loading the driver, either via 
+.Xr loader.conf 5
+or through the use of
+.Xr kenv 1 .
+These are provided by the
+.Xr iflib 9
+framework, and might be better documented there.
 .Bl -tag -width indent
 .It Va dev.bnxt.X.iflib.override_nrxds
-This overrides the number of RX descriptors for each queue.  This is a comma
-separated list of three positive integers, the size of the completion ring,
+Override the number of RX descriptors for each queue.
+The value is a comma separated list of three positive integers: the size of the
+completion ring,
 the size of the receive ring, and the size of the aggregation ring respectively.
-The completion ring should be at least four times the size of the receive ring
-plus the size of the aggregation ring.  These numbers must be powers of two, and
-zero indicates that the default should be used.
-Defaults to 0,0,0
+The completion ring should be at least the size of the aggregation ring plus
+four times the size of the receive ring.
+These numbers must be powers of two, and zero means to use the default.
+Defaults to 0,0,0.
 .It Va dev.bnxt.X.iflib.override_ntxds
-This overrides the number of TX descriptors for each queue.  This is a comma
-separated list of two positive integers, the size of the completion ring, and
-the size of the transmit ring respectively.  The completion ring should be at
-least twice the size of the transmit ring.  These numbers must be powers of two,
-and zero indicates that the default value should be used.
-Defaults to 0,0
+Override the number of TX descriptors for each queue.
+The value is a comma separated list of two positive integers: the size of the
+completion ring, and the size of the transmit ring respectively.
+The completion ring should be at least twice the size of the transmit ring.
+These numbers must be powers of two, and zero means to use the default.
+Defaults to 0,0.
 .It Va override_qs_enable
-Setting this alles the number of transmit and receive queues to be different.
-If this is not set, 
+When set, allows the number of transmit and receive queues to be different.
+If not set, the lower of the number of TX or RX queues will be used for both.
 .It Va override_nrxqs
-Sets the number of RX queues.  If zero, the number of RX queues is derived from
-the number of cores on the socket the controller is connected to.
-Defaults to 0
+Set the number of RX queues.
+If zero, the number of RX queues is derived from the number of cores on the
+socket connected to the controller.
+Defaults to 0.
 .It Va override_ntxqs
-Sets the number of TX queues.  If zero, the number of TX queues is derived from
-the number of cores in the socket the controller is connected to.
+Set the number of TX queues.
+If zero, the number of TX queues is derived from the number of cores on the
+socket connected to the controller.
 .El
 .Pp
-The following variables sysctl variables can be changed at any time:
+These
 .Xr sysctl 8
-variables:
+variables can be changed at any time:
 .Bl -tag -width indent
 .It Va dev.bnxt.X.vlan_only
-This requires that incoming frames must have a VLAN tag on them that matches
-one that is configured for the NIC.  Normally, both frames that have a matching
-VLAN tag and frames that have no VLAN tag are accepted.
-Defaults to 0
+Require that incoming frames must have a VLAN tag on them that matches one that
+is configured for the NIC.
+Normally, both frames that have a matching VLAN tag and frames that have no
+VLAN tag are accepted.
+Defaults to 0.
 .It Va dev.bnxt.X.vlan_strip
-Setting this to non-zero configures the NIC to strip VLAN tags on receive.
-Defaults to 0
+When non-zero the NIC strips VLAN tags on receive.
+Defaults to 0.
 .It Va dev.bnxt.X.rx_stall
-This enables buffering rather than dropping frames when there are no available
-host RX buffers to DMA to.
-Defaults to 0
+Enable buffering rather than dropping frames when there are no available host
+RX buffers for DMA.
+Defaults to 0.
 .It Va dev.bnxt.X.rss_type
-A comma-separated list of RSS hash types to support.  Default is all types.
-Defaults to ipv4,tcp_ipv4,udp_ipv4,ipv6,tcp_ipv6,udp_ipv6
+Comma-separated list of RSS hash types to support.
+Default is all types.
+Defaults to ipv4,tcp_ipv4,udp_ipv4,ipv6,tcp_ipv6,udp_ipv6.
 .It Va dev.bnxt.X.rss_key
-The current RSS key.
-Defaults to a randomly generated value
+Current RSS key.
+Defaults to a randomly generated value which is generated for each device
+during attach.
 .It Va dev.bnxt.X.ver.hwrm_min_ver
-The minimum HWRM (HardWare Resource Manager) firmware API to support.  If the
-firmware implements an older version, a warning will be printed, and the
+Minimum HWRM (HardWare Resource Manager) firmware API to support.
+If the firmware implements an older version, a warning will be printed, and the
 firmware should be upgraded.
-Defaults to 1.2.2
+Defaults to 1.2.2.
 .El
 .Pp
-The following sysctl variables are read-only:
+These
+.Xr sysctl 8
+variables are read-only:
 .Bl -tag -width indent
 .It Va dev.bnxt.X.if_name
-The current interface name of the device.  This will normally be "bnxtX", but
-this can be changed via ifconfig name.  This sysctl allows correlating an
-interface with a child of dev.bnxt.
+Current interface name of the device.
+This will normally be 
+.Va bnxtX ,
+but this can be changed using
+.Cm ifconfig name .
+This sysctl allows correlating an interface with a child of dev.bnxt.
 .It Va dev.bnxt.X.nvram.*
-Various information about the NVRAM part which contains the device firmware.
+Information about the NVRAM device which contains the device firmware.
 .It Va dev.bnxt.X.ver.*
-Various version related information about the device and firmware.  Some of
-these follow.
+Version-related information about the device and firmware:
 .It Va dev.bnxt.X.ver.hwrm_if
-The supported HWRM API version of the currently running firmware.
-.It Va dev.bnxt.X.driver_hwrm_if
-The HWRM API version the driver was built to support.
+Supported HWRM API version of the currently running firmware.
+.It Va dev.bnxt.X.ver.driver_hwrm_if
+HWRM API version the driver was built to support.
 .It Va dev.bnxt.X.hwstats.*
-Various per-queue statistics tracked by the hardware.
+Per-queue statistics tracked by the hardware.
 .It Va dev.bnxt.X.hwstats.rxq0.drop_pkts
-The number of packets dropped by hardware on queue zero.  This number may seem
-high, but this count includes packets dropped due to incorrect destination MAC,
-unsubscribed multicast address, and other normal resons to ignore ethernet
-frames.
+Number of packets dropped by hardware on queue zero.
+This number might seem high, but the count includes packets dropped due to
+incorrect destination MAC, unsubscribed multicast address, and other normal
+reasons to ignore Ethernet frames.
 .El
 .Sh DIAGNOSTICS
 .Bl -diag
 .It "bnxt%d: %s command returned %s error."
-Device firmware rejected a command from the driver.  There may be a
-driver/firmware HWRM API mismatch.
+Device firmware rejected a command from the driver.
+There might be a driver/firmware HWRM API mismatch.
 .It "bnxt%d: Timeout sending %s (timeout: %d) seq %d\n"
-Device firmware unresponsive.  Device likely needs to be reset.
+Device firmware unresponsive.
+A PCI device reset is likely needed.
 .It "bnxt%d: Timeout sending %s (timeout: %d) msg {0x%x 0x%x} len:%d v: %d\n"
-Partial firmware response.  Device may need to be reset.
+Partial firmware response.
+A PCI device reset is likely needed.
+.Pp
+As of this writing, the system must be rebooted to initiate a PCI device reset.
 .El
 .Sh SEE ALSO
 .Xr altq 4 ,
@@ -195,7 +212,7 @@ Partial firmware response.  Device may need to be reset.
 The
 .Nm
 device driver first appeared in
-.Fx 11.0 .
+.Fx 12.0 .
 .Sh AUTHORS
 The
 .Nm
