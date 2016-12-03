@@ -49,7 +49,7 @@ PROTECT="/usr/bin/protect"
 ID="/usr/bin/id"
 IDCMD="if [ -x $ID ]; then $ID -un; fi"
 PS="/bin/ps -ww"
-JID=`$PS -p $$ -o jid=`
+JID=0
 
 #
 #	functions
@@ -2118,6 +2118,13 @@ _echoonce()
 	*)	[ -z "$_var" ] && echo -n "$_msg" && eval "$1=finished" ;;
 	esac
 }
+
+# If the loader env variable rc.debug is set, turn on debugging. rc.conf will
+# still override this, but /etc/defaults/rc.conf can't unconditionally set this
+# since it would undo what we've done here.
+if kenv -q rc.debug > /dev/null ; then
+	rc_debug=YES
+fi
 
 fi # [ -z "${_rc_subr_loaded}" ]
 
