@@ -1402,6 +1402,7 @@ dev/dcons/dcons.c		optional dcons
 dev/dcons/dcons_crom.c		optional dcons_crom
 dev/dcons/dcons_os.c		optional dcons
 dev/de/if_de.c			optional de pci
+dev/dme/if_dme.c		optional dme
 dev/dpt/dpt_eisa.c		optional dpt eisa
 dev/dpt/dpt_pci.c		optional dpt pci
 dev/dpt/dpt_scsi.c		optional dpt
@@ -1661,6 +1662,7 @@ dev/gpio/gpioc.c		optional gpio				\
 dev/gpio/gpioiic.c		optional gpioiic
 dev/gpio/gpioled.c		optional gpioled !fdt
 dev/gpio/gpioled_fdt.c		optional gpioled fdt
+dev/gpio/gpiopower.c		optional gpiopower fdt
 dev/gpio/gpioregulator.c	optional gpioregulator fdt ext_resources
 dev/gpio/gpiospi.c		optional gpiospi
 dev/gpio/gpio_if.m		optional gpio
