@@ -1297,13 +1297,13 @@ if_addgroup(struct ifnet *ifp, const char *groupname)
 		}
 
 	if ((ifgl = (struct ifg_list *)malloc(sizeof(struct ifg_list), M_TEMP,
-	    M_NOWAIT|M_ZERO)) == NULL) {
+	    M_NOWAIT)) == NULL) {
 	    	IFNET_WUNLOCK();
 		return (ENOMEM);
 	}
 
 	if ((ifgm = (struct ifg_member *)malloc(sizeof(struct ifg_member),
-	    M_TEMP, M_NOWAIT|M_ZERO)) == NULL) {
+	    M_TEMP, M_NOWAIT)) == NULL) {
 		free(ifgl, M_TEMP);
 		IFNET_WUNLOCK();
 		return (ENOMEM);
@@ -1315,7 +1315,7 @@ if_addgroup(struct ifnet *ifp, const char *groupname)
 
 	if (ifg == NULL) {
 		if ((ifg = (struct ifg_group *)malloc(sizeof(struct ifg_group),
-		    M_TEMP, M_NOWAIT|M_ZERO)) == NULL) {
+		    M_TEMP, M_NOWAIT)) == NULL) {
 			free(ifgl, M_TEMP);
 			free(ifgm, M_TEMP);
 			IFNET_WUNLOCK();

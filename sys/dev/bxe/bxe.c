@@ -2469,6 +2469,7 @@ static int
 bxe_probe(device_t dev)
 {
     struct bxe_device_type *t;
+    char *descbuf;
     uint16_t did, sdid, svid, vid;
 
     /* Find our device structure */
@@ -2485,6 +2486,20 @@ bxe_probe(device_t dev)
         if ((vid == t->bxe_vid) && (did == t->bxe_did) &&
             ((svid == t->bxe_svid) || (t->bxe_svid == PCI_ANY_ID)) &&
             ((sdid == t->bxe_sdid) || (t->bxe_sdid == PCI_ANY_ID))) {
+            descbuf = malloc(BXE_DEVDESC_MAX, M_TEMP, M_NOWAIT);
+            if (descbuf == NULL)
+                return (ENOMEM);
+
+            /* Print out the device identity. */
+            snprintf(descbuf, BXE_DEVDESC_MAX,
+                     "%s (%c%d) BXE v:%s\n", t->bxe_name,
+                     (((pci_read_config(dev, PCIR_REVID, 4) &
+                        0xf0) >> 4) + 'A'),
+                     (pci_read_config(dev, PCIR_REVID, 4) & 0xf),
+                     BXE_DRIVER_VERSION);
+
+            device_set_desc_copy(dev, descbuf);
+            free(descbuf, M_TEMP);
             return (BUS_PROBE_DEFAULT);
         }
         t++;
@@ -15777,44 +15792,12 @@ static int
 bxe_attach(device_t dev)
 {
     struct bxe_softc *sc;
-    char *descbuf;
-    struct bxe_device_type *t;
-    uint16_t did, sdid, svid, vid;
 
-    t = bxe_devs;
     sc = device_get_softc(dev);
-
-
-    /* Get the data for the device to be probed. */
-    vid  = pci_get_vendor(dev);
-    did  = pci_get_device(dev);
-    svid = pci_get_subvendor(dev);
-    sdid = pci_get_subdevice(dev);
-    /* Look through the list of known devices for a match. */
-    while (t->bxe_name != NULL) {
-        if ((vid == t->bxe_vid) && (did == t->bxe_did) &&
-            ((svid == t->bxe_svid) || (t->bxe_svid == PCI_ANY_ID)) &&
-            ((sdid == t->bxe_sdid) || (t->bxe_sdid == PCI_ANY_ID))) {
-		break;
-        }
-        t++;
-    }
 
     BLOGD(sc, DBG_LOAD, "Starting attach...\n");
 
     sc->state = BXE_STATE_CLOSED;
-
-    descbuf = malloc(BXE_DEVDESC_MAX, M_TEMP, M_WAITOK);
-
-    /* Print out the device identity. */
-    snprintf(descbuf, BXE_DEVDESC_MAX,
-	     "%s (%c%d) BXE v:%s\n", t->bxe_name,
-	     (((pci_read_config(dev, PCIR_REVID, 4) &
-		0xf0) >> 4) + 'A'),
-	     (pci_read_config(dev, PCIR_REVID, 4) & 0xf),
-	     BXE_DRIVER_VERSION);
-    device_set_desc_copy(dev, descbuf);
-    free(descbuf, M_TEMP);
 
     sc->dev  = dev;
     sc->unit = device_get_unit(dev);

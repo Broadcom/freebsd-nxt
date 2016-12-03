@@ -41,7 +41,6 @@ __FBSDID("$FreeBSD$");
 #define NO_64BIT_ATOMICS
 #endif
 
-
 #if defined(__i386__)
 #define atomic_cmpset_acq_64 atomic_cmpset_64
 #define atomic_cmpset_rel_64 atomic_cmpset_64

@@ -143,18 +143,6 @@ an_attach_pci(dev)
 {
 	struct an_softc		*sc;
 	int 			flags, error = 0;
-	struct an_type		*t;
-
-	t = an_devs;
-
-	while (t->an_name != NULL) {
-		if (pci_get_vendor(dev) == t->an_vid &&
-		    pci_get_device(dev) == t->an_did) {
-			device_set_desc(dev, t->an_name);
-			break;
-		}
-		t++;
-	}
 
 	sc = device_get_softc(dev);
 	bzero(sc, sizeof(struct an_softc));

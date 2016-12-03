@@ -534,7 +534,7 @@ _vpo=		vpo
 _sym=		sym
 # intr_disable() is a macro, causes problems
 .if ${MK_SOURCELESS_UCODE} != "no"
-#_cxgb=		cxgb
+_cxgb=		cxgb
 .endif
 .endif
 

@@ -246,9 +246,8 @@ SYSINIT(memguard, SI_SUB_KLD, SI_ORDER_ANY, memguard_sysinit, NULL);
  * size in one of the page's fields that is unused when the page is
  * wired rather than the object field, which is used.
  */
-
-static vm_page_t
-memguard_page_lookup(vm_offset_t va)
+static u_long *
+v2sizep(vm_offset_t va)
 {
 	vm_paddr_t pa;
 	struct vm_page *p;
@@ -259,24 +258,21 @@ memguard_page_lookup(vm_offset_t va)
 	p = PHYS_TO_VM_PAGE(pa);
 	KASSERT(p->wire_count != 0 && p->queue == PQ_NONE,
 	    ("MEMGUARD: Expected wired page %p in vtomgfifo!", p));
-	return (p);
-}
-
-static u_long *
-v2sizep(vm_offset_t va)
-{
-	vm_page_t p;
-
-	p = memguard_page_lookup(va);
 	return (&p->plinks.memguard.p);
 }
 
 static u_long *
 v2sizev(vm_offset_t va)
 {
-	vm_page_t p;
+	vm_paddr_t pa;
+	struct vm_page *p;
 
-	p = memguard_page_lookup(va);
+	pa = pmap_kextract(va);
+	if (pa == 0)
+		panic("MemGuard detected double-free of %p", (void *)va);
+	p = PHYS_TO_VM_PAGE(pa);
+	KASSERT(p->wire_count != 0 && p->queue == PQ_NONE,
+	    ("MEMGUARD: Expected wired page %p in vtomgfifo!", p));
 	return (&p->plinks.memguard.v);
 }
 
