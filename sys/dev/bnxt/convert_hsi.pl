@@ -72,6 +72,7 @@ $header =~ s/\bu32_t(\s+[a-zA-Z0-9_]+)_lo;\s*\r?\n\s*u32_t(\s+[a-zA-Z0-9_]+)_hi/
 
 # Convert types
 $header =~ s/\bu([0-9]+)_t\b/uint$1_t/gs;
+$header =~ s/\bs([0-9]+)_t\b/int$1_t/gs;
 
 # Convert literals
 $header =~ s/\b((?:0x)?[0-9a-f]+)UL/UINT32_C($1)/gs;
