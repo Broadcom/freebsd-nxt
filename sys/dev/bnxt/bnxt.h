@@ -113,7 +113,7 @@ __FBSDID("$FreeBSD$");
  * If we update the index, a write barrier is needed after the write to ensure
  * the completion ring has space before the RX/TX ring does.  Since we can't
  * make the RX and AG doorbells covered by the same barrier without remapping
- * MSI-X vectors, we create the barrier over the enture doorbell bar.
+ * MSI-X vectors, we create the barrier over the entire doorbell bar.
  * TODO: Remap the MSI-X vectors to allow a barrier to only cover the doorbells
  *       for a single ring group.
  *

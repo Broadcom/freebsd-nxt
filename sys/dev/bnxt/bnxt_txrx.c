@@ -53,11 +53,6 @@ static int bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, uint32_t cidx,
     bool clear);
 
 static void bnxt_isc_rxd_refill(void *sc, if_rxd_update_t iru);
-
-/*				uint16_t rxqid, uint8_t flid,
-    uint32_t pidx, uint64_t *paddrs, caddr_t *vaddrs, uint16_t count,
-    uint16_t buf_size);
-*/
 static void bnxt_isc_rxd_flush(void *sc, uint16_t rxqid, uint8_t flid,
     uint32_t pidx);
 static int bnxt_isc_rxd_available(void *sc, uint16_t rxqid, uint32_t idx,
@@ -260,19 +255,12 @@ bnxt_isc_rxd_refill(void *sc, if_rxd_update_t iru)
 	uint16_t type;
 	uint16_t i;
 	uint16_t rxqid;
-	uint16_t count, len;
 	uint32_t pidx;
 	uint8_t flid;
-	uint64_t *paddrs;
-	caddr_t *vaddrs;
 
 	rxqid = iru->iru_qsidx;
-	count = iru->iru_count;
-	len = iru->iru_buf_size;
 	pidx = iru->iru_pidx;
 	flid = iru->iru_flidx;
-	vaddrs = iru->iru_vaddrs;
-	paddrs = iru->iru_paddrs;
 
 	if (flid == 0) {
 		rx_ring = &softc->rx_rings[rxqid];
@@ -284,13 +272,13 @@ bnxt_isc_rxd_refill(void *sc, if_rxd_update_t iru)
 	}
 	rxbd = (void *)rx_ring->vaddr;
 
-	for (i=0; i<count; i++) {
+	for (i=0; i<iru->iru_count; i++) {
 		rxbd[pidx].flags_type = htole16(type);
-		rxbd[pidx].len = htole16(len);
+		rxbd[pidx].len = htole16(iru->iru_buf_size);
 		/* No need to byte-swap the opaque value */
 		rxbd[pidx].opaque = ((rxqid & 0xff) << 24) | (flid << 16)
 		    | pidx;
-		rxbd[pidx].addr = htole64(paddrs[i]);
+		rxbd[pidx].addr = htole64(iru->iru_paddrs[i]);
 		if (++pidx == rx_ring->ring_size)
 			pidx = 0;
 	}
