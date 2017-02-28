@@ -404,10 +404,6 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, qidx_t idx, qidx_t budget)
 		case CMPL_BASE_TYPE_RX_AGG:
 			break;
 		default:
-			device_printf(softc->dev,
-			    "Unhandled completion type %d on RXQ %d\n",
-			    type, rxqid);
-
 			/* Odd completion types use two completions */
 			if (type & 1) {
 				NEXT_CP_CONS_V(&cpr->ring, cons, v_bit);
@@ -416,6 +412,12 @@ bnxt_isc_rxd_available(void *sc, uint16_t rxqid, qidx_t idx, qidx_t budget)
 				if (!CMP_VALID(&cmp[cons], v_bit))
 					goto cmpl_invalid;
 			}
+
+			/* Ensure both completions are valid before bleating */
+			device_printf(softc->dev,
+			    "Unhandled completion type %d on RXQ %d\n",
+			    type, rxqid);
+
 			break;
 		}
 		if (avail > budget)
