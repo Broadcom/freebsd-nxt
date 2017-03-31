@@ -93,6 +93,7 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 {
 	struct bnxt_softc *softc = (struct bnxt_softc *)sc;
 	struct bnxt_ring *txr = &softc->tx_rings[pi->ipi_qsidx];
+	struct bnxt_cp_ring *cpr = &softc->tx_cp_rings[pi->ipi_qsidx];
 	struct tx_bd_long *tbd;
 	struct tx_bd_long_hi *tbdh;
 	bool need_hi = false;
@@ -113,7 +114,7 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 	tbd = &((struct tx_bd_long *)txr->vaddr)[pi->ipi_new_pidx];
 	pi->ipi_ndescs = 0;
 	/* No need to byte-swap the opaque value */
-	tbd->opaque = ((pi->ipi_nsegs + need_hi) << 24) | pi->ipi_new_pidx;
+	cpr->pkt_count += pi->ipi_nsegs + need_hi;
 	tbd->len = htole16(pi->ipi_segs[seg].ds_len);
 	tbd->addr = htole64(pi->ipi_segs[seg++].ds_addr);
 	flags_type = ((pi->ipi_nsegs + need_hi) <<
@@ -122,6 +123,14 @@ bnxt_isc_txd_encap(void *sc, if_pkt_info_t pi)
 		flags_type |= TX_BD_SHORT_FLAGS_LHINT_GTE2K;
 	else
 		flags_type |= bnxt_tx_lhint[pi->ipi_len >> 9];
+	if (pi->ipi_flags & IPI_TX_INTR) {
+		tbd->opaque = cpr->pkt_count;
+		cpr->pkt_count = 0;
+	}
+	else {
+		tbd->opaque = 0;
+		flags_type |= TX_BD_SHORT_FLAGS_NO_CMPL;
+	}
 
 	if (need_hi) {
 		flags_type |= TX_BD_LONG_TYPE_TX_BD_LONG;
@@ -219,7 +228,7 @@ bnxt_isc_txd_credits_update(void *sc, uint16_t txqid, bool clear)
 				device_printf(softc->dev,
 				    "TX completion error %u\n", err);
 			/* No need to byte-swap the opaque value */
-			avail += cmpl[cons].opaque >> 24;
+			avail += cmpl[cons].opaque;
 			/*
 			 * If we're not clearing, iflib only cares if there's
 			 * at least one buffer.  Don't scan the whole ring in

@@ -435,9 +435,9 @@ struct bnxt_cp_ring {
 	bool			v_bit;		/* Value of valid bit */
 	struct ctx_hw_stats	*stats;
 	uint32_t		stats_ctx_id;
-	uint32_t		last_idx;	/* Used by RX rings only
-						 * set to the last read pidx
-						 */
+	uint32_t		pkt_count;	/* Used by TX rings only, the
+						   number of packets since the
+						   last IPI_TX_INTR */
 };
 
 struct bnxt_full_tpa_start {
