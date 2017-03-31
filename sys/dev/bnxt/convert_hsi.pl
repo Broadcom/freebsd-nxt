@@ -92,7 +92,7 @@ $header =~ s/    /\t/g;
 $header =~ s/([^\s]\t+) +/$1/g;
 
 # Remove typedefs and pack structs
-$header =~ s/^typedef struct (.*?)\n{\n(.*?)}[^\n]*;/struct $1 {\n$2} __attribute__((packed));/gsm;
+$header =~ s/^typedef struct (.*?)\n\{\n(.*?)}[^\n]*;/struct $1 {\n$2} __attribute__((packed));/gsm;
 
 print OUT $header;
 close OUT;
