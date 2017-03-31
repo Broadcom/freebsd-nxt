@@ -43,7 +43,22 @@ __FBSDID("$FreeBSD$");
 /* DTrace init */
 LIN_SDT_PROVIDER_DECLARE(LINUX_DTRACE);
 
-DUMMY(mincore);
+UNIMPLEMENTED(afs_syscall);
+UNIMPLEMENTED(create_module);	/* added in linux 1.0 removed in 2.6 */
+UNIMPLEMENTED(epoll_ctl_old);
+UNIMPLEMENTED(epoll_wait_old);
+UNIMPLEMENTED(get_kernel_syms);	/* added in linux 1.0 removed in 2.6 */
+UNIMPLEMENTED(get_thread_area);
+UNIMPLEMENTED(getpmsg);
+UNIMPLEMENTED(nfsservctl);	/* added in linux 2.2 removed in 3.1 */
+UNIMPLEMENTED(putpmsg);
+UNIMPLEMENTED(query_module);	/* added in linux 2.2 removed in 2.6 */
+UNIMPLEMENTED(security);
+UNIMPLEMENTED(set_thread_area);
+UNIMPLEMENTED(tuxcall);
+UNIMPLEMENTED(uselib);
+UNIMPLEMENTED(vserver);
+
 DUMMY(sendfile);
 DUMMY(syslog);
 DUMMY(setfsuid);
@@ -53,22 +68,10 @@ DUMMY(vhangup);
 DUMMY(pivot_root);
 DUMMY(adjtimex);
 DUMMY(swapoff);
-DUMMY(create_module);
 DUMMY(init_module);
 DUMMY(delete_module);
-DUMMY(get_kernel_syms);
-DUMMY(query_module);
 DUMMY(quotactl);
-DUMMY(nfsservctl);
-DUMMY(getpmsg);
-DUMMY(putpmsg);
-DUMMY(afs_syscall);
-DUMMY(tuxcall);
-DUMMY(security);
-DUMMY(set_thread_area);
 DUMMY(lookup_dcookie);
-DUMMY(epoll_ctl_old);
-DUMMY(epoll_wait_old);
 DUMMY(remap_file_pages);
 DUMMY(semtimedop);
 DUMMY(mbind);
@@ -131,7 +134,6 @@ DUMMY(sched_getattr);
 DUMMY(renameat2);
 /* linux 3.15: */
 DUMMY(seccomp);
-DUMMY(getrandom);
 DUMMY(memfd_create);
 DUMMY(kexec_file_load);
 /* linux 3.18: */

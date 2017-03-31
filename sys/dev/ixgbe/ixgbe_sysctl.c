@@ -25,11 +25,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef KLD_MODULE
-#include "opt_iflib.h"
-#endif
-
-#ifdef IFLIB
 #include "ixgbe.h"
 /********************************************************************
  *
@@ -556,4 +551,3 @@ int ixgbe_get_regs(SYSCTL_HANDLER_ARGS)
 	sbuf_delete(sb);
         return(rc);
 }
-#endif

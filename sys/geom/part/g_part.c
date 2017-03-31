@@ -137,7 +137,7 @@ SYSCTL_UINT(_kern_geom_part, OID_AUTO, check_integrity,
     "Enable integrity checking");
 static u_int auto_resize = 1;
 SYSCTL_UINT(_kern_geom_part, OID_AUTO, auto_resize,
-    CTLFLAG_RW, &auto_resize, 1,
+    CTLFLAG_RWTUN, &auto_resize, 1,
     "Enable auto resize");
 
 /*
@@ -888,6 +888,10 @@ g_part_ctl_commit(struct gctl_req *req, struct g_part_parms *gpp)
 
 	LIST_FOREACH_SAFE(entry, &table->gpt_entry, gpe_entry, tmp) {
 		if (!entry->gpe_deleted) {
+			/* Notify consumers that provider might be changed. */
+			if (entry->gpe_modified && (
+			    entry->gpe_pp->acw + entry->gpe_pp->ace) == 0)
+				g_media_changed(entry->gpe_pp, M_NOWAIT);
 			entry->gpe_created = 0;
 			entry->gpe_modified = 0;
 			continue;

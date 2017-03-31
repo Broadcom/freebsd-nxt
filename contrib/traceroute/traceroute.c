@@ -238,6 +238,7 @@ static const char rcsid[] =
 #endif	/* IPSEC */
 
 #include <ctype.h>
+#include <capsicum_helpers.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -1014,14 +1015,21 @@ main(int argc, char **argv)
 		cansandbox = false;
 #endif
 
+	caph_cache_catpages();
+
 	/*
 	 * Here we enter capability mode. Further down access to global
 	 * namespaces (e.g filesystem) is restricted (see capsicum(4)).
 	 * We must connect(2) our socket before this point.
 	 */
 	if (cansandbox && cap_enter() < 0) {
-		Fprintf(stderr, "%s: cap_enter: %s\n", prog, strerror(errno));
-		exit(1);
+		if (errno != ENOSYS) {
+			Fprintf(stderr, "%s: cap_enter: %s\n", prog,
+			    strerror(errno));
+			exit(1);
+		} else {
+			cansandbox = false;
+		}
 	}
 
 	cap_rights_init(&rights, CAP_SEND, CAP_SETSOCKOPT);

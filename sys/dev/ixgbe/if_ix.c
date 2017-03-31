@@ -203,9 +203,6 @@ static int ixgbe_sysctl_eee_rx_lpi_status(SYSCTL_HANDLER_ARGS);
 static int ixgbe_sysctl_eee_tx_lpi_status(SYSCTL_HANDLER_ARGS);
 static int ixgbe_sysctl_eee_tx_lpi_delay(SYSCTL_HANDLER_ARGS);
 
-/* Support for pluggable optic modules */
-static void	ixgbe_setup_optics(struct adapter *);
-
 /* Deferred interrupt tasklets */
 static void	ixgbe_handle_msf(void *);
 static void	ixgbe_handle_mod(void *);
@@ -2006,7 +2003,7 @@ ixgbe_if_msix_intr_assign(if_ctx_t ctx, int msix)
 		rid = vector + 1;
 
 		snprintf(buf, sizeof(buf), "rxq%d", i);
-		error = iflib_irq_alloc_generic(ctx, &rx_que->que_irq, rid, IFLIB_INTR_RX,
+		error = iflib_irq_alloc_generic(ctx, &rx_que->que_irq, rid, IFLIB_INTR_RXTX,
 										ixgbe_msix_que, rx_que, rx_que->rxr.me, buf);
 
 		if (error) {
@@ -3061,6 +3058,7 @@ ixgbe_if_init(if_ctx_t ctx)
 	for (i = 0, tx_que = adapter->tx_queues; i < adapter->num_tx_queues; i++, tx_que++) {
 		struct tx_ring		*txr = &tx_que->txr;
 
+		txr->tx_rs_cidx = txr->tx_rs_pidx = txr->tx_cidx_processed = 0;
 		txdctl = IXGBE_READ_REG(hw, IXGBE_TXDCTL(txr->me));
 		txdctl |= IXGBE_TXDCTL_ENABLE;
 		/* Set WTHRESH to 8, burst writeback */
@@ -3940,8 +3938,8 @@ ixgbe_disable_queue(struct adapter *adapter, u32 vector)
 int
 ixgbe_intr(void *arg)
 {
-	struct ix_rx_queue *que = arg;
-	struct adapter *adapter = que->adapter;
+	struct adapter *adapter = arg;
+	struct ix_rx_queue *que = adapter->rx_queues;
 	struct ixgbe_hw *hw = &adapter->hw;
 	if_ctx_t ctx = adapter->ctx;
 	u32 reg_eicr;

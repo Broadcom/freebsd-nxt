@@ -266,8 +266,9 @@ typedef struct iflib_dma_info {
 #define IFLIB_MAGIC 0xCAFEF00D
 
 typedef enum {
-	IFLIB_INTR_TX,
 	IFLIB_INTR_RX,
+	IFLIB_INTR_TX,
+	IFLIB_INTR_RXTX,
 	IFLIB_INTR_ADMIN,
 	IFLIB_INTR_IOV,
 } iflib_intr_type_t;
@@ -301,6 +302,10 @@ typedef enum {
  * Interface doesn't expect in_pseudo for th_sum
  */
 #define IFLIB_TSO_INIT_IP	0x20
+/*
+ * Interface doesn't align IP header
+ */
+#define IFLIB_DO_RX_FIXUP	0x40
 
 
 

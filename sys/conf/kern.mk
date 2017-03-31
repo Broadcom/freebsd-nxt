@@ -33,6 +33,9 @@ CWARNEXTRA?=	-Wno-error-tautological-compare -Wno-error-empty-body \
 .if ${COMPILER_VERSION} >= 30700
 CWARNEXTRA+=	-Wno-error-shift-negative-value
 .endif
+.if ${COMPILER_VERSION} >= 40000
+CWARNEXTRA+=	-Wno-error-address-of-packed-member
+.endif
 
 CLANG_NO_IAS= -no-integrated-as
 .if ${COMPILER_VERSION} < 30500
@@ -217,7 +220,7 @@ CFLAGS+=	-fstack-protector
 # but critical for these newer versions.
 #
 .if ${CFLAGS:M-g} != "" && ${CFLAGS:M-gdwarf*} == ""
-CFLAGS+=	-gdwarf-4 -ggdb3
+CFLAGS+=	-gdwarf-2
 .endif
 
 CFLAGS+= ${CWARNFLAGS:M*} ${CWARNFLAGS.${.IMPSRC:T}}

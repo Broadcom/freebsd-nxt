@@ -68,8 +68,6 @@ __FBSDID("$FreeBSD$");
 #include <linux/vmalloc.h>
 #include <linux/netdevice.h>
 #include <linux/timer.h>
-#include <linux/workqueue.h>
-#include <linux/rcupdate.h>
 #include <linux/interrupt.h>
 #include <linux/uaccess.h>
 #include <linux/kernel.h>
@@ -94,7 +92,6 @@ struct device linux_root_device;
 struct class linux_class_misc;
 struct list_head pci_drivers;
 struct list_head pci_devices;
-struct net init_net;
 spinlock_t pci_lock;
 
 unsigned long linux_timer_hz_mask;
@@ -509,6 +506,60 @@ linux_copyout(const void *kaddr, void *uaddr, size_t len)
 		return (0);
 	}
 	return (-copyout(kaddr, uaddr, len));
+}
+
+size_t
+linux_clear_user(void *_uaddr, size_t _len)
+{
+	uint8_t *uaddr = _uaddr;
+	size_t len = _len;
+
+	/* make sure uaddr is aligned before going into the fast loop */
+	while (((uintptr_t)uaddr & 7) != 0 && len > 7) {
+		if (subyte(uaddr, 0))
+			return (_len);
+		uaddr++;
+		len--;
+	}
+
+	/* zero 8 bytes at a time */
+	while (len > 7) {
+#ifdef __LP64__
+		if (suword64(uaddr, 0))
+			return (_len);
+#else
+		if (suword32(uaddr, 0))
+			return (_len);
+		if (suword32(uaddr + 4, 0))
+			return (_len);
+#endif
+		uaddr += 8;
+		len -= 8;
+	}
+
+	/* zero fill end, if any */
+	while (len > 0) {
+		if (subyte(uaddr, 0))
+			return (_len);
+		uaddr++;
+		len--;
+	}
+	return (0);
+}
+
+int
+linux_access_ok(int rw, const void *uaddr, size_t len)
+{
+	uintptr_t saddr;
+	uintptr_t eaddr;
+
+	/* get start and end address */
+	saddr = (uintptr_t)uaddr;
+	eaddr = (uintptr_t)uaddr + len;
+
+	/* verify addresses are valid for userspace */
+	return ((saddr == eaddr) ||
+	    (eaddr > saddr && eaddr <= VM_MAXUSER_ADDRESS));
 }
 
 static int
@@ -1001,6 +1052,8 @@ linux_timer_callback_wrapper(void *context)
 {
 	struct timer_list *timer;
 
+	linux_set_current(curthread);
+
 	timer = context;
 	timer->function(timer->data);
 }
@@ -1022,6 +1075,15 @@ add_timer(struct timer_list *timer)
 	callout_reset(&timer->timer_callout,
 	    linux_timer_jiffies_until(timer->expires),
 	    &linux_timer_callback_wrapper, timer);
+}
+
+void
+add_timer_on(struct timer_list *timer, int cpu)
+{
+
+	callout_reset_on(&timer->timer_callout,
+	    linux_timer_jiffies_until(timer->expires),
+	    &linux_timer_callback_wrapper, timer, cpu);
 }
 
 static void
@@ -1154,50 +1216,6 @@ linux_completion_done(struct completion *c)
 		isdone = 0;
 	sleepq_release(c);
 	return (isdone);
-}
-
-void
-linux_delayed_work_fn(void *arg)
-{
-	struct delayed_work *work;
-
-	work = arg;
-	taskqueue_enqueue(work->work.taskqueue, &work->work.work_task);
-}
-
-void
-linux_work_fn(void *context, int pending)
-{
-	struct work_struct *work;
-
-	work = context;
-	work->fn(work);
-}
-
-void
-linux_flush_fn(void *context, int pending)
-{
-}
-
-struct workqueue_struct *
-linux_create_workqueue_common(const char *name, int cpus)
-{
-	struct workqueue_struct *wq;
-
-	wq = kmalloc(sizeof(*wq), M_WAITOK);
-	wq->taskqueue = taskqueue_create(name, M_WAITOK,
-	    taskqueue_thread_enqueue,  &wq->taskqueue);
-	atomic_set(&wq->draining, 0);
-	taskqueue_start_threads(&wq->taskqueue, cpus, PWAIT, "%s", name);
-
-	return (wq);
-}
-
-void
-destroy_workqueue(struct workqueue_struct *wq)
-{
-	taskqueue_free(wq->taskqueue);
-	kfree(wq);
 }
 
 static void
@@ -1380,6 +1398,8 @@ linux_irq_handler(void *ent)
 {
 	struct irq_ent *irqe;
 
+	linux_set_current(curthread);
+
 	irqe = ent;
 	irqe->handler(irqe->irq, irqe->arg);
 }
@@ -1503,8 +1523,6 @@ linux_compat_uninit(void *arg)
 	linux_kobject_kfree_name(&linux_class_root);
 	linux_kobject_kfree_name(&linux_root_device.kobj);
 	linux_kobject_kfree_name(&linux_class_misc.kobj);
-
-	synchronize_rcu();
 }
 SYSUNINIT(linux_compat, SI_SUB_DRIVERS, SI_ORDER_SECOND, linux_compat_uninit, NULL);
 

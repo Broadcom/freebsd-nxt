@@ -255,8 +255,9 @@ iflib_get_sctx(if_ctx_t ctx)
 	return (ctx->ifc_sctx);
 }
 
+#define IP_ALIGNED(m) ((((uintptr_t)(m)->m_data) & 0x3) == 0x2)
 #define CACHE_PTR_INCREMENT (CACHE_LINE_SIZE/sizeof(void*))
-#define CACHE_PTR_NEXT(ptr) ((void *)(((vm_paddr_t)(ptr)+CACHE_LINE_SIZE-1) & (CACHE_LINE_SIZE-1)))
+#define CACHE_PTR_NEXT(ptr) ((void *)(((uintptr_t)(ptr)+CACHE_LINE_SIZE-1) & (CACHE_LINE_SIZE-1)))
 
 #define LINK_ACTIVE(ctx) ((ctx)->ifc_link_state == LINK_STATE_UP)
 #define CTX_IS_VF(ctx) ((ctx)->ifc_sctx->isc_flags & IFLIB_IS_VF)
@@ -299,14 +300,15 @@ typedef struct iflib_sw_tx_desc_array {
 
 #define IFLIB_RESTART_BUDGET		8
 
-#define	IFC_LEGACY		0x01
-#define	IFC_QFLUSH		0x02
-#define	IFC_MULTISEG		0x04
-#define	IFC_DMAR		0x08
-#define	IFC_SC_ALLOCATED	0x10
-#define	IFC_INIT_DONE		0x20
-#define	IFC_PREFETCH		0x40
-
+#define	IFC_LEGACY		0x001
+#define	IFC_QFLUSH		0x002
+#define	IFC_MULTISEG		0x004
+#define	IFC_DMAR		0x008
+#define	IFC_SC_ALLOCATED	0x010
+#define	IFC_INIT_DONE		0x020
+#define	IFC_PREFETCH		0x040
+#define	IFC_DO_RESET		0x080
+#define	IFC_CHECK_HUNG		0x100
 
 #define CSUM_OFFLOAD		(CSUM_IP_TSO|CSUM_IP6_TSO|CSUM_IP| \
 				 CSUM_IP_UDP|CSUM_IP_TCP|CSUM_IP_SCTP| \
@@ -325,6 +327,7 @@ struct iflib_txq {
 	uint8_t		ift_txd_size[8];
 	uint64_t	ift_processed;
 	uint64_t	ift_cleaned;
+	uint64_t	ift_cleaned_prev;
 #if MEMORY_LOGGING
 	uint64_t	ift_enqueued;
 	uint64_t	ift_dequeued;
@@ -704,6 +707,11 @@ static void iflib_add_device_sysctl_pre(if_ctx_t ctx);
 static void iflib_add_device_sysctl_post(if_ctx_t ctx);
 static void iflib_ifmp_purge(iflib_txq_t txq);
 static void _iflib_pre_assert(if_softc_ctx_t scctx);
+static void iflib_stop(if_ctx_t ctx);
+static void iflib_if_init_locked(if_ctx_t ctx);
+#ifndef __NO_STRICT_ALIGNMENT
+static struct mbuf * iflib_fixup_rx(struct mbuf *m);
+#endif
 
 #ifdef DEV_NETMAP
 #include <sys/selinfo.h>
@@ -747,6 +755,7 @@ iflib_netmap_register(struct netmap_adapter *na, int onoff)
 {
 	struct ifnet *ifp = na->ifp;
 	if_ctx_t ctx = ifp->if_softc;
+	int status;
 
 	CTX_LOCK(ctx);
 	IFDI_INTR_DISABLE(ctx);
@@ -763,10 +772,14 @@ iflib_netmap_register(struct netmap_adapter *na, int onoff)
 	} else {
 		nm_clear_native_flags(na);
 	}
-	IFDI_INIT(ctx);
+	iflib_stop(ctx);
+	iflib_init_locked(ctx);
 	IFDI_CRCSTRIP_SET(ctx, onoff, iflib_crcstrip); // XXX why twice ?
+	status = ifp->if_drv_flags & IFF_DRV_RUNNING ? 0 : 1;
+	if (status)
+		nm_clear_native_flags(na);
 	CTX_UNLOCK(ctx);
-	return (ifp->if_drv_flags & IFF_DRV_RUNNING ? 0 : 1);
+	return (status);
 }
 
 /*
@@ -805,8 +818,9 @@ iflib_netmap_txsync(struct netmap_kring *kring, int flags)
 	if_ctx_t ctx = ifp->if_softc;
 	iflib_txq_t txq = &ctx->ifc_txqs[kring->ring_id];
 
-	bus_dmamap_sync(txq->ift_desc_tag, txq->ift_ifdi->idi_map,
-					BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
+	if (txq->ift_sds.ifsd_map)
+		bus_dmamap_sync(txq->ift_desc_tag, txq->ift_ifdi->idi_map,
+				BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 
 
 	/*
@@ -846,7 +860,7 @@ iflib_netmap_txsync(struct netmap_kring *kring, int flags)
 		for (n = 0; nm_i != head; n++) {
 			struct netmap_slot *slot = &ring->slot[nm_i];
 			u_int len = slot->len;
-			vm_paddr_t paddr;
+			uint64_t paddr;
 			void *addr = PNMB(na, slot, &paddr);
 			int flags = (slot->flags & NS_REPORT ||
 				nic_i == 0 || nic_i == report_frequency) ?
@@ -940,13 +954,13 @@ iflib_netmap_rxsync(struct netmap_kring *kring, int flags)
 	if (head > lim)
 		return netmap_ring_reinit(kring);
 
-	ri.iri_qsidx = kring->ring_id;
-	ri.iri_ifp = ctx->ifc_ifp;
 	/* XXX check sync modes */
-	for (i = 0, fl = rxq->ifr_fl; i < rxq->ifr_nfl; i++, fl++)
+	for (i = 0, fl = rxq->ifr_fl; i < rxq->ifr_nfl; i++, fl++) {
+		if (fl->ifl_sds.ifsd_map == NULL)
+			continue;
 		bus_dmamap_sync(rxq->ifr_fl[i].ifl_desc_tag, fl->ifl_ifdi->idi_map,
 				BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
-
+	}
 	/*
 	 * First part: import newly received packets.
 	 *
@@ -970,9 +984,14 @@ iflib_netmap_rxsync(struct netmap_kring *kring, int flags)
 		for (fl = rxq->ifr_fl, i = 0; i < rxq->ifr_nfl; i++, fl++) {
 			nic_i = fl->ifl_cidx;
 			nm_i = netmap_idx_n2k(kring, nic_i);
-			avail = ctx->isc_rxd_available(ctx->ifc_softc, kring->ring_id, nic_i, USHRT_MAX);
+			avail = iflib_rxd_avail(ctx, rxq, nic_i, USHRT_MAX);
 			for (n = 0; avail > 0; n++, avail--) {
 				rxd_info_zero(&ri);
+				ri.iri_frags = rxq->ifr_frags;
+				ri.iri_qsidx = kring->ring_id;
+				ri.iri_ifp = ctx->ifc_ifp;
+				ri.iri_cidx = nic_i;
+
 				error = ctx->isc_rxd_pkt_get(ctx->ifc_softc, &ri);
 				ring->slot[nm_i].len = error ? 0 : ri.iri_len - crclen;
 				ring->slot[nm_i].flags = slot_flags;
@@ -1018,7 +1037,6 @@ iflib_netmap_rxsync(struct netmap_kring *kring, int flags)
 		struct netmap_slot *slot = &ring->slot[nm_i];
 		void *addr = PNMB(na, slot, &fl->ifl_bus_addrs[i]);
 
-
 		if (addr == NETMAP_BUF_BASE(na)) /* bad buf */
 			goto ring_reset;
 
@@ -1034,12 +1052,14 @@ iflib_netmap_rxsync(struct netmap_kring *kring, int flags)
 		if (nm_i != head && i < IFLIB_MAX_RX_REFRESH)
 			continue;
 
-		iru.iru_pidx = nic_i;
+		iru.iru_pidx = nic_i_start;
 		iru.iru_count = i;
 		i = 0;
 		ctx->isc_rxd_refill(ctx->ifc_softc, &iru);
-		if (fl->ifl_sds.ifsd_map == NULL)
+		if (fl->ifl_sds.ifsd_map == NULL) {
+			nic_i_start = nic_i;
 			continue;
+		}
 		nic_i = nic_i_start;
 		for (n = 0; n < iru.iru_count; n++) {
 			bus_dmamap_sync(fl->ifl_ifdi->idi_tag, fl->ifl_sds.ifsd_map[nic_i],
@@ -1114,6 +1134,8 @@ iflib_netmap_txq_init(if_ctx_t ctx, iflib_txq_t txq)
 	slot = netmap_reset(na, NR_TX, txq->ift_id, 0);
 	if (slot == NULL)
 		return;
+	if (txq->ift_sds.ifsd_map == NULL)
+		return;
 
 	for (int i = 0; i < ctx->ifc_softc_ctx.isc_ntxd[0]; i++) {
 
@@ -1137,7 +1159,7 @@ iflib_netmap_rxq_init(if_ctx_t ctx, iflib_rxq_t rxq)
 	iflib_fl_t fl;
 	bus_dmamap_t *map;
 	int nrxd;
-	uint32_t i, j;
+	uint32_t i, j, pidx_start;
 
 	slot = netmap_reset(na, NR_RX, rxq->ifr_id, 0);
 	if (slot == NULL)
@@ -1152,12 +1174,12 @@ iflib_netmap_rxq_init(if_ctx_t ctx, iflib_rxq_t rxq)
 	iru.iru_buf_size = rxq->ifr_fl[0].ifl_buf_size;
 	iru.iru_flidx = 0;
 
-	for (i = j = 0; i < nrxd; i++, j++) {
+	for (pidx_start = i = j = 0; i < nrxd; i++, j++) {
 		int sj = netmap_idx_n2k(&na->rx_rings[rxq->ifr_id], i);
 		void *addr;
 
 		fl->ifl_rxd_idxs[j] = i;
-		addr = fl->ifl_vm_addrs[j] = PNMB(na, slot + sj, &fl->ifl_bus_addrs[i]);
+		addr = fl->ifl_vm_addrs[j] = PNMB(na, slot + sj, &fl->ifl_bus_addrs[j]);
 		if (map) {
 			netmap_load_map(na, rxq->ifr_fl[0].ifl_ifdi->idi_tag, *map, addr);
 			map++;
@@ -1166,9 +1188,11 @@ iflib_netmap_rxq_init(if_ctx_t ctx, iflib_rxq_t rxq)
 		if (j < IFLIB_MAX_RX_REFRESH && i < nrxd - 1)
 			continue;
 
-		iru.iru_pidx = i;
+		iru.iru_pidx = pidx_start;
+		pidx_start = i;
 		iru.iru_count = j;
 		j = 0;
+		MPASS(pidx_start + j <= nrxd);
 		/* Update descriptors and the cached value */
 		ctx->isc_rxd_refill(ctx->ifc_softc, &iru);
 	}
@@ -1190,7 +1214,7 @@ iflib_netmap_rxq_init(if_ctx_t ctx, iflib_rxq_t rxq)
 
 #define iflib_netmap_attach(ctx) (0)
 #define netmap_rx_irq(ifp, qid, budget) (0)
-#define netmap_tx_irq(ifp, qid) (0)
+#define netmap_tx_irq(ifp, qid) do {} while (0)
 
 #endif
 
@@ -1341,6 +1365,22 @@ SYSINIT(iflib_record_started, SI_SUB_SMP + 1, SI_ORDER_FIRST,
 #endif
 
 static int
+iflib_fast_intr(void *arg)
+{
+	iflib_filter_info_t info = arg;
+	struct grouptask *gtask = info->ifi_task;
+	if (!iflib_started)
+		return (FILTER_HANDLED);
+
+	DBG_COUNTER_INC(fast_intrs);
+	if (info->ifi_filter != NULL && info->ifi_filter(info->ifi_filter_arg) == FILTER_HANDLED)
+		return (FILTER_HANDLED);
+
+	GROUPTASK_ENQUEUE(gtask);
+	return (FILTER_HANDLED);
+}
+
+static int
 iflib_fast_intr_rxtx(void *arg)
 {
 	iflib_filter_info_t info = arg;
@@ -1378,6 +1418,7 @@ iflib_fast_intr_rxtx(void *arg)
 	return (FILTER_HANDLED);
 }
 
+
 static int
 iflib_fast_intr_ctx(void *arg)
 {
@@ -1400,15 +1441,17 @@ _iflib_irq_alloc(if_ctx_t ctx, if_irq_t irq, int rid,
 	driver_filter_t filter, driver_intr_t handler, void *arg,
 				 char *name)
 {
-	int rc;
+	int rc, flags;
 	struct resource *res;
-	void *tag;
+	void *tag = NULL;
 	device_t dev = ctx->ifc_dev;
 
+	flags = RF_ACTIVE;
+	if (ctx->ifc_flags & IFC_LEGACY)
+		flags |= RF_SHAREABLE;
 	MPASS(rid < 512);
 	irq->ii_rid = rid;
-	res = bus_alloc_resource_any(dev, SYS_RES_IRQ, &irq->ii_rid,
-				     RF_SHAREABLE | RF_ACTIVE);
+	res = bus_alloc_resource_any(dev, SYS_RES_IRQ, &irq->ii_rid, flags);
 	if (res == NULL) {
 		device_printf(dev,
 		    "failed to allocate IRQ for rid %d, name %s.\n", rid, name);
@@ -1506,7 +1549,7 @@ iflib_txsd_alloc(iflib_txq_t txq)
 	}
 
         /* Create the descriptor buffer dma maps */
-#if defined(ACPI_DMAR) || (!(defined(__i386__) && !defined(__amd64__)))
+#if defined(ACPI_DMAR) || (! (defined(__i386__) || defined(__amd64__)))
 	if ((ctx->ifc_flags & IFC_DMAR) == 0)
 		return (0);
 
@@ -1689,7 +1732,7 @@ iflib_rxsd_alloc(iflib_rxq_t rxq)
 		}
 
 		/* Create the descriptor buffer dma maps */
-#if defined(ACPI_DMAR) || (!(defined(__i386__) && !defined(__amd64__)))
+#if defined(ACPI_DMAR) || (! (defined(__i386__) || defined(__amd64__)))
 		if ((ctx->ifc_flags & IFC_DMAR) == 0)
 			continue;
 
@@ -1703,7 +1746,7 @@ iflib_rxsd_alloc(iflib_rxq_t rxq)
 		for (int i = 0; i < scctx->isc_nrxd[rxq->ifr_fl_offset]; i++) {
 			err = bus_dmamap_create(fl->ifl_desc_tag, 0, &fl->ifl_sds.ifsd_map[i]);
 			if (err != 0) {
-				device_printf(dev, "Unable to create TX DMA map\n");
+				device_printf(dev, "Unable to create RX buffer DMA map\n");
 				goto fail;
 			}
 		}
@@ -1815,19 +1858,6 @@ _iflib_fl_refill(if_ctx_t ctx, iflib_fl_t fl, int count)
 #endif
 
 		DBG_COUNTER_INC(rx_allocs);
-#ifdef notyet
-		if ((sd_flags[pidx] & RX_SW_DESC_MAP_CREATED) == 0) {
-			int err;
-
-			if ((err = bus_dmamap_create(fl->ifl_ifdi->idi_tag, 0, &sd_map[idx]))) {
-				log(LOG_WARNING, "bus_dmamap_create failed %d\n", err);
-				uma_zfree(fl->ifl_zone, cl);
-				n = 0;
-				goto done;
-			}
-			sd_flags[idx] |= RX_SW_DESC_MAP_CREATED;
-		}
-#endif
 #if defined(__i386__) || defined(__amd64__)
 		if (!IS_DMAR(ctx)) {
 			bus_addr = pmap_kextract((vm_offset_t)cl);
@@ -1839,8 +1869,11 @@ _iflib_fl_refill(if_ctx_t ctx, iflib_fl_t fl, int count)
 
 			cb_arg.error = 0;
 			q = fl->ifl_rxq;
+			MPASS(sd_map != NULL);
+			MPASS(sd_map[idx] != NULL);
 			err = bus_dmamap_load(fl->ifl_desc_tag, sd_map[idx],
 		         cl, fl->ifl_buf_size, _rxq_refill_cb, &cb_arg, 0);
+			bus_dmamap_sync(fl->ifl_desc_tag, sd_map[idx], BUS_DMASYNC_PREREAD);
 
 			if (err != 0 || cb_arg.error) {
 				/*
@@ -1885,6 +1918,10 @@ done:
 		pidx = fl->ifl_size - 1;
 	else
 		pidx = fl->ifl_pidx - 1;
+
+	if (sd_map)
+		bus_dmamap_sync(fl->ifl_ifdi->idi_tag, fl->ifl_ifdi->idi_map,
+				BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 	ctx->isc_rxd_flush(ctx->ifc_softc, fl->ifl_rxq->ifr_id, fl->ifl_id, pidx);
 }
 
@@ -1933,12 +1970,21 @@ iflib_fl_bufs_free(iflib_fl_t fl)
 			MPASS(*sd_m == NULL);
 		}
 #if MEMORY_LOGGING
-		fl->ifl_m_dequeued++;
-		fl->ifl_cl_dequeued++;
+		if (*sd_m != NULL)
+			fl->ifl_m_dequeued++;
+		if (*sd_cl != NULL)
+			fl->ifl_cl_dequeued++;
 #endif
 		*sd_cl = NULL;
 		*sd_m = NULL;
 	}
+#ifdef INVARIANTS
+	for (i = 0; i < fl->ifl_size; i++) {
+		MPASS(fl->ifl_sds.ifsd_flags[i] == 0);
+		MPASS(fl->ifl_sds.ifsd_cl[i] == NULL);
+		MPASS(fl->ifl_sds.ifsd_m[i] == NULL);
+	}
+#endif
 	/*
 	 * Reset free list values
 	 */
@@ -2055,9 +2101,13 @@ iflib_timer(void *arg)
 	*/
 	IFDI_TIMER(ctx, txq->ift_id);
 	if ((txq->ift_qstatus == IFLIB_QUEUE_HUNG) &&
-		(ctx->ifc_pause_frames == 0))
+	    ((txq->ift_cleaned_prev == txq->ift_cleaned) ||
+	     (ctx->ifc_pause_frames == 0)))
 		goto hung;
 
+	if (ifmp_ring_is_stalled(txq->ift_br))
+		txq->ift_qstatus = IFLIB_QUEUE_HUNG;
+	txq->ift_cleaned_prev = txq->ift_cleaned;
 	/* handle any laggards */
 	if (txq->ift_db_pending)
 		GROUPTASK_ENQUEUE(&txq->ift_task);
@@ -2068,7 +2118,7 @@ iflib_timer(void *arg)
 	return;
 hung:
 	CTX_LOCK(ctx);
-	if_setdrvflagbits(ctx->ifc_ifp, 0, IFF_DRV_RUNNING);
+	if_setdrvflagbits(ctx->ifc_ifp, IFF_DRV_OACTIVE, IFF_DRV_RUNNING);
 	device_printf(ctx->ifc_dev,  "TX(%d) desc avail = %d, pidx = %d\n",
 				  txq->ift_id, TXQ_AVAIL(txq), txq->ift_pidx);
 
@@ -2076,7 +2126,8 @@ hung:
 	ctx->ifc_watchdog_events++;
 	ctx->ifc_pause_frames = 0;
 
-	iflib_init_locked(ctx);
+	ctx->ifc_flags |= IFC_DO_RESET;
+	iflib_admin_intr_deferred(ctx);
 	CTX_UNLOCK(ctx);
 }
 
@@ -2115,6 +2166,7 @@ iflib_init_locked(if_ctx_t ctx)
 		iflib_netmap_txq_init(ctx, txq);
 	}
 	for (i = 0, rxq = ctx->ifc_rxqs; i < sctx->isc_nrxqsets; i++, rxq++) {
+		MPASS(rxq->ifr_id == i);
 		iflib_netmap_rxq_init(ctx, rxq);
 	}
 #ifdef INVARIANTS
@@ -2123,6 +2175,9 @@ iflib_init_locked(if_ctx_t ctx)
 	IFDI_INIT(ctx);
 	MPASS(if_getdrvflags(ifp) == i);
 	for (i = 0, rxq = ctx->ifc_rxqs; i < sctx->isc_nrxqsets; i++, rxq++) {
+		/* XXX this should really be done on a per-queue basis */
+		if (if_getcapenable(ifp) & IFCAP_NETMAP)
+			continue;
 		for (j = 0, fl = rxq->ifr_fl; j < rxq->ifr_nfl; j++, fl++) {
 			if (iflib_fl_setup(fl)) {
 				device_printf(ctx->ifc_dev, "freelist setup failed - check cluster settings\n");
@@ -2177,9 +2232,9 @@ iflib_stop(if_ctx_t ctx)
 	if_setdrvflagbits(ctx->ifc_ifp, IFF_DRV_OACTIVE, IFF_DRV_RUNNING);
 
 	IFDI_INTR_DISABLE(ctx);
-	DELAY(100000);
+	DELAY(1000);
 	IFDI_STOP(ctx);
-	DELAY(100000);
+	DELAY(1000);
 
 	iflib_debug_reset();
 	/* Wait for current tx queue users to exit to disarm watchdog timer. */
@@ -2263,6 +2318,7 @@ rxd_frag_to_sd(iflib_rxq_t rxq, if_rxd_frag_t irf, int unload, if_rxsd_t sd)
 	iflib_dma_info_t di;
 	int next;
 
+	map = NULL;
 	flid = irf->irf_flid;
 	cidx = irf->irf_idx;
 	fl = &rxq->ifr_fl[flid];
@@ -2294,6 +2350,9 @@ rxd_frag_to_sd(iflib_rxq_t rxq, if_rxd_frag_t irf, int unload, if_rxsd_t sd)
 	fl->ifl_cidx = (fl->ifl_cidx + 1) & (fl->ifl_size-1);
 	if (__predict_false(fl->ifl_cidx == 0))
 		fl->ifl_gen = 0;
+	if (map != NULL)
+		bus_dmamap_sync(fl->ifl_ifdi->idi_tag, fl->ifl_ifdi->idi_map,
+			BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 }
 
 static struct mbuf *
@@ -2334,6 +2393,9 @@ assemble_segments(iflib_rxq_t rxq, if_rxd_info_t ri, if_rxsd_t sd)
 		}
 		cl = *sd->ifsd_cl;
 		*sd->ifsd_cl = NULL;
+#if MEMORY_LOGGING
+		sd->ifsd_fl->ifl_cl_dequeued++;
+#endif
 
 		/* Can these two be made one ? */
 		m_init(m, M_NOWAIT, MT_DATA, flags);
@@ -2365,6 +2427,10 @@ iflib_rxd_pkt_get(iflib_rxq_t rxq, if_rxd_info_t ri)
 		m = *sd.ifsd_m;
 		*sd.ifsd_m = NULL;
 		m_init(m, M_NOWAIT, MT_DATA, M_PKTHDR);
+#ifndef __NO_STRICT_ALIGNMENT
+		if (!IP_ALIGNED(m))
+			m->m_data += 2;
+#endif
 		memcpy(m->m_data, *sd.ifsd_cl, ri->iri_len);
 		m->m_len = ri->iri_frags[0].irf_len;
        } else {
@@ -2404,8 +2470,8 @@ iflib_rxeof(iflib_rxq_t rxq, qidx_t budget)
 	ifp = ctx->ifc_ifp;
 #ifdef DEV_NETMAP
 	if (ifp->if_capenable & IFCAP_NETMAP) {
-		u_int budget32 = budget;
-		if (netmap_rx_irq(ifp, rxq->ifr_id, &budget32))
+		u_int work = 0;
+		if (netmap_rx_irq(ifp, rxq->ifr_id, &work))
 			return (FALSE);
 	}
 #endif
@@ -2439,8 +2505,8 @@ iflib_rxeof(iflib_rxq_t rxq, qidx_t budget)
 		ri.iri_frags = rxq->ifr_frags;
 		err = ctx->isc_rxd_pkt_get(ctx->ifc_softc, &ri);
 
-		/* in lieu of handling correctly - make sure it isn't being unhandled */
-		MPASS(err == 0);
+		if (err)
+			goto err;
 		if (sctx->isc_flags & IFLIB_HAS_RXCQ) {
 			*cidxp = ri.iri_cidx;
 			/* Update our consumer index */
@@ -2482,6 +2548,10 @@ iflib_rxeof(iflib_rxq_t rxq, qidx_t budget)
 		m = mh;
 		mh = mh->m_nextpkt;
 		m->m_nextpkt = NULL;
+#ifndef __NO_STRICT_ALIGNMENT
+		if (!IP_ALIGNED(m) && (m = iflib_fixup_rx(m)) == NULL)
+			continue;
+#endif
 		rx_bytes += m->m_pkthdr.len;
 		rx_pkts++;
 #if defined(INET6) || defined(INET)
@@ -2504,6 +2574,12 @@ iflib_rxeof(iflib_rxq_t rxq, qidx_t budget)
 	if (avail)
 		return true;
 	return (iflib_rxd_avail(ctx, rxq, *cidxp, 1));
+err:
+	CTX_LOCK(ctx);
+	ctx->ifc_flags |= IFC_DO_RESET;
+	iflib_admin_intr_deferred(ctx);
+	CTX_UNLOCK(ctx);
+	return (false);
 }
 
 #define TXD_NOTIFY_COUNT(txq) (((txq)->ift_size / (txq)->ift_update_freq)-1)
@@ -2532,7 +2608,7 @@ txq_max_rs_deferred(iflib_txq_t txq)
 		return (notify_count >> 1);
 	if (txq->ift_in_use > minthresh)
 		return (notify_count >> 2);
-	return (notify_count >> 4);
+	return (2);
 }
 
 #define M_CSUM_FLAGS(m) ((m)->m_pkthdr.csum_flags)
@@ -2963,11 +3039,11 @@ iflib_encap(iflib_txq_t txq, struct mbuf **m_headp)
 		prefetch(&txq->ift_sds.ifsd_m[next]);
 		if (txq->ift_sds.ifsd_map != NULL) {
 			prefetch(&txq->ift_sds.ifsd_map[next]);
-			map = txq->ift_sds.ifsd_map[pidx];
 			next = (cidx + CACHE_LINE_SIZE) & (ntxd-1);
 			prefetch(&txq->ift_sds.ifsd_flags[next]);
 		}
-	}
+	} else if (txq->ift_sds.ifsd_map != NULL)
+		map = txq->ift_sds.ifsd_map[pidx];
 
 	if (m_head->m_pkthdr.csum_flags & CSUM_TSO) {
 		desc_tag = txq->ift_tso_desc_tag;
@@ -3060,13 +3136,14 @@ defrag:
 #ifdef PKT_DEBUG
 	print_pkt(&pi);
 #endif
+	if (map != NULL)
+		bus_dmamap_sync(desc_tag, map, BUS_DMASYNC_PREWRITE);
 	if ((err = ctx->isc_txd_encap(ctx->ifc_softc, &pi)) == 0) {
-		bus_dmamap_sync(txq->ift_ifdi->idi_tag, txq->ift_ifdi->idi_map,
-						BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
-
+		if (map != NULL)
+			bus_dmamap_sync(txq->ift_ifdi->idi_tag, txq->ift_ifdi->idi_map,
+					BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 		DBG_COUNTER_INC(tx_encap);
-		MPASS(pi.ipi_new_pidx >= 0 &&
-		    pi.ipi_new_pidx < txq->ift_size);
+		MPASS(pi.ipi_new_pidx < txq->ift_size);
 
 		ndesc = pi.ipi_new_pidx - pi.ipi_pidx;
 		if (pi.ipi_new_pidx < pi.ipi_pidx) {
@@ -3269,6 +3346,8 @@ iflib_txq_drain(struct ifmp_ring *r, uint32_t cidx, uint32_t pidx)
 		DBG_COUNTER_INC(txq_drain_oactive);
 		return (0);
 	}
+	if (reclaimed)
+		txq->ift_qstatus = IFLIB_QUEUE_IDLE;
 	consumed = mcast_sent = bytes_sent = pkt_sent = 0;
 	count = MIN(avail, TX_BATCH_SIZE);
 #ifdef INVARIANTS
@@ -3306,8 +3385,8 @@ iflib_txq_drain(struct ifmp_ring *r, uint32_t cidx, uint32_t pidx)
 		m = *mp;
 		DBG_COUNTER_INC(tx_sent);
 		bytes_sent += m->m_pkthdr.len;
-		if (m->m_flags & M_MCAST)
-			mcast_sent++;
+		mcast_sent += !!(m->m_flags & M_MCAST);
+		avail = TXQ_AVAIL(txq);
 
 		txq->ift_db_pending += (txq->ift_in_use - in_use_prev);
 		desc_used += (txq->ift_in_use - in_use_prev);
@@ -3316,6 +3395,7 @@ iflib_txq_drain(struct ifmp_ring *r, uint32_t cidx, uint32_t pidx)
 			break;
 		rang = iflib_txd_db_check(ctx, txq, false, in_use_prev);
 	}
+
 	/* deliberate use of bitwise or to avoid gratuitous short-circuit */
 	ring = rang ? false  : (iflib_min_tx_latency | err) || (TXQ_AVAIL(txq) < MAX_TX_DESC(ctx));
 	iflib_txd_db_check(ctx, txq, ring, txq->ift_in_use);
@@ -3392,6 +3472,7 @@ _task_fn_tx(void *context)
 	if ((ifp->if_capenable & IFCAP_NETMAP)) {
 		if (ctx->isc_txd_credits_update(ctx->ifc_softc, txq->ift_id, false))
 			netmap_tx_irq(ifp, txq->ift_id);
+		IFDI_TX_QUEUE_INTR_ENABLE(ctx, txq->ift_id);
 		return;
 	}
 	if (txq->ift_db_pending)
@@ -3443,8 +3524,11 @@ _task_fn_admin(void *context)
 	iflib_txq_t txq;
 	int i;
 
-	if (!(if_getdrvflags(ctx->ifc_ifp) & IFF_DRV_RUNNING))
-		return;
+	if (!(if_getdrvflags(ctx->ifc_ifp) & IFF_DRV_RUNNING)) {
+		if (!(if_getdrvflags(ctx->ifc_ifp) & IFF_DRV_OACTIVE)) {
+			return;
+		}
+	}
 
 	CTX_LOCK(ctx);
 	for (txq = ctx->ifc_txqs, i = 0; i < sctx->isc_ntxqsets; i++, txq++) {
@@ -3456,6 +3540,10 @@ _task_fn_admin(void *context)
 	for (txq = ctx->ifc_txqs, i = 0; i < sctx->isc_ntxqsets; i++, txq++)
 		callout_reset_on(&txq->ift_timer, hz/2, iflib_timer, txq, txq->ift_timer.c_cpu);
 	IFDI_LINK_INTR_ENABLE(ctx);
+	if (ctx->ifc_flags & IFC_DO_RESET) {
+		ctx->ifc_flags &= ~IFC_DO_RESET;
+		iflib_if_init_locked(ctx);
+	}
 	CTX_UNLOCK(ctx);
 
 	if (LINK_ACTIVE(ctx) == 0)
@@ -4000,6 +4088,9 @@ iflib_device_register(device_t dev, void *sc, if_shared_ctx_t sctx, if_ctx_t *ct
 #ifdef ACPI_DMAR
 	if (dmar_get_dma_tag(device_get_parent(dev), dev) != NULL)
 		ctx->ifc_flags |= IFC_DMAR;
+#elif !(defined(__i386__) || defined(__amd64__))
+	/* set unconditionally for !x86 */
+	ctx->ifc_flags |= IFC_DMAR;
 #endif
 
 	msix_bar = scctx->isc_msix_bar;
@@ -4807,10 +4898,19 @@ iflib_irq_alloc_generic(if_ctx_t ctx, if_irq_t irq, int rid,
 		gtask = &ctx->ifc_txqs[qid].ift_task;
 		tqg = qgroup_if_io_tqg;
 		fn = _task_fn_tx;
-		intr_fast = iflib_fast_intr_rxtx;
+		intr_fast = iflib_fast_intr;
 		GROUPTASK_INIT(gtask, 0, fn, q);
 		break;
 	case IFLIB_INTR_RX:
+		q = &ctx->ifc_rxqs[qid];
+		info = &ctx->ifc_rxqs[qid].ifr_filter_info;
+		gtask = &ctx->ifc_rxqs[qid].ifr_task;
+		tqg = qgroup_if_io_tqg;
+		fn = _task_fn_rx;
+		intr_fast = iflib_fast_intr;
+		GROUPTASK_INIT(gtask, 0, fn, q);
+		break;
+	case IFLIB_INTR_RXTX:
 		q = &ctx->ifc_rxqs[qid];
 		info = &ctx->ifc_rxqs[qid].ifr_filter_info;
 		gtask = &ctx->ifc_rxqs[qid].ifr_task;
@@ -4943,7 +5043,7 @@ iflib_led_create(if_ctx_t ctx)
 {
 
 	ctx->ifc_led_dev = led_create(iflib_led_func, ctx,
-								  device_get_nameunit(ctx->ifc_dev));
+	    device_get_nameunit(ctx->ifc_dev));
 }
 
 void
@@ -5500,3 +5600,30 @@ iflib_add_device_sysctl_post(if_ctx_t ctx)
 	}
 
 }
+
+#ifndef __NO_STRICT_ALIGNMENT
+static struct mbuf *
+iflib_fixup_rx(struct mbuf *m)
+{
+	struct mbuf *n;
+
+	if (m->m_len <= (MCLBYTES - ETHER_HDR_LEN)) {
+		bcopy(m->m_data, m->m_data + ETHER_HDR_LEN, m->m_len);
+		m->m_data += ETHER_HDR_LEN;
+		n = m;
+	} else {
+		MGETHDR(n, M_NOWAIT, MT_DATA);
+		if (n == NULL) {
+			m_freem(m);
+			return (NULL);
+		}
+		bcopy(m->m_data, n->m_data, ETHER_HDR_LEN);
+		m->m_data += ETHER_HDR_LEN;
+		m->m_len -= ETHER_HDR_LEN;
+		n->m_len = ETHER_HDR_LEN;
+		M_MOVE_PKTHDR(n, m);
+		n->m_next = m;
+	}
+	return (n);
+}
+#endif

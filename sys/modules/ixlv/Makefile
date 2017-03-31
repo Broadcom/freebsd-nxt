@@ -1,7 +1,6 @@
 # $FreeBSD$
 
-SYSDIR?=${.CURDIR}/../..
-.include "${SYSDIR}/conf/kern.opts.mk"
+.PATH:  ${SRCTOP}/sys/dev/ixl
 
 SUBDIR = \
         ixlv_iflib \

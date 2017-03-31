@@ -1,6 +1,12 @@
 /*-
  * Copyright (c) 1999-2005 Apple Inc.
+ * Copyright (c) 2016-2017 Robert N. M. Watson
  * All rights reserved.
+ *
+ * This software was developed by BAE Systems, the University of Cambridge
+ * Computer Laboratory, and Memorial University under DARPA/AFRL contract
+ * FA8650-15-C-7558 ("CADETS"), as part of the DARPA Transparent Computing
+ * (TC) research program.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -109,6 +115,7 @@ void	 audit_arg_svipc_cmd(int cmd);
 void	 audit_arg_svipc_perm(struct ipc_perm *perm);
 void	 audit_arg_svipc_id(int id);
 void	 audit_arg_svipc_addr(void *addr);
+void	 audit_arg_svipc_which(int which);
 void	 audit_arg_posix_ipc_perm(uid_t uid, gid_t gid, mode_t mode);
 void	 audit_arg_auditon(union auditon_udata *udata);
 void	 audit_arg_file(struct proc *p, struct file *fp);
@@ -232,6 +239,11 @@ void	 audit_thread_free(struct thread *td);
 		audit_arg_pid((pid));					\
 } while (0)
 
+#define	AUDIT_ARG_POSIX_IPC_PERM(uid, gid, mode) do {			\
+	if (AUDITING_TD(curthread))					\
+		audit_arg_posix_ipc_perm((uid), (gid), (mod));		\
+} while (0)
+
 #define	AUDIT_ARG_PROCESS(p) do {					\
 	if (AUDITING_TD(curthread))					\
 		audit_arg_process((p));					\
@@ -280,6 +292,31 @@ void	 audit_thread_free(struct thread *td);
 #define	AUDIT_ARG_SUID(suid) do {					\
 	if (AUDITING_TD(curthread))					\
 		audit_arg_suid((suid));					\
+} while (0)
+
+#define	AUDIT_ARG_SVIPC_CMD(cmd) do {					\
+	if (AUDITING_TD(curthread))					\
+		audit_arg_svipc_cmd((cmd));				\
+} while (0)
+
+#define	AUDIT_ARG_SVIPC_PERM(perm) do {					\
+	if (AUDITING_TD(curthread))					\
+		audit_arg_svipc_perm((perm));				\
+} while (0)
+
+#define	AUDIT_ARG_SVIPC_ID(id) do {					\
+	if (AUDITING_TD(curthread))					\
+		audit_arg_svipc_id((id));				\
+} while (0)
+
+#define	AUDIT_ARG_SVIPC_ADDR(addr) do {					\
+	if (AUDITING_TD(curthread))					\
+		audit_arg_svipc_addr((addr));				\
+} while (0)
+
+#define	AUDIT_ARG_SVIPC_WHICH(which) do {				\
+	if (AUDITING_TD(curthread))					\
+		audit_arg_svipc_which((which));				\
 } while (0)
 
 #define	AUDIT_ARG_TEXT(text) do {					\
@@ -363,6 +400,7 @@ void	 audit_thread_free(struct thread *td);
 #define	AUDIT_ARG_MODE(mode)
 #define	AUDIT_ARG_OWNER(uid, gid)
 #define	AUDIT_ARG_PID(pid)
+#define	AUDIT_ARG_POSIX_IPC_PERM(uid, gid, mode)
 #define	AUDIT_ARG_PROCESS(p)
 #define	AUDIT_ARG_RGID(rgid)
 #define	AUDIT_ARG_RIGHTS(rights)
@@ -373,6 +411,11 @@ void	 audit_thread_free(struct thread *td);
 #define	AUDIT_ARG_SOCKET(sodomain, sotype, soprotocol)
 #define	AUDIT_ARG_SOCKADDR(td, dirfd, sa)
 #define	AUDIT_ARG_SUID(suid)
+#define	AUDIT_ARG_SVIPC_CMD(cmd)
+#define	AUDIT_ARG_SVIPC_PERM(perm)
+#define	AUDIT_ARG_SVIPC_ID(id)
+#define	AUDIT_ARG_SVIPC_ADDR(addr)
+#define	AUDIT_ARG_SVIPC_WHICH(which)
 #define	AUDIT_ARG_TEXT(text)
 #define	AUDIT_ARG_UID(uid)
 #define	AUDIT_ARG_UPATH1(td, dirfd, upath)
