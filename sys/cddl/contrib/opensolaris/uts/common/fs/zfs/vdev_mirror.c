@@ -24,13 +24,14 @@
  */
 
 /*
- * Copyright (c) 2012, 2014 by Delphix. All rights reserved.
+ * Copyright (c) 2012, 2015 by Delphix. All rights reserved.
  */
 
 #include <sys/zfs_context.h>
 #include <sys/spa.h>
 #include <sys/vdev_impl.h>
 #include <sys/zio.h>
+#include <sys/abd.h>
 #include <sys/fs/zfs.h>
 
 /*
@@ -58,9 +59,11 @@ typedef struct mirror_map {
 
 static int vdev_mirror_shift = 21;
 
+#ifdef _KERNEL
 SYSCTL_DECL(_vfs_zfs_vdev);
 static SYSCTL_NODE(_vfs_zfs_vdev, OID_AUTO, mirror, CTLFLAG_RD, 0,
     "ZFS VDEV Mirror");
+#endif
 
 /*
  * The load configuration settings below are tuned by default for
@@ -74,28 +77,38 @@ static SYSCTL_NODE(_vfs_zfs_vdev, OID_AUTO, mirror, CTLFLAG_RD, 0,
 
 /* Rotating media load calculation configuration. */
 static int rotating_inc = 0;
+#ifdef _KERNEL
 SYSCTL_INT(_vfs_zfs_vdev_mirror, OID_AUTO, rotating_inc, CTLFLAG_RWTUN,
     &rotating_inc, 0, "Rotating media load increment for non-seeking I/O's");
+#endif
 
 static int rotating_seek_inc = 5;
+#ifdef _KERNEL
 SYSCTL_INT(_vfs_zfs_vdev_mirror, OID_AUTO, rotating_seek_inc, CTLFLAG_RWTUN,
     &rotating_seek_inc, 0, "Rotating media load increment for seeking I/O's");
+#endif
 
 static int rotating_seek_offset = 1 * 1024 * 1024;
+#ifdef _KERNEL
 SYSCTL_INT(_vfs_zfs_vdev_mirror, OID_AUTO, rotating_seek_offset, CTLFLAG_RWTUN,
     &rotating_seek_offset, 0, "Offset in bytes from the last I/O which "
     "triggers a reduced rotating media seek increment");
+#endif
 
 /* Non-rotating media load calculation configuration. */
 static int non_rotating_inc = 0;
+#ifdef _KERNEL
 SYSCTL_INT(_vfs_zfs_vdev_mirror, OID_AUTO, non_rotating_inc, CTLFLAG_RWTUN,
     &non_rotating_inc, 0,
     "Non-rotating media load increment for non-seeking I/O's");
+#endif
 
 static int non_rotating_seek_inc = 1;
+#ifdef _KERNEL
 SYSCTL_INT(_vfs_zfs_vdev_mirror, OID_AUTO, non_rotating_seek_inc, CTLFLAG_RWTUN,
     &non_rotating_seek_inc, 0,
     "Non-rotating media load increment for seeking I/O's");
+#endif
 
 
 static inline size_t
@@ -281,18 +294,18 @@ vdev_mirror_scrub_done(zio_t *zio)
 
 	if (zio->io_error == 0) {
 		zio_t *pio;
+		zio_link_t *zl = NULL;
 
 		mutex_enter(&zio->io_lock);
-		while ((pio = zio_walk_parents(zio)) != NULL) {
+		while ((pio = zio_walk_parents(zio, &zl)) != NULL) {
 			mutex_enter(&pio->io_lock);
 			ASSERT3U(zio->io_size, >=, pio->io_size);
-			bcopy(zio->io_data, pio->io_data, pio->io_size);
+			abd_copy(pio->io_abd, zio->io_abd, pio->io_size);
 			mutex_exit(&pio->io_lock);
 		}
 		mutex_exit(&zio->io_lock);
 	}
-
-	zio_buf_free(zio->io_data, zio->io_size);
+	abd_free(zio->io_abd);
 
 	mc->mc_error = zio->io_error;
 	mc->mc_tried = 1;
@@ -447,7 +460,8 @@ vdev_mirror_io_start(zio_t *zio)
 				mc = &mm->mm_child[c];
 				zio_nowait(zio_vdev_child_io(zio, zio->io_bp,
 				    mc->mc_vd, mc->mc_offset,
-				    zio_buf_alloc(zio->io_size), zio->io_size,
+				    abd_alloc_sametype(zio->io_abd,
+				    zio->io_size), zio->io_size,
 				    zio->io_type, zio->io_priority, 0,
 				    vdev_mirror_scrub_done, mc));
 			}
@@ -473,7 +487,7 @@ vdev_mirror_io_start(zio_t *zio)
 	while (children--) {
 		mc = &mm->mm_child[c];
 		zio_nowait(zio_vdev_child_io(zio, zio->io_bp,
-		    mc->mc_vd, mc->mc_offset, zio->io_data, zio->io_size,
+		    mc->mc_vd, mc->mc_offset, zio->io_abd, zio->io_size,
 		    zio->io_type, zio->io_priority, 0,
 		    vdev_mirror_child_done, mc));
 		c++;
@@ -560,7 +574,7 @@ vdev_mirror_io_done(zio_t *zio)
 		mc = &mm->mm_child[c];
 		zio_vdev_io_redone(zio);
 		zio_nowait(zio_vdev_child_io(zio, zio->io_bp,
-		    mc->mc_vd, mc->mc_offset, zio->io_data, zio->io_size,
+		    mc->mc_vd, mc->mc_offset, zio->io_abd, zio->io_size,
 		    ZIO_TYPE_READ, zio->io_priority, 0,
 		    vdev_mirror_child_done, mc));
 		return;
@@ -601,7 +615,7 @@ vdev_mirror_io_done(zio_t *zio)
 
 			zio_nowait(zio_vdev_child_io(zio, zio->io_bp,
 			    mc->mc_vd, mc->mc_offset,
-			    zio->io_data, zio->io_size,
+			    zio->io_abd, zio->io_size,
 			    ZIO_TYPE_WRITE, ZIO_PRIORITY_ASYNC_WRITE,
 			    ZIO_FLAG_IO_REPAIR | (unexpected_errors ?
 			    ZIO_FLAG_SELF_HEAL : 0), NULL, NULL));

@@ -586,6 +586,7 @@ sys_ptrace(struct thread *td, struct ptrace_args *uap)
 		struct ptrace_lwpinfo32 pl32;
 		struct ptrace_vm_entry32 pve32;
 #endif
+		char args[nitems(td->td_sa.args) * sizeof(register_t)];
 		int ptevents;
 	} r;
 	void *addr;
@@ -606,6 +607,7 @@ sys_ptrace(struct thread *td, struct ptrace_args *uap)
 	case PT_GETFPREGS:
 	case PT_GETDBREGS:
 	case PT_LWPINFO:
+	case PT_GET_SC_ARGS:
 		break;
 	case PT_SETREGS:
 		error = COPYIN(uap->addr, &r.reg, sizeof r.reg);
@@ -663,6 +665,10 @@ sys_ptrace(struct thread *td, struct ptrace_args *uap)
 		/* NB: The size in uap->data is validated in kern_ptrace(). */
 		error = copyout(&r.pl, uap->addr, uap->data);
 		break;
+	case PT_GET_SC_ARGS:
+		error = copyout(r.args, uap->addr, MIN(uap->data,
+		    sizeof(r.args)));
+		break;
 	}
 
 	return (error);
@@ -693,12 +699,13 @@ sys_ptrace(struct thread *td, struct ptrace_args *uap)
 #endif
 
 void
-proc_set_traced(struct proc *p)
+proc_set_traced(struct proc *p, bool stop)
 {
 
 	PROC_LOCK_ASSERT(p, MA_OWNED);
 	p->p_flag |= P_TRACED;
-	p->p_flag2 |= P2_PTRACE_FSTP;
+	if (stop)
+		p->p_flag2 |= P2_PTRACE_FSTP;
 	p->p_ptevents = PTRACE_DEFAULT;
 	p->p_oppid = p->p_pptr->p_pid;
 }
@@ -738,6 +745,7 @@ kern_ptrace(struct thread *td, int req, pid_t pid, void *addr, int data)
 	case PT_GET_EVENT_MASK:
 	case PT_SET_EVENT_MASK:
 	case PT_DETACH:
+	case PT_GET_SC_ARGS:
 		sx_xlock(&proctree_lock);
 		proctree_locked = 1;
 		break;
@@ -910,7 +918,7 @@ kern_ptrace(struct thread *td, int req, pid_t pid, void *addr, int data)
 	switch (req) {
 	case PT_TRACE_ME:
 		/* set my trace flag and "owner" so it can read/write me */
-		proc_set_traced(p);
+		proc_set_traced(p, false);
 		if (p->p_flag & P_PPWAIT)
 			p->p_flag |= P_PPTRACE;
 		CTR1(KTR_PTRACE, "PT_TRACE_ME: pid %d", p->p_pid);
@@ -927,7 +935,7 @@ kern_ptrace(struct thread *td, int req, pid_t pid, void *addr, int data)
 		 * The old parent is remembered so we can put things back
 		 * on a "detach".
 		 */
-		proc_set_traced(p);
+		proc_set_traced(p, true);
 		if (p->p_pptr != td->td_proc) {
 			proc_reparent(p, td->td_proc);
 		}
@@ -1007,6 +1015,28 @@ kern_ptrace(struct thread *td, int req, pid_t pid, void *addr, int data)
 		CTR3(KTR_PTRACE, "PT_SET_EVENT_MASK: pid %d mask %#x -> %#x",
 		    p->p_pid, p->p_ptevents, tmp);
 		p->p_ptevents = tmp;
+		break;
+
+	case PT_GET_SC_ARGS:
+		CTR1(KTR_PTRACE, "PT_GET_SC_ARGS: pid %d", p->p_pid);
+		if ((td2->td_dbgflags & (TDB_SCE | TDB_SCX)) == 0
+#ifdef COMPAT_FREEBSD32
+		    || (wrap32 && !safe)
+#endif
+		    ) {
+			error = EINVAL;
+			break;
+		}
+		bzero(addr, sizeof(td2->td_sa.args));
+#ifdef COMPAT_FREEBSD32
+		if (wrap32)
+			for (num = 0; num < nitems(td2->td_sa.args); num++)
+				((uint32_t *)addr)[num] = (uint32_t)
+				    td2->td_sa.args[num];
+		else
+#endif
+			bcopy(td2->td_sa.args, addr, td2->td_sa.narg *
+			    sizeof(register_t));
 		break;
 		
 	case PT_STEP:
@@ -1123,6 +1153,16 @@ kern_ptrace(struct thread *td, int req, pid_t pid, void *addr, int data)
 			/* deliver or queue signal */
 			td2->td_dbgflags &= ~TDB_XSIG;
 			td2->td_xsig = data;
+
+			/*
+			 * P_WKILLED is insurance that a PT_KILL/SIGKILL always
+			 * works immediately, even if another thread is
+			 * unsuspended first and attempts to handle a different
+			 * signal or if the POSIX.1b style signal queue cannot
+			 * accommodate any new signals.
+			 */
+			if (data == SIGKILL)
+				p->p_flag |= P_WKILLED;
 
 			if (req == PT_DETACH) {
 				FOREACH_THREAD_IN_PROC(p, td3)
@@ -1295,7 +1335,7 @@ kern_ptrace(struct thread *td, int req, pid_t pid, void *addr, int data)
 		pl->pl_flags = 0;
 		if (td2->td_dbgflags & TDB_XSIG) {
 			pl->pl_event = PL_EVENT_SIGNAL;
-			if (td2->td_dbgksi.ksi_signo != 0 &&
+			if (td2->td_si.si_signo != 0 &&
 #ifdef COMPAT_FREEBSD32
 			    ((!wrap32 && data >= offsetof(struct ptrace_lwpinfo,
 			    pl_siginfo) + sizeof(pl->pl_siginfo)) ||
@@ -1307,7 +1347,7 @@ kern_ptrace(struct thread *td, int req, pid_t pid, void *addr, int data)
 #endif
 			){
 				pl->pl_flags |= PL_FLAG_SI;
-				pl->pl_siginfo = td2->td_dbgksi.ksi_info;
+				pl->pl_siginfo = td2->td_si;
 			}
 		}
 		if ((pl->pl_flags & PL_FLAG_SI) == 0)
@@ -1336,8 +1376,8 @@ kern_ptrace(struct thread *td, int req, pid_t pid, void *addr, int data)
 		pl->pl_siglist = td2->td_siglist;
 		strcpy(pl->pl_tdname, td2->td_name);
 		if ((td2->td_dbgflags & (TDB_SCE | TDB_SCX)) != 0) {
-			pl->pl_syscall_code = td2->td_dbg_sc_code;
-			pl->pl_syscall_narg = td2->td_dbg_sc_narg;
+			pl->pl_syscall_code = td2->td_sa.code;
+			pl->pl_syscall_narg = td2->td_sa.narg;
 		} else {
 			pl->pl_syscall_code = 0;
 			pl->pl_syscall_narg = 0;

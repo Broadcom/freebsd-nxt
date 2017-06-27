@@ -35,7 +35,7 @@ KERN_DEBUGDIR?=	${DEBUGDIR}
 .MAIN: all
 
 .for target in all clean cleandepend cleandir clobber depend install \
-    obj reinstall tags
+    ${_obj} reinstall tags
 ${target}: kernel-${target}
 .if !defined(MODULES_WITH_WORLD) && !defined(NO_MODULES) && exists($S/modules)
 ${target}: modules-${target}
@@ -63,8 +63,12 @@ OSRELDATE!=	awk '/^\#define[[:space:]]*__FreeBSD_version/ { print $$3 }' \
 		    ${MAKEOBJDIRPREFIX}${SRC_BASE}/include/osreldate.h
 .endif
 # Keep the related ports builds in the obj directory so that they are only rebuilt once per kernel build
-WRKDIRPREFIX?=	${MAKEOBJDIRPREFIX}${SRC_BASE}/sys/${KERNCONF}
+WRKDIRPREFIX?=	${.OBJDIR}
 PORTSMODULESENV=\
+	env \
+	-u CC \
+	-u CXX \
+	-u CPP \
 	PATH=${PATH}:${LOCALBASE}/bin:${LOCALBASE}/sbin \
 	SRC_BASE=${SRC_BASE} \
 	OSVERSION=${OSRELDATE} \
@@ -75,7 +79,7 @@ PORTSMODULESENV=\
 all:
 .for __i in ${PORTS_MODULES}
 	@${ECHO} "===> Ports module ${__i} (all)"
-	cd $${PORTSDIR:-/usr/ports}/${__i}; ${PORTSMODULESENV} ${MAKE} -B clean all
+	cd $${PORTSDIR:-/usr/ports}/${__i}; ${PORTSMODULESENV} ${MAKE} -B clean build
 .endfor
 
 .for __target in install reinstall clean
@@ -161,7 +165,7 @@ ${mfile:T:S/.m$/.h/}: ${mfile}
 .endfor
 
 kernel-clean:
-	rm -f *.o *.so *.So *.ko *.s eddep errs \
+	rm -f *.o *.so *.pico *.ko *.s eddep errs \
 	    ${FULLKERNEL} ${KERNEL_KO} ${KERNEL_KO}.debug \
 	    linterrs tags vers.c \
 	    vnode_if.c vnode_if.h vnode_if_newproto.h vnode_if_typedef.h \
@@ -176,30 +180,34 @@ lint: ${LNFILES}
 # dynamic references.  We could probably do a '-Bforcedynamic' mode like
 # in the a.out ld.  For now, this works.
 HACK_EXTRA_FLAGS?= -shared
-hack.So: Makefile
+hack.pico: Makefile
 	:> hack.c
-	${CC} ${HACK_EXTRA_FLAGS} -nostdlib hack.c -o hack.So
+	${CC} ${HACK_EXTRA_FLAGS} -nostdlib hack.c -o hack.pico
 	rm -f hack.c
 
 assym.s: $S/kern/genassym.sh genassym.o
 	NM='${NM}' NMFLAGS='${NMFLAGS}' sh $S/kern/genassym.sh genassym.o > ${.TARGET}
 
 genassym.o: $S/$M/$M/genassym.c
-	${CC} -c ${CFLAGS:N-fno-common} $S/$M/$M/genassym.c
+	${CC} -c ${CFLAGS:N-flto:N-fno-common} $S/$M/$M/genassym.c
 
 ${SYSTEM_OBJS} genassym.o vers.o: opt_global.h
 
 .if !empty(.MAKE.MODE:Unormal:Mmeta) && empty(.MAKE.MODE:Unormal:Mnofilemon)
 _meta_filemon=	1
 .endif
-# Skip reading .depend when not needed to speed up tree-walks
-# and simple lookups.
+# Skip reading .depend when not needed to speed up tree-walks and simple
+# lookups.  For install, only do this if no other targets are specified.
 # Also skip generating or including .depend.* files if in meta+filemon mode
-# since it will track dependencies itself.  OBJS_DEPEND_GUESS is still used.
-.if !empty(.MAKEFLAGS:M-V${_V_READ_DEPEND}) || make(obj) || make(clean*) || \
-    make(install*) || make(kernel-obj) || make(kernel-clean*) || \
-    make(kernel-install*) || defined(_meta_filemon)
-_SKIP_READ_DEPEND=	1
+# since it will track dependencies itself.  OBJS_DEPEND_GUESS is still used
+# for _meta_filemon but not for _SKIP_DEPEND.
+.if !empty(.MAKEFLAGS:M-V${_V_READ_DEPEND}) || make(*obj) || \
+    ${.TARGETS:M*clean*} == ${.TARGETS} || \
+    ${.TARGETS:M*install*} == ${.TARGETS} || \
+    defined(_meta_filemon)
+_SKIP_DEPEND=	1
+.endif
+.if defined(_SKIP_DEPEND) || defined(_meta_filemon)
 .MAKE.DEPENDFILE=	/dev/null
 .endif
 
@@ -213,6 +221,15 @@ DEPENDFILES_OBJS=	${DEPENDOBJS:O:u:C/^/.depend./}
 .if ${MAKE_VERSION} < 20160220
 DEPEND_MP?=	-MP
 .endif
+.if defined(_SKIP_DEPEND)
+# Don't bother reading any .meta files
+${DEPENDOBJS}:	.NOMETA
+.depend:	.NOMETA
+# Unset these to avoid looping/statting on them later.
+.undef DEPENDSRCS
+.undef DEPENDOBJS
+.undef DEPENDFILES_OBJS
+.endif	# defined(_SKIP_DEPEND)
 DEPEND_CFLAGS+=	-MD ${DEPEND_MP} -MF.depend.${.TARGET}
 DEPEND_CFLAGS+=	-MT${.TARGET}
 .if !defined(_meta_filemon)
@@ -224,7 +241,6 @@ CFLAGS+=	${${DEPEND_CFLAGS_CONDITION}:?${DEPEND_CFLAGS}:}
 .else
 CFLAGS+=	${DEPEND_CFLAGS}
 .endif
-.if !defined(_SKIP_READ_DEPEND)
 .for __depend_obj in ${DEPENDFILES_OBJS}
 .if ${MAKE_VERSION} < 20160220
 .sinclude "${.OBJDIR}/${__depend_obj}"
@@ -232,7 +248,6 @@ CFLAGS+=	${DEPEND_CFLAGS}
 .dinclude "${.OBJDIR}/${__depend_obj}"
 .endif
 .endfor
-.endif	# !defined(_SKIP_READ_DEPEND)
 .endif	# !defined(_meta_filemon)
 
 # Always run 'make depend' to generate dependencies early and to avoid the
@@ -352,8 +367,11 @@ config.o env.o hints.o vers.o vnode_if.o:
 config.ln env.ln hints.ln vers.ln vnode_if.ln:
 	${NORMAL_LINT}
 
+.if ${MK_REPRODUCIBLE_BUILD} != "no"
+REPRO_FLAG="-r"
+.endif
 vers.c: $S/conf/newvers.sh $S/sys/param.h ${SYSTEM_DEP}
-	MAKE=${MAKE} sh $S/conf/newvers.sh ${KERN_IDENT}
+	MAKE=${MAKE} sh $S/conf/newvers.sh ${REPRO_FLAG} ${KERN_IDENT}
 
 vnode_if.c: $S/tools/vnode_if.awk $S/kern/vnode_if.src
 	${AWK} -f $S/tools/vnode_if.awk $S/kern/vnode_if.src -c

@@ -10,7 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -119,8 +119,7 @@ struct sysentvec {
 	u_long		*sv_maxssiz;
 	u_int		sv_flags;
 	void		(*sv_set_syscall_retval)(struct thread *, int);
-	int		(*sv_fetch_syscall_args)(struct thread *, struct
-			    syscall_args *);
+	int		(*sv_fetch_syscall_args)(struct thread *);
 	const char	**sv_syscallnames;
 	vm_offset_t	sv_timekeep_base;
 	vm_offset_t	sv_shared_page_base;
@@ -138,7 +137,7 @@ struct sysentvec {
 #define	SV_AOUT		0x008000	/* a.out executable. */
 #define	SV_SHP		0x010000	/* Shared page. */
 #define	SV_CAPSICUM	0x020000	/* Force cap_enter() on startup. */
-#define	SV_TIMEKEEP	0x040000
+#define	SV_TIMEKEEP	0x040000	/* Shared page timehands. */
 
 #define	SV_ABI_MASK	0xff
 #define	SV_ABI_ERRNO(p, e)	((p)->p_sysent->sv_errsize <= 0 ? e :	\

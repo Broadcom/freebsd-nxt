@@ -10,7 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -68,6 +68,8 @@
 
 #define	PT_GET_EVENT_MASK 25	/* get mask of optional events */
 #define	PT_SET_EVENT_MASK 26	/* set mask of optional events */
+
+#define	PT_GET_SC_ARGS	27	/* fetch syscall args */
 
 #define PT_GETREGS      33	/* get general-purpose registers */
 #define PT_SETREGS      34	/* set general-purpose registers */

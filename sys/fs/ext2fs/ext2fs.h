@@ -31,7 +31,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * 
+ *
  */
 
 #ifndef _FS_EXT2FS_EXT2FS_H_
@@ -204,8 +204,10 @@ struct csum {
  */
 #define	EXT2F_COMPAT_PREALLOC		0x0001
 #define	EXT2F_COMPAT_HASJOURNAL		0x0004
+#define	EXT2F_COMPAT_EXT_ATTR		0x0008
 #define	EXT2F_COMPAT_RESIZE		0x0010
 #define	EXT2F_COMPAT_DIRHASHINDEX	0x0020
+#define	EXT2F_COMPAT_SPARSESUPER2	0x0200
 
 #define	EXT2F_ROCOMPAT_SPARSESUPER	0x0001
 #define	EXT2F_ROCOMPAT_LARGEFILE	0x0002
@@ -214,6 +216,11 @@ struct csum {
 #define	EXT2F_ROCOMPAT_GDT_CSUM		0x0010
 #define	EXT2F_ROCOMPAT_DIR_NLINK	0x0020
 #define	EXT2F_ROCOMPAT_EXTRA_ISIZE	0x0040
+#define	EXT2F_ROCOMPAT_QUOTA		0x0100
+#define	EXT2F_ROCOMPAT_BIGALLOC		0x0200
+#define	EXT2F_ROCOMPAT_METADATA_CKSUM	0x0400
+#define	EXT2F_ROCOMPAT_READONLY		0x1000
+#define	EXT2F_ROCOMPAT_PROJECT		0x2000
 
 #define	EXT2F_INCOMPAT_COMP		0x0001
 #define	EXT2F_INCOMPAT_FTYPE		0x0002
@@ -223,6 +230,12 @@ struct csum {
 #define	EXT2F_INCOMPAT_64BIT		0x0080
 #define	EXT2F_INCOMPAT_MMP		0x0100
 #define	EXT2F_INCOMPAT_FLEX_BG		0x0200
+#define	EXT2F_INCOMPAT_EA_INODE		0x0400
+#define	EXT2F_INCOMPAT_DIRDATA		0x1000
+#define	EXT2F_INCOMPAT_CSUM_SEED	0x2000
+#define	EXT2F_INCOMPAT_LARGEDIR		0x4000
+#define	EXT2F_INCOMPAT_INLINE_DATA	0x8000
+#define	EXT2F_INCOMPAT_ENCRYPT		0x10000
 
 /*
  * Features supported in this implementation
@@ -246,6 +259,9 @@ struct csum {
 #define	EXT2F_COMPAT_SUPP		EXT2F_COMPAT_DIRHASHINDEX
 #define	EXT2F_ROCOMPAT_SUPP		(EXT2F_ROCOMPAT_SPARSESUPER | \
 					 EXT2F_ROCOMPAT_LARGEFILE | \
+					 EXT2F_ROCOMPAT_GDT_CSUM | \
+					 EXT2F_ROCOMPAT_DIR_NLINK | \
+					 EXT2F_ROCOMPAT_HUGE_FILE | \
 					 EXT2F_ROCOMPAT_EXTRA_ISIZE)
 #define	EXT2F_INCOMPAT_SUPP		EXT2F_INCOMPAT_FTYPE
 #define	EXT4F_RO_INCOMPAT_SUPP		(EXT2F_INCOMPAT_EXTENTS | \
@@ -280,6 +296,10 @@ struct csum {
 #define	E2FS_SIGNED_HASH	0x0001
 #define	E2FS_UNSIGNED_HASH	0x0002
 
+#define	EXT2_BG_INODE_UNINIT	0x0001	/* Inode table/bitmap not in use */
+#define	EXT2_BG_BLOCK_UNINIT	0x0002	/* Block bitmap not in use */
+#define	EXT2_BG_INODE_ZEROED	0x0004	/* On-disk itable initialized to zero */
+
 /* ext2 file system block group descriptor */
 
 struct ext2_gd {
@@ -297,9 +317,8 @@ struct ext2_gd {
 	uint16_t ext4bgd_csum;		/* group descriptor checksum */
 };
 
-
-/* EXT2FS metadatas are stored in little-endian byte order. These macros
- * helps reading these metadatas
+/* EXT2FS metadata is stored in little-endian byte order. These macros
+ * help reading it.
  */
 
 #define	e2fs_cgload(old, new, size) memcpy((new), (old), (size));

@@ -8,11 +8,17 @@
     bin
         cat
         ..
+        chmod
+        ..
         date
         ..
         dd
         ..
+        echo
+        ..
         expr
+        ..
+        ln
         ..
         ls
         ..
@@ -21,6 +27,8 @@
         pax
         ..
         pkill
+        ..
+        pwait
         ..
         sh
             builtins
@@ -183,6 +191,8 @@
                     ..
                     struct
                     ..
+                    sugar
+                    ..
                     syscall
                     ..
                     sysevent
@@ -306,19 +316,35 @@
             ttyio
             ..
         ..
+        libcam
+        ..
+        libcasper
+            services
+                cap_dns
+                ..
+                cap_grp
+                ..
+                cap_pwd
+                ..
+                cap_sysctl
+                ..
+            ..
+        ..
         libcrypt
         ..
         libdevdctl
+        ..
+        libkvm
         ..
         libmp
         ..
         libnv
         ..
-        libpam
-        ..
         libproc
         ..
         librt
+        ..
+        libsbuf
         ..
         libthr
             dlopen
@@ -382,6 +408,10 @@
         ..
         file
         ..
+        fs
+            tmpfs
+            ..
+        ..
         geom
             class
                 concat
@@ -417,6 +447,8 @@
             ..
         ..
         kqueue
+            libkqueue
+            ..
         ..
         mac
             bsdextended
@@ -574,11 +606,13 @@
                 ..
             ..
         ..
-	bsdcat
-	..
+        bsdcat
+        ..
         calendar
         ..
         cmp
+        ..
+        compress
         ..
         cpio
         ..
@@ -586,17 +620,27 @@
         ..
         comm
         ..
+        csplit
+        ..
         cut
+        ..
+        diff
         ..
         dirname
         ..
+        du
+        ..
         file2c
+        ..
+        getconf
         ..
         grep
         ..
         gzip
         ..
         ident
+        ..
+        indent
         ..
         join
         ..
@@ -614,7 +658,11 @@
         ..
         opensm
         ..
+        pr
+        ..
         printf
+        ..
+        procstat
         ..
         sdiff
         ..
@@ -623,6 +671,10 @@
             ..
         ..
         soelim
+        ..
+        stat
+        ..
+        tail
         ..
         tar
         ..
@@ -637,6 +689,8 @@
         uudecode
         ..
         uuencode
+        ..
+        uniq
         ..
         xargs
         ..

@@ -235,8 +235,7 @@ static struct cap_desc {
 	{ CAP_SOCK_CLIENT,	"scl" },
 	{ CAP_SOCK_SERVER,	"ssr" },
 };
-static const u_int	cap_desc_count = sizeof(cap_desc) /
-			    sizeof(cap_desc[0]);
+static const u_int	cap_desc_count = nitems(cap_desc);
 
 static u_int
 width_capability(cap_rights_t *rightsp)
@@ -535,6 +534,12 @@ procstat_files(struct procstat *procstat, struct kinfo_proc *kipp)
 			xo_emit("{:protocol/%-3s/%s} ",
 			    protocol_to_string(sock.dom_family,
 			    sock.type, sock.proto));
+			if (sock.proto == IPPROTO_TCP ||
+			    sock.proto == IPPROTO_SCTP ||
+			    sock.type == SOCK_STREAM) {
+				xo_emit("{:sendq/%u} ", sock.sendq);
+				xo_emit("{:recvq/%u} ", sock.recvq);
+			}
 			/*
 			 * While generally we like to print two addresses,
 			 * local and peer, for sockets, it turns out to be

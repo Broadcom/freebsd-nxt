@@ -176,7 +176,7 @@ bus_space_tag_t		base_tag = &_base_tag;
 bus_space_tag_t		obio_tag = NULL;
 
 void
-pxa_obio_tag_init()
+pxa_obio_tag_init(void)
 {
 
 	bcopy(&_base_tag, &_obio_tag, sizeof(struct bus_space));
@@ -191,9 +191,6 @@ pxa_bus_tag_alloc(bus_addr_t offset)
 
 	tag = (struct bus_space *)malloc(sizeof(struct bus_space), M_PXATAG,
 	    M_WAITOK);
-	if (tag == NULL) {
-		return (NULL);
-	}
 
 	bcopy(&_base_tag, tag, sizeof(struct bus_space));
 	tag->bs_privdata = (void *)offset;

@@ -14,7 +14,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -45,12 +45,12 @@ extern const char *fname, *outfname;
 extern FILE *infile, *outfile;
 extern int rflags;	/* regex flags to use */
 
-void	 cfclose(struct s_command *, const struct s_command *);
+void	 cfclose(struct s_command *, struct s_command *);
 void	 compile(void);
 void	 cspace(SPACE *, const char *, size_t, enum e_spflag);
-const char *cu_fgets(int *);
+char	*cu_fgets(char *, int, int *);
 int	 mf_fgets(SPACE *, enum e_spflag);
 int	 lastline(void);
 void	 process(void);
 void	 resetstate(void);
-char	*strregerror(int, const regex_t *);
+char	*strregerror(int, regex_t *);

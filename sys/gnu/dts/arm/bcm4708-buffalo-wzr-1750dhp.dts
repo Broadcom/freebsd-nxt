@@ -17,11 +17,12 @@
 	model = "Buffalo WZR-1750DHP (BCM4708)";
 
 	chosen {
-		bootargs = "console=ttyS0,115200";
+		bootargs = "console=ttyS0,115200 earlycon";
 	};
 
 	memory {
-		reg = <0x00000000 0x08000000>;
+		reg = <0x00000000 0x08000000
+		       0x88000000 0x18000000>;
 	};
 
 	spi {
@@ -136,6 +137,14 @@
 	};
 };
 
-&uart0 {
+&usb2 {
+	vcc-gpio = <&chipcommon 9 GPIO_ACTIVE_HIGH>;
+};
+
+&usb3 {
+	vcc-gpio = <&chipcommon 10 GPIO_ACTIVE_LOW>;
+};
+
+&spi_nor {
 	status = "okay";
 };

@@ -230,7 +230,8 @@ struct prison_racct {
 #define	PR_ALLOW_MOUNT_FDESCFS		0x1000
 #define	PR_ALLOW_MOUNT_LINPROCFS	0x2000
 #define	PR_ALLOW_MOUNT_LINSYSFS		0x4000
-#define	PR_ALLOW_ALL			0x7fff
+#define	PR_ALLOW_RESERVED_PORTS		0x8000
+#define	PR_ALLOW_ALL			0xffff
 
 /*
  * OSD methods
@@ -389,14 +390,20 @@ int prison_get_ip4(struct ucred *cred, struct in_addr *ia);
 int prison_local_ip4(struct ucred *cred, struct in_addr *ia);
 int prison_remote_ip4(struct ucred *cred, struct in_addr *ia);
 int prison_check_ip4(const struct ucred *, const struct in_addr *);
+int prison_check_ip4_locked(const struct prison *, const struct in_addr *);
 int prison_saddrsel_ip4(struct ucred *, struct in_addr *);
+int prison_restrict_ip4(struct prison *, struct in_addr *);
+int prison_qcmp_v4(const void *, const void *);
 #ifdef INET6
 int prison_equal_ip6(struct prison *, struct prison *);
 int prison_get_ip6(struct ucred *, struct in6_addr *);
 int prison_local_ip6(struct ucred *, struct in6_addr *, int);
 int prison_remote_ip6(struct ucred *, struct in6_addr *);
-int prison_check_ip6(struct ucred *, struct in6_addr *);
+int prison_check_ip6(const struct ucred *, const struct in6_addr *);
+int prison_check_ip6_locked(const struct prison *, const struct in6_addr *);
 int prison_saddrsel_ip6(struct ucred *, struct in6_addr *);
+int prison_restrict_ip6(struct prison *, struct in6_addr *);
+int prison_qcmp_v6(const void *, const void *);
 #endif
 int prison_check_af(struct ucred *cred, int af);
 int prison_if(struct ucred *cred, struct sockaddr *sa);

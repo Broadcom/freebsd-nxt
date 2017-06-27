@@ -27,7 +27,6 @@ exclude()
 }
 
 exclude EXFAIL common/aggs/tst.subr.d
-exclude EXFAIL common/dtraceUtil/tst.DataModel32.d.ksh
 exclude EXFAIL common/dtraceUtil/tst.ELFGenerationOut.d.ksh
 exclude EXFAIL common/dtraceUtil/tst.ELFGenerationWithO.d.ksh
 exclude EXFAIL common/funcs/tst.copyin.d
@@ -73,6 +72,7 @@ exclude EXFAIL common/mib/tst.udp.ksh
 exclude SKIP common/privs/tst.fds.ksh
 exclude SKIP common/privs/tst.func_access.ksh
 exclude SKIP common/privs/tst.getf.ksh
+exclude SKIP common/privs/tst.kpriv.ksh
 exclude SKIP common/privs/tst.op_access.ksh
 exclude SKIP common/privs/tst.procpriv.ksh
 exclude SKIP common/privs/tst.providers.ksh
@@ -128,9 +128,6 @@ exclude EXFAIL common/ip/tst.ipv4remoteicmp.ksh
 exclude EXFAIL common/ip/tst.localtcpstate.ksh
 exclude EXFAIL common/ip/tst.remotetcpstate.ksh
 
-# Depends on the number of probes in /bin/sh and the current DOF limit.
-exclude EXFAIL common/pid/err.D_PROC_CREATEFAIL.many.d
-
 # Tries to enable pid$target:libc::entry, though there's no "libc" module.
 # Currently unsure as to whether this might be a libproc bug.
 exclude EXFAIL common/pid/tst.probemod.ksh
@@ -141,11 +138,6 @@ exclude EXFAIL common/pid/tst.newprobes.ksh
 # libproc+librtld_db don't handle dlopen(2) yet.
 exclude EXFAIL common/pid/tst.provregex2.ksh
 exclude EXFAIL common/pid/tst.provregex4.ksh
-
-# libproc doesn't properly handle probe sites that correspond to multiple
-# symbols.
-exclude EXFAIL common/pid/tst.weak1.d
-exclude EXFAIL common/pid/tst.weak2.d
 
 # This test checks for a leading tab on a line before #define. That is illegal
 # on Solaris, but the clang pre-processor on FreeBSD is happy with code like
@@ -191,3 +183,6 @@ exclude EXFAIL common/usdt/tst.static2.ksh
 
 # Uses the Solaris-specific ppriv(1).
 exclude EXFAIL common/usdt/tst.user.ksh
+
+# Triggers a lock assertion by using the raise() action from a profile probe.
+exclude SKIP common/ustack/tst.spin.ksh

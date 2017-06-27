@@ -1,4 +1,5 @@
 /*-
+ * Copyright (c) 2017 Dell EMC
  * Copyright (c) 2000, 2001, 2008, 2011, David E. O'Brien
  * Copyright (c) 1998 John D. Polstra.
  * All rights reserved.
@@ -171,6 +172,7 @@ typedef struct {
 #define	ELFOSABI_AROS		15	/* Amiga Research OS */
 #define	ELFOSABI_FENIXOS	16	/* FenixOS */
 #define	ELFOSABI_CLOUDABI	17	/* Nuxi CloudABI */
+#define	ELFOSABI_ARM_AEABI	64	/* ARM EABI */
 #define	ELFOSABI_ARM		97	/* ARM */
 #define	ELFOSABI_STANDALONE	255	/* Standalone (embedded) application */
 
@@ -510,6 +512,8 @@ typedef struct {
 #define	PT_HISUNW	0x6fffffff
 #define	PT_HIOS		0x6fffffff	/* Last OS-specific. */
 #define	PT_LOPROC	0x70000000	/* First processor-specific type. */
+#define	PT_ARM_ARCHEXT	0x70000000	/* ARM arch compat information. */
+#define	PT_ARM_EXIDX	0x70000001	/* ARM exception unwind tables. */
 #define	PT_HIPROC	0x7fffffff	/* Last processor-specific type. */
 
 /* Values for p_flags. */
@@ -750,6 +754,7 @@ typedef struct {
 #define	NT_PROCSTAT_OSREL	14	/* Procstat osreldate data. */
 #define	NT_PROCSTAT_PSSTRINGS	15	/* Procstat ps_strings data. */
 #define	NT_PROCSTAT_AUXV	16	/* Procstat auxv data. */
+#define	NT_PTLWPINFO		17	/* Thread ptrace miscellaneous info. */
 #define	NT_PPC_VMX	0x100	/* PowerPC Altivec/VMX registers */
 #define	NT_X86_XSTATE	0x202	/* x86 XSAVE extended state. */
 
@@ -845,6 +850,13 @@ typedef struct {
 #define	SYMINFO_NONE		0	/* Syminfo version */
 #define	SYMINFO_CURRENT		1
 #define	SYMINFO_NUM		2
+
+/* Values for ch_type (compressed section headers). */
+#define	ELFCOMPRESS_ZLIB	1	/* ZLIB/DEFLATE */
+#define	ELFCOMPRESS_LOOS	0x60000000	/* OS-specific */
+#define	ELFCOMPRESS_HIOS	0x6fffffff
+#define	ELFCOMPRESS_LOPROC	0x70000000	/* Processor-specific */
+#define	ELFCOMPRESS_HIPROC	0x7fffffff
 
 /*
  * Relocation types.

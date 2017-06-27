@@ -168,7 +168,15 @@ ntb_link_event(device_t dev)
 	struct ntb_child **cpp = device_get_softc(dev);
 	struct ntb_child *nc;
 	struct rm_priotracker ctx_tracker;
+	enum ntb_speed speed;
+	enum ntb_width width;
 
+	if (NTB_LINK_IS_UP(dev, &speed, &width)) {
+		device_printf(dev, "Link is up (PCIe %d.x / x%d)\n",
+		    (int)speed, (int)width);
+	} else {
+		device_printf(dev, "Link is down\n");
+	}
 	for (nc = *cpp; nc != NULL; nc = nc->next) {
 		rm_rlock(&nc->ctx_lock, &ctx_tracker);
 		if (nc->ctx_ops != NULL && nc->ctx_ops->link_event != NULL)
@@ -206,7 +214,7 @@ ntb_link_enable(device_t ntb, enum ntb_speed speed, enum ntb_width width)
 	struct ntb_child **cpp = device_get_softc(device_get_parent(nc->dev));
 	struct ntb_child *nc1;
 
-	for (nc1 = *cpp; nc1 != NULL; nc1 = nc->next) {
+	for (nc1 = *cpp; nc1 != NULL; nc1 = nc1->next) {
 		if (nc1->enabled) {
 			nc->enabled = 1;
 			return (0);
@@ -226,7 +234,7 @@ ntb_link_disable(device_t ntb)
 	if (!nc->enabled)
 		return (0);
 	nc->enabled = 0;
-	for (nc1 = *cpp; nc1 != NULL; nc1 = nc->next) {
+	for (nc1 = *cpp; nc1 != NULL; nc1 = nc1->next) {
 		if (nc1->enabled)
 			return (0);
 	}

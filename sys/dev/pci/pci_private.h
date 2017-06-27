@@ -34,7 +34,7 @@
 
 /*
  * Export definitions of the pci bus so that we can more easily share
- * it with "subclass" busses.
+ * it with "subclass" buses.
  */
 DECLARE_CLASS(pci_driver);
 
@@ -158,7 +158,8 @@ struct resource *pci_alloc_multi_resource(device_t dev, device_t child,
 		    rman_res_t count, u_long num, u_int flags);
 
 int		pci_iov_attach_method(device_t bus, device_t dev,
-		    struct nvlist *pf_schema, struct nvlist *vf_schema);
+		    struct nvlist *pf_schema, struct nvlist *vf_schema,
+		    const char *name);
 int		pci_iov_detach_method(device_t bus, device_t dev);
 
 device_t	pci_create_iov_child_method(device_t bus, device_t pf,

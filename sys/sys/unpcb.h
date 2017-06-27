@@ -10,7 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -92,21 +92,10 @@ struct unpcb {
  * and is really the credentials of the connected peer.  This is used
  * to determine whether the contents should be sent to the user or
  * not.
- *
- * UNP_HAVEPCCACHED - indicates that the unp_peercred member is filled
- * in, but does *not* contain the credentials of the connected peer
- * (there may not even be a peer).  This is set in unp_listen() when
- * it fills in unp_peercred for later consumption by unp_connect().
  */
 #define UNP_HAVEPC			0x001
-#define UNP_HAVEPCCACHED		0x002
 #define	UNP_WANTCRED			0x004	/* credentials wanted */
 #define	UNP_CONNWAIT			0x008	/* connect blocks until accepted */
-
-#define	UNPGC_REF			0x1	/* unpcb has external ref. */
-#define	UNPGC_DEAD			0x2	/* unpcb might be dead. */
-#define	UNPGC_SCANNED			0x4	/* Has been scanned. */
-#define	UNPGC_IGNORE_RIGHTS		0x8	/* Attached rights are freed */
 
 /*
  * These flags are used to handle non-atomicity in connect() and bind()
@@ -115,6 +104,15 @@ struct unpcb {
  */
 #define	UNP_CONNECTING			0x010	/* Currently connecting. */
 #define	UNP_BINDING			0x020	/* Currently binding. */
+#define	UNP_NASCENT			0x040	/* Newborn child socket. */
+
+/*
+ * Flags in unp_gcflag.
+ */
+#define	UNPGC_REF			0x1	/* unpcb has external ref. */
+#define	UNPGC_DEAD			0x2	/* unpcb might be dead. */
+#define	UNPGC_SCANNED			0x4	/* Has been scanned. */
+#define	UNPGC_IGNORE_RIGHTS		0x8	/* Attached rights are freed */
 
 #define	sotounpcb(so)	((struct unpcb *)((so)->so_pcb))
 

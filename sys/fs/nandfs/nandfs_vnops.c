@@ -129,8 +129,8 @@ nandfs_reclaim(struct vop_reclaim_args *ap)
 static int
 nandfs_read(struct vop_read_args *ap)
 {
-	register struct vnode *vp = ap->a_vp;
-	register struct nandfs_node *node = VTON(vp);
+	struct vnode *vp = ap->a_vp;
+	struct nandfs_node *node = VTON(vp);
 	struct nandfs_device *nandfsdev = node->nn_nandfsdev;
 	struct uio *uio = ap->a_uio;
 	struct buf *bp;
@@ -2211,7 +2211,7 @@ nandfs_whiteout(struct vop_whiteout_args *ap)
 		/* Create a new directory whiteout */
 #ifdef INVARIANTS
 		if ((cnp->cn_flags & SAVENAME) == 0)
-			panic("ufs_whiteout: missing name");
+			panic("nandfs_whiteout: missing name");
 #endif
 		error = nandfs_add_dirent(dvp, NANDFS_WHT_INO, cnp->cn_nameptr,
 		    cnp->cn_namelen, DT_WHT);

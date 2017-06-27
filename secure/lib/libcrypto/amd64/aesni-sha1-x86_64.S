@@ -1,5 +1,5 @@
-# $FreeBSD$
-# Do not modify. This file is auto-generated from aesni-sha1-x86_64.pl.
+/* $FreeBSD$ */
+/* Do not modify. This file is auto-generated from aesni-sha1-x86_64.pl. */
 .text	
 
 
@@ -2694,6 +2694,7 @@ aesni_cbc_sha1_enc_shaext:
 	movl	240(%rcx),%r11d
 	subq	%rdi,%rsi
 	movups	(%rcx),%xmm15
+	movups	(%r8),%xmm2
 	movups	16(%rcx),%xmm0
 	leaq	112(%rcx),%rcx
 

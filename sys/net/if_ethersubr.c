@@ -10,7 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -115,8 +115,6 @@ static	void ether_reassign(struct ifnet *, struct vnet *, char *);
 #endif
 static	int ether_requestencap(struct ifnet *, struct if_encap_req *);
 
-#define	ETHER_IS_BROADCAST(addr) \
-	(bcmp(etherbroadcastaddr, (addr), ETHER_ADDR_LEN) == 0)
 
 #define senderr(e) do { error = (e); goto bad;} while (0)
 
@@ -917,6 +915,9 @@ ether_ifattach(struct ifnet *ifp, const u_int8_t *lla)
 	sdl->sdl_type = IFT_ETHER;
 	sdl->sdl_alen = ifp->if_addrlen;
 	bcopy(lla, LLADDR(sdl), ifp->if_addrlen);
+
+	if (ifp->if_hw_addr != NULL)
+		bcopy(lla, ifp->if_hw_addr, ifp->if_addrlen);
 
 	bpfattach(ifp, DLT_EN10MB, ETHER_HDR_LEN);
 	if (ng_ether_attach_p != NULL)

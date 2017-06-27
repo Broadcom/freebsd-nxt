@@ -223,6 +223,8 @@ Otherwise, the task is scheduled for enqueueing in the future,
 after the absolute value of
 .Va ticks
 is passed.
+This function returns -1 if the task is being drained.
+Otherwise, the number of pending calls is returned.
 .Pp
 The
 .Fn taskqueue_cancel
@@ -402,7 +404,7 @@ the
 .Va init
 argument to the macro is executed as a C statement,
 allowing any further initialisation to be performed
-(such as registering an interrupt handler etc.)
+(such as registering an interrupt handler, etc.).
 .Pp
 The
 .Fn TASKQUEUE_DEFINE_THREAD

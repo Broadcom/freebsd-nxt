@@ -15,7 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -291,6 +291,7 @@ typedef	struct __siginfo {
 #define TRAP_BRKPT	1	/* Process breakpoint.			*/
 #define TRAP_TRACE	2	/* Process trace trap.			*/
 #define	TRAP_DTRACE	3	/* DTrace induced trap.			*/
+#define	TRAP_CAP	4	/* Capabilities protective trap.	*/
 
 /* codes for SIGCHLD */
 #define CLD_EXITED	1	/* Child has exited			*/

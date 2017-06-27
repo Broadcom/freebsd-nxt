@@ -9,6 +9,7 @@ MK_SSP=		no
 PROG=		loader.sym
 INTERNALPROG=
 WARNS?=		3
+LOADER_NET_SUPPORT?=	yes
 
 # architecture-specific loader code
 SRCS=	autoload.c \
@@ -24,11 +25,23 @@ SRCS=	autoload.c \
 .if ${MK_ZFS} != "no"
 SRCS+=		zfs.c
 .PATH:		${.CURDIR}/../../zfs
+SRCS+=		skein.c skein_block.c
+# Do not unroll skein loops, reduce code size
+CFLAGS+=	-DSKEIN_LOOP=111
+.PATH:		${.CURDIR}/../../../crypto/skein
 
 # Disable warnings that are currently incompatible with the zfs boot code
 CWARNFLAGS.zfs.c+=	-Wno-sign-compare
 CWARNFLAGS.zfs.c+=	-Wno-array-bounds
 CWARNFLAGS.zfs.c+=	-Wno-missing-prototypes
+.endif
+
+.if defined(LOADER_NET_SUPPORT)
+CFLAGS+=	-I${.CURDIR}/../../../../lib/libstand
+.endif
+
+.if ${COMPILER_TYPE} == "gcc" && ${COMPILER_VERSION} > 40201
+CWARNFLAGS.self_reloc.c+=	-Wno-error=maybe-uninitialized
 .endif
 
 # We implement a slightly non-standard %S in that it always takes a
@@ -53,14 +66,21 @@ CFLAGS+=	-I${.CURDIR}/../../i386/libi386
 .if ${MK_ZFS} != "no"
 CFLAGS+=	-I${.CURDIR}/../../zfs
 CFLAGS+=	-I${.CURDIR}/../../../cddl/boot/zfs
+CFLAGS+=	-I${.CURDIR}/../../../crypto/skein
 CFLAGS+=	-DEFI_ZFS_BOOT
 .endif
 CFLAGS+=	-DNO_PCI -DEFI
 
-# make buildenv doesn't set DESTDIR, this means LIBSTAND
-# will be wrong when crossbuilding.
-.if exists(${.OBJDIR}/../../../../lib/libstand/libstand.a)
-LIBSTAND=	${.OBJDIR}/../../../../lib/libstand/libstand.a
+.if !defined(BOOT_HIDE_SERIAL_NUMBERS)
+# Export serial numbers, UUID, and asset tag from loader.
+CFLAGS+= -DSMBIOS_SERIAL_NUMBERS
+.if defined(BOOT_LITTLE_ENDIAN_UUID)
+# Use little-endian UUID format as defined in SMBIOS 2.6.
+CFLAGS+= -DSMBIOS_LITTLE_ENDIAN_UUID
+.elif defined(BOOT_NETWORK_ENDIAN_UUID)
+# Use network-endian UUID format for backward compatibility.
+CFLAGS+= -DSMBIOS_NETWORK_ENDIAN_UUID
+.endif
 .endif
 
 .if ${MK_FORTH} != "no"
@@ -98,12 +118,9 @@ FILESMODE_loader.efi=	${BINMODE}
 LDSCRIPT=	${.CURDIR}/arch/${MACHINE}/ldscript.${MACHINE}
 LDFLAGS+=	-Wl,-T${LDSCRIPT} -Wl,-Bsymbolic -shared
 
-CLEANFILES+=	vers.c loader.efi
+CLEANFILES+=	loader.efi
 
 NEWVERSWHAT=	"EFI loader" ${MACHINE}
-
-vers.c:	${.CURDIR}/../../common/newvers.sh ${.CURDIR}/../../efi/loader/version
-	sh ${.CURDIR}/../../common/newvers.sh ${.CURDIR}/version ${NEWVERSWHAT}
 
 NM?=		nm
 OBJCOPY?=	objcopy
@@ -116,14 +133,19 @@ EFI_TARGET=	efi-app-ia32
 EFI_TARGET=	binary
 .endif
 
+# Arbitrarily set the PE/COFF header timestamps to 1 Jan 2016 00:00:00
+# for build reproducibility.
+SOURCE_DATE_EPOCH?=1451606400
 loader.efi: ${PROG}
 	if ${NM} ${.ALLSRC} | grep ' U '; then \
 		echo "Undefined symbols in ${.ALLSRC}"; \
 		exit 1; \
 	fi
+	SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
 	${OBJCOPY} -j .peheader -j .text -j .sdata -j .data \
 		-j .dynamic -j .dynsym -j .rel.dyn \
 		-j .rela.dyn -j .reloc -j .eh_frame -j set_Xcommand_set \
+		-j set_Xficl_compile_set \
 		--output-target=${EFI_TARGET} ${.ALLSRC} ${.TARGET}
 
 LIBEFI=		${.OBJDIR}/../libefi/libefi.a

@@ -39,16 +39,6 @@
 #include "i40e_prototype.h"
 
 /**
- * i40e_is_nvm_update_op - return TRUE if this is an NVM update operation
- * @desc: API request descriptor
- **/
-static INLINE bool i40e_is_nvm_update_op(struct i40e_aq_desc *desc)
-{
-	return (desc->opcode == CPU_TO_LE16(i40e_aqc_opc_nvm_erase)) ||
-		(desc->opcode == CPU_TO_LE16(i40e_aqc_opc_nvm_update));
-}
-
-/**
  *  i40e_adminq_init_regs - Initialize AdminQ registers
  *  @hw: pointer to the hardware structure
  *
@@ -661,13 +651,9 @@ enum i40e_status_code i40e_init_adminq(struct i40e_hw *hw)
 
 	/* pre-emptive resource lock release */
 	i40e_aq_release_resource(hw, I40E_NVM_RESOURCE_ID, 0, NULL);
-	hw->aq.nvm_release_on_done = FALSE;
+	hw->nvm_release_on_done = FALSE;
 	hw->nvmupd_state = I40E_NVMUPD_STATE_INIT;
 
-	ret_code = i40e_aq_set_hmc_resource_profile(hw,
-						    I40E_HMC_PROFILE_DEFAULT,
-						    0,
-						    NULL);
 	ret_code = I40E_SUCCESS;
 
 	/* success! */
@@ -1034,11 +1020,11 @@ enum i40e_status_code i40e_clean_arq_element(struct i40e_hw *hw,
 	desc = I40E_ADMINQ_DESC(hw->aq.arq, ntc);
 	desc_idx = ntc;
 
+	hw->aq.arq_last_status =
+		(enum i40e_admin_queue_err)LE16_TO_CPU(desc->retval);
 	flags = LE16_TO_CPU(desc->flags);
 	if (flags & I40E_AQ_FLAG_ERR) {
 		ret_code = I40E_ERR_ADMIN_QUEUE_ERROR;
-		hw->aq.arq_last_status =
-			(enum i40e_admin_queue_err)LE16_TO_CPU(desc->retval);
 		i40e_debug(hw,
 			   I40E_DEBUG_AQ_MESSAGE,
 			   "AQRX: Event received with error 0x%X.\n",
@@ -1081,26 +1067,7 @@ enum i40e_status_code i40e_clean_arq_element(struct i40e_hw *hw,
 	hw->aq.arq.next_to_clean = ntc;
 	hw->aq.arq.next_to_use = ntu;
 
-	if (i40e_is_nvm_update_op(&e->desc)) {
-		if (hw->aq.nvm_release_on_done) {
-			i40e_release_nvm(hw);
-			hw->aq.nvm_release_on_done = FALSE;
-		}
-
-		switch (hw->nvmupd_state) {
-		case I40E_NVMUPD_STATE_INIT_WAIT:
-			hw->nvmupd_state = I40E_NVMUPD_STATE_INIT;
-			break;
-
-		case I40E_NVMUPD_STATE_WRITE_WAIT:
-			hw->nvmupd_state = I40E_NVMUPD_STATE_WRITING;
-			break;
-
-		default:
-			break;
-		}
-	}
-
+	i40e_nvmupd_check_wait_event(hw, LE16_TO_CPU(e->desc.opcode));
 clean_arq_element_out:
 	/* Set pending if needed, unlock and return */
 	if (pending != NULL)

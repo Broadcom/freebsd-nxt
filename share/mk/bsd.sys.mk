@@ -78,6 +78,9 @@ CWARNFLAGS.clang+=	-Wno-tautological-compare -Wno-unused-value\
 .if ${COMPILER_TYPE} == "clang" && ${COMPILER_VERSION} >= 30600
 CWARNFLAGS.clang+=	-Wno-unused-local-typedef
 .endif
+.if ${COMPILER_TYPE} == "clang" && ${COMPILER_VERSION} >= 40000
+CWARNFLAGS.clang+=	-Wno-address-of-packed-member
+.endif
 .endif # WARNS <= 3
 .if ${WARNS} <= 2
 CWARNFLAGS.clang+=	-Wno-switch -Wno-switch-enum -Wno-knr-promoted-parameter
@@ -126,6 +129,11 @@ CWARNFLAGS+=	-Wno-error=address			\
 		-Wno-error=unused-but-set-variable	\
 		-Wno-error=unused-function		\
 		-Wno-error=unused-value
+.endif
+
+# GCC 5.3.0
+.if ${COMPILER_TYPE} == "gcc" && ${COMPILER_VERSION} >= 50300
+CWARNFLAGS+=	-Wno-error=strict-overflow
 .endif
 
 # GCC 6.1.0
@@ -204,7 +212,7 @@ CXXFLAGS+=	${CXXFLAGS.${.IMPSRC:T}}
 
 .if defined(SRCTOP)
 # Prevent rebuilding during install to support read-only objdirs.
-.if !make(all) && make(install) && empty(.MAKE.MODE:Mmeta)
+.if ${.TARGETS:M*install*} == ${.TARGETS} && empty(.MAKE.MODE:Mmeta)
 CFLAGS+=	ERROR-tried-to-rebuild-during-make-install
 .endif
 .endif

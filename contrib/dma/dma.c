@@ -47,6 +47,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <libgen.h>
 #include <paths.h>
 #include <pwd.h>
 #include <signal.h>
@@ -321,7 +322,7 @@ deliver(struct qitem *it)
 	snprintf(errmsg, sizeof(errmsg), "unknown bounce reason");
 
 retry:
-	syslog(LOG_INFO, "trying delivery");
+	syslog(LOG_INFO, "<%s> trying delivery", it->addr);
 
 	if (it->remote)
 		error = deliver_remote(it);
@@ -331,7 +332,7 @@ retry:
 	switch (error) {
 	case 0:
 		delqueue(it);
-		syslog(LOG_INFO, "delivery successful");
+		syslog(LOG_INFO, "<%s> delivery successful", it->addr);
 		exit(EX_OK);
 
 	case 1:
@@ -457,7 +458,7 @@ main(int argc, char **argv)
 	bzero(&queue, sizeof(queue));
 	LIST_INIT(&queue.queue);
 
-	if (strcmp(argv[0], "mailq") == 0) {
+	if (strcmp(basename(argv[0]), "mailq") == 0) {
 		argv++; argc--;
 		showq = 1;
 		if (argc != 0)

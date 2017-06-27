@@ -100,9 +100,6 @@ cloudabi_sys_fd_create1(struct thread *td,
     struct cloudabi_sys_fd_create1_args *uap)
 {
 	struct filecaps fcaps = {};
-	struct socket_args socket_args = {
-		.domain = AF_UNIX,
-	};
 
 	switch (uap->type) {
 	case CLOUDABI_FILETYPE_POLL:
@@ -113,14 +110,11 @@ cloudabi_sys_fd_create1(struct thread *td,
 		    CAP_MMAP_RWX);
 		return (kern_shm_open(td, SHM_ANON, O_RDWR, 0, &fcaps));
 	case CLOUDABI_FILETYPE_SOCKET_DGRAM:
-		socket_args.type = SOCK_DGRAM;
-		return (sys_socket(td, &socket_args));
+		return (kern_socket(td, AF_UNIX, SOCK_DGRAM, 0));
 	case CLOUDABI_FILETYPE_SOCKET_SEQPACKET:
-		socket_args.type = SOCK_SEQPACKET;
-		return (sys_socket(td, &socket_args));
+		return (kern_socket(td, AF_UNIX, SOCK_SEQPACKET, 0));
 	case CLOUDABI_FILETYPE_SOCKET_STREAM:
-		socket_args.type = SOCK_STREAM;
-		return (sys_socket(td, &socket_args));
+		return (kern_socket(td, AF_UNIX, SOCK_STREAM, 0));
 	default:
 		return (EINVAL);
 	}
@@ -172,12 +166,8 @@ int
 cloudabi_sys_fd_datasync(struct thread *td,
     struct cloudabi_sys_fd_datasync_args *uap)
 {
-	struct fsync_args fsync_args = {
-		.fd = uap->fd
-	};
 
-	/* Call into fsync(), as FreeBSD lacks fdatasync(). */
-	return (sys_fsync(td, &fsync_args));
+	return (kern_fsync(td, uap->fd, false));
 }
 
 int
@@ -213,26 +203,23 @@ cloudabi_sys_fd_replace(struct thread *td,
 int
 cloudabi_sys_fd_seek(struct thread *td, struct cloudabi_sys_fd_seek_args *uap)
 {
-	struct lseek_args lseek_args = {
-		.fd	= uap->fd,
-		.offset	= uap->offset
-	};
+	int whence;
 
 	switch (uap->whence) {
 	case CLOUDABI_WHENCE_CUR:
-		lseek_args.whence = SEEK_CUR;
+		whence = SEEK_CUR;
 		break;
 	case CLOUDABI_WHENCE_END:
-		lseek_args.whence = SEEK_END;
+		whence = SEEK_END;
 		break;
 	case CLOUDABI_WHENCE_SET:
-		lseek_args.whence = SEEK_SET;
+		whence = SEEK_SET;
 		break;
 	default:
 		return (EINVAL);
 	}
 
-	return (sys_lseek(td, &lseek_args));
+	return (kern_lseek(td, uap->fd, uap->offset, whence));
 }
 
 /* Converts a file descriptor to a CloudABI file descriptor type. */
@@ -460,32 +447,19 @@ cloudabi_sys_fd_stat_get(struct thread *td,
     struct cloudabi_sys_fd_stat_get_args *uap)
 {
 	cloudabi_fdstat_t fsb = {};
-	struct filedesc *fdp;
 	struct file *fp;
-	seq_t seq;
 	cap_rights_t rights;
+	struct filecaps fcaps;
 	int error, oflags;
-	bool modified;
 
 	/* Obtain file descriptor properties. */
-	fdp = td->td_proc->p_fd;
-	do {
-		error = fget_unlocked(fdp, uap->fd, cap_rights_init(&rights),
-		    &fp, &seq);
-		if (error != 0)
-			return (error);
-		if (fp->f_ops == &badfileops) {
-			fdrop(fp, td);
-			return (EBADF);
-		}
-
-		rights = *cap_rights(fdp, uap->fd);
-		oflags = OFLAGS(fp->f_flag);
-		fsb.fs_filetype = cloudabi_convert_filetype(fp);
-
-		modified = fd_modified(fdp, uap->fd, seq);
-		fdrop(fp, td);
-	} while (modified);
+	error = fget_cap(td, uap->fd, cap_rights_init(&rights), &fp,
+	    &fcaps);
+	if (error != 0)
+		return (error);
+	oflags = OFLAGS(fp->f_flag);
+	fsb.fs_filetype = cloudabi_convert_filetype(fp);
+	fdrop(fp, td);
 
 	/* Convert file descriptor flags. */
 	if (oflags & O_APPEND)
@@ -496,8 +470,9 @@ cloudabi_sys_fd_stat_get(struct thread *td,
 		fsb.fs_flags |= CLOUDABI_FDFLAG_SYNC;
 
 	/* Convert capabilities to CloudABI rights. */
-	convert_capabilities(&rights, fsb.fs_filetype,
+	convert_capabilities(&fcaps.fc_rights, fsb.fs_filetype,
 	    &fsb.fs_rights_base, &fsb.fs_rights_inheriting);
+	filecaps_free(&fcaps);
 	return (copyout(&fsb, (void *)uap->buf, sizeof(fsb)));
 }
 
@@ -557,9 +532,6 @@ cloudabi_sys_fd_stat_put(struct thread *td,
 int
 cloudabi_sys_fd_sync(struct thread *td, struct cloudabi_sys_fd_sync_args *uap)
 {
-	struct fsync_args fsync_args = {
-		.fd = uap->fd
-	};
 
-	return (sys_fsync(td, &fsync_args));
+	return (kern_fsync(td, uap->fd, true));
 }

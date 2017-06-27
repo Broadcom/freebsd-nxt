@@ -14,7 +14,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -56,14 +56,16 @@ static const char sccsid[] = "@(#)misc.c	8.1 (Berkeley) 6/6/93";
  * the buffer).
  */
 char *
-strregerror(int errcode, const regex_t *preg)
+strregerror(int errcode, regex_t *preg)
 {
 	static char *oe;
 	size_t s;
 
+	if (oe != NULL)
+		free(oe);
 	s = regerror(errcode, preg, NULL, 0);
-	if ((oe = realloc(oe, s)) == NULL)
-		err(1, "realloc");
+	if ((oe = malloc(s)) == NULL)
+		err(1, "malloc");
 	(void)regerror(errcode, preg, oe, s);
 	return (oe);
 }

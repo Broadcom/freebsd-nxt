@@ -13,7 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -62,6 +62,7 @@ extern struct nfsclienthashhead *nfsclienthash;
 extern struct nfslockhashhead *nfslockhash;
 extern struct nfssessionhash *nfssessionhash;
 extern int nfsrv_sessionhashsize;
+extern struct nfsstatsv1 nfsstatsv1;
 struct vfsoptlist nfsv4root_opt, nfsv4root_newopt;
 NFSDLOCKMUTEX;
 struct nfsrchash_bucket nfsrchash_table[NFSRVCACHE_HASHSIZE];
@@ -86,6 +87,7 @@ static int nfs_commit_miss;
 extern int nfsrv_issuedelegs;
 extern int nfsrv_dolocallocks;
 extern int nfsd_enable_stringtouid;
+extern int nfsd_enable_uidtostring;
 
 SYSCTL_NODE(_vfs, OID_AUTO, nfsd, CTLFLAG_RW, 0, "NFS server");
 SYSCTL_INT(_vfs_nfsd, OID_AUTO, mirrormnt, CTLFLAG_RW,
@@ -102,6 +104,8 @@ SYSCTL_INT(_vfs_nfsd, OID_AUTO, debuglevel, CTLFLAG_RW, &nfsd_debuglevel,
     0, "Debug level for NFS server");
 SYSCTL_INT(_vfs_nfsd, OID_AUTO, enable_stringtouid, CTLFLAG_RW,
     &nfsd_enable_stringtouid, 0, "Enable nfsd to accept numeric owner_names");
+SYSCTL_INT(_vfs_nfsd, OID_AUTO, enable_uidtostring, CTLFLAG_RW,
+    &nfsd_enable_uidtostring, 0, "Make nfsd always send numeric owner_names");
 
 #define	MAX_REORDERED_RPC	16
 #define	NUM_HEURISTIC		1031
@@ -349,7 +353,7 @@ nfsvno_namei(struct nfsrv_descript *nd, struct nameidata *ndp,
 
 	*retdirp = NULL;
 	cnp->cn_nameptr = cnp->cn_pnbuf;
-	ndp->ni_strictrelative = 0;
+	ndp->ni_lcf = 0;
 	/*
 	 * Extract and set starting directory.
 	 */
@@ -686,6 +690,8 @@ nfsvno_read(struct vnode *vp, off_t off, int cnt, struct ucred *cred,
 	uiop->uio_td = NULL;
 	nh = nfsrv_sequential_heuristic(uiop, vp);
 	ioflag |= nh->nh_seqcount << IO_SEQSHIFT;
+	/* XXX KDM make this more systematic? */
+	nfsstatsv1.srvbytes[NFSV4OP_READ] += uiop->uio_resid;
 	error = VOP_READ(vp, uiop, IO_NODELOCKED | ioflag, cred);
 	FREE((caddr_t)iv2, M_TEMP);
 	if (error) {
@@ -758,6 +764,8 @@ nfsvno_write(struct vnode *vp, off_t off, int retlen, int cnt, int stable,
 	uiop->uio_offset = off;
 	nh = nfsrv_sequential_heuristic(uiop, vp);
 	ioflags |= nh->nh_seqcount << IO_SEQSHIFT;
+	/* XXX KDM make this more systematic? */
+	nfsstatsv1.srvbytes[NFSV4OP_WRITE] += uiop->uio_resid;
 	error = VOP_WRITE(vp, uiop, ioflags, cred);
 	if (error == 0)
 		nh->nh_nextoff = uiop->uio_offset;
@@ -1431,7 +1439,9 @@ nfsvno_open(struct nfsrv_descript *nd, struct nameidata *ndp,
 						vput(ndp->ni_vp);
 						ndp->ni_vp = NULL;
 						nd->nd_repstat = NFSERR_NOTSUPP;
-					}
+					} else
+						NFSSETBIT_ATTRBIT(attrbitp,
+						    NFSATTRBIT_TIMEACCESS);
 				} else {
 					nfsrv_fixattr(nd, ndp->ni_vp, nvap,
 					    aclp, p, attrbitp, exp);

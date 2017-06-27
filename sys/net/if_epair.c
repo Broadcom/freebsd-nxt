@@ -402,8 +402,8 @@ epair_start_locked(struct ifnet *ifp)
 		return;
 
 	/*
-	 * We get patckets here from ether_output via if_handoff()
-	 * and ned to put them into the input queue of the oifp
+	 * We get packets here from ether_output via if_handoff()
+	 * and need to put them into the input queue of the oifp
 	 * and call oifp->if_input() via netisr/epair_sintr().
 	 */
 	oifp = sc->oifp;
@@ -807,9 +807,9 @@ epair_clone_create(struct if_clone *ifc, char *name, size_t len, caddr_t params)
 	 * cache locality but we can at least allow parallelism.
 	 */
 	sca->cpuid =
-	    netisr_get_cpuid(sca->ifp->if_index % netisr_get_cpucount());
+	    netisr_get_cpuid(sca->ifp->if_index);
 	scb->cpuid =
-	    netisr_get_cpuid(scb->ifp->if_index % netisr_get_cpucount());
+	    netisr_get_cpuid(scb->ifp->if_index);
 
 	/* Initialise pseudo media types. */
 	ifmedia_init(&sca->media, 0, epair_media_change, epair_media_status);
@@ -831,7 +831,8 @@ epair_clone_create(struct if_clone *ifc, char *name, size_t len, caddr_t params)
 	ifp->if_start = epair_start;
 	ifp->if_ioctl = epair_ioctl;
 	ifp->if_init  = epair_init;
-	ifp->if_snd.ifq_maxlen = ifqmaxlen;
+	if_setsendqlen(ifp, ifqmaxlen);
+	if_setsendqready(ifp);
 	/* Assign a hopefully unique, locally administered etheraddr. */
 	eaddr[0] = 0x02;
 	eaddr[3] = (ifp->if_index >> 8) & 0xff;
@@ -857,7 +858,8 @@ epair_clone_create(struct if_clone *ifc, char *name, size_t len, caddr_t params)
 	ifp->if_start = epair_start;
 	ifp->if_ioctl = epair_ioctl;
 	ifp->if_init  = epair_init;
-	ifp->if_snd.ifq_maxlen = ifqmaxlen;
+	if_setsendqlen(ifp, ifqmaxlen);
+	if_setsendqready(ifp);
 	/* We need to play some tricks here for the second interface. */
 	strlcpy(name, epairname, len);
 	error = if_clone_create(name, len, (caddr_t)scb);

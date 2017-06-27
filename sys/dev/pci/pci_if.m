@@ -60,6 +60,11 @@ HEADER {
 	    PCI_ID_RID,
 	    PCI_ID_MSI,
 	};
+
+	enum pci_feature {
+	    PCI_FEATURE_HP,		/* Hot Plug feature */
+	    PCI_FEATURE_AER,		/* Advanced Error Reporting */
+	};
 }
 
 
@@ -235,6 +240,7 @@ METHOD int iov_attach {
 	device_t	child;
 	struct nvlist	*pf_schema;
 	struct nvlist	*vf_schema;
+	const char	*name;
 };
 
 METHOD int iov_detach {

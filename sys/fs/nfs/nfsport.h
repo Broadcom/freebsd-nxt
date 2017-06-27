@@ -13,7 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -55,6 +55,7 @@
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/mount.h>
+#include <sys/mutex.h>
 #include <sys/namei.h>
 #include <sys/proc.h>
 #include <sys/protosw.h>
@@ -254,24 +255,26 @@
 
 /*
  * Must be one more than last op#.
+ * NFSv4.2 isn't implemented yet, but define the op# limit for it.
  */
 #define	NFSV41_NOPS		59
+#define	NFSV42_NOPS		72
 
 /* Quirky case if the illegal op code */
 #define	NFSV4OP_OPILLEGAL	10044
 
 /*
- * Fake NFSV4OP_xxx used for nfsstat. Start at NFSV4OP_NOPS.
+ * Fake NFSV4OP_xxx used for nfsstat. Start at NFSV42_NOPS.
  */
-#define	NFSV4OP_SYMLINK		(NFSV4OP_NOPS)
-#define	NFSV4OP_MKDIR		(NFSV4OP_NOPS + 1)
-#define	NFSV4OP_RMDIR		(NFSV4OP_NOPS + 2)
-#define	NFSV4OP_READDIRPLUS	(NFSV4OP_NOPS + 3)
-#define	NFSV4OP_MKNOD		(NFSV4OP_NOPS + 4)
-#define	NFSV4OP_FSSTAT		(NFSV4OP_NOPS + 5)
-#define	NFSV4OP_FSINFO		(NFSV4OP_NOPS + 6)
-#define	NFSV4OP_PATHCONF	(NFSV4OP_NOPS + 7)
-#define	NFSV4OP_V3CREATE	(NFSV4OP_NOPS + 8)
+#define	NFSV4OP_SYMLINK		(NFSV42_NOPS)
+#define	NFSV4OP_MKDIR		(NFSV42_NOPS + 1)
+#define	NFSV4OP_RMDIR		(NFSV42_NOPS + 2)
+#define	NFSV4OP_READDIRPLUS	(NFSV42_NOPS + 3)
+#define	NFSV4OP_MKNOD		(NFSV42_NOPS + 4)
+#define	NFSV4OP_FSSTAT		(NFSV42_NOPS + 5)
+#define	NFSV4OP_FSINFO		(NFSV42_NOPS + 6)
+#define	NFSV4OP_PATHCONF	(NFSV42_NOPS + 7)
+#define	NFSV4OP_V3CREATE	(NFSV42_NOPS + 8)
 
 /*
  * This is the count of the fake operations listed above.
@@ -285,12 +288,12 @@
 #define	NFSV4OP_CBRECALL	4
 
 /*
- * Must be one greater than the last Callback Operation#.
+ * Must be one greater than the last Callback Operation# for NFSv4.0.
  */
 #define	NFSV4OP_CBNOPS		5
 
 /*
- * Additional Callback Ops for NFSv4.1 only. Not yet in nfsstats.
+ * Additional Callback Ops for NFSv4.1 only.
  */
 #define	NFSV4OP_CBLAYOUTRECALL	5
 #define	NFSV4OP_CBNOTIFY	6
@@ -302,6 +305,9 @@
 #define	NFSV4OP_CBWANTCANCELLED	12
 #define	NFSV4OP_CBNOTIFYLOCK	13
 #define	NFSV4OP_CBNOTIFYDEVID	14
+
+#define	NFSV41_CBNOPS		15
+#define	NFSV42_CBNOPS		16
 
 /*
  * The lower numbers -> 21 are used by NFSv2 and v3. These define higher
@@ -351,16 +357,83 @@
 #define	NFSPROC_WRITEDS		51
 #define	NFSPROC_READDS		52
 #define	NFSPROC_COMMITDS	53
+#define	NFSPROC_OPENLAYGET	54
+#define	NFSPROC_CREATELAYGET	55
 
 /*
  * Must be defined as one higher than the last NFSv4.1 Proc# above.
  */
-#define	NFSV41_NPROCS		54
+#define	NFSV41_NPROCS		56
 
 #endif	/* NFS_V3NPROCS */
 
 /*
- * Stats structure
+ * New stats structure.
+ * The vers field will be set to NFSSTATS_V1 by the caller.
+ */
+#define	NFSSTATS_V1	1
+struct nfsstatsv1 {
+	int		vers;	/* Set to version requested by caller. */
+	uint64_t	attrcache_hits;
+	uint64_t	attrcache_misses;
+	uint64_t	lookupcache_hits;
+	uint64_t	lookupcache_misses;
+	uint64_t	direofcache_hits;
+	uint64_t	direofcache_misses;
+	uint64_t	accesscache_hits;
+	uint64_t	accesscache_misses;
+	uint64_t	biocache_reads;
+	uint64_t	read_bios;
+	uint64_t	read_physios;
+	uint64_t	biocache_writes;
+	uint64_t	write_bios;
+	uint64_t	write_physios;
+	uint64_t	biocache_readlinks;
+	uint64_t	readlink_bios;
+	uint64_t	biocache_readdirs;
+	uint64_t	readdir_bios;
+	uint64_t	rpccnt[NFSV41_NPROCS + 13];
+	uint64_t	rpcretries;
+	uint64_t	srvrpccnt[NFSV42_NOPS + NFSV4OP_FAKENOPS];
+	uint64_t	srvrpc_errs;
+	uint64_t	srv_errs;
+	uint64_t	rpcrequests;
+	uint64_t	rpctimeouts;
+	uint64_t	rpcunexpected;
+	uint64_t	rpcinvalid;
+	uint64_t	srvcache_inproghits;
+	uint64_t	srvcache_idemdonehits;
+	uint64_t	srvcache_nonidemdonehits;
+	uint64_t	srvcache_misses;
+	uint64_t	srvcache_tcppeak;
+	int		srvcache_size;	/* Updated by atomic_xx_int(). */
+	uint64_t	srvclients;
+	uint64_t	srvopenowners;
+	uint64_t	srvopens;
+	uint64_t	srvlockowners;
+	uint64_t	srvlocks;
+	uint64_t	srvdelegates;
+	uint64_t	cbrpccnt[NFSV42_CBNOPS];
+	uint64_t	clopenowners;
+	uint64_t	clopens;
+	uint64_t	cllockowners;
+	uint64_t	cllocks;
+	uint64_t	cldelegates;
+	uint64_t	cllocalopenowners;
+	uint64_t	cllocalopens;
+	uint64_t	cllocallockowners;
+	uint64_t	cllocallocks;
+	uint64_t	srvstartcnt;
+	uint64_t	srvdonecnt;
+	uint64_t	srvbytes[NFSV42_NOPS + NFSV4OP_FAKENOPS];
+	uint64_t	srvops[NFSV42_NOPS + NFSV4OP_FAKENOPS];
+	struct bintime	srvduration[NFSV42_NOPS + NFSV4OP_FAKENOPS];
+	struct bintime	busyfrom;
+	struct bintime	busytime;
+};
+
+/*
+ * Old stats structure.
  */
 struct ext_nfsstats {
 	int	attrcache_hits;
@@ -416,11 +489,6 @@ struct ext_nfsstats {
 
 #ifdef _KERNEL
 /*
- * Define the ext_nfsstats as nfsstats for the kernel code.
- */
-#define nfsstats	ext_nfsstats
-
-/*
  * Define NFS_NPROCS as NFSV4_NPROCS for the experimental kernel code.
  */
 #ifndef	NFS_NPROCS
@@ -452,7 +520,7 @@ struct nfs_vattr {
 struct nfsvattr {
 	struct vattr	na_vattr;
 	nfsattrbit_t	na_suppattr;
-	u_int32_t	na_mntonfileno;
+	u_int64_t	na_mntonfileno;
 	u_int64_t	na_filesid[2];
 };
 
@@ -664,12 +732,6 @@ int nfsmsleep(void *, void *, int, const char *, struct timespec *);
 #define	NFSMINOR(d)		minor(d)
 
 /*
- * Define this to be the macro that returns the minimum size required
- * for a directory entry.
- */
-#define	DIRENT_SIZE(dp)		GENERIC_DIRSIZ(dp)
-
-/*
  * The vnode tag for nfsv4root.
  */
 #define	VT_NFSV4ROOT		"nfsv4root"
@@ -833,6 +895,7 @@ int newnfs_realign(struct mbuf **, int);
  */
 #define	NFSSTA_HASWRITEVERF	0x00040000  /* Has write verifier */
 #define	NFSSTA_GOTFSINFO	0x00100000  /* Got the fsinfo */
+#define	NFSSTA_OPENMODE		0x00200000  /* Must use correct open mode */
 #define	NFSSTA_NOLAYOUTCOMMIT	0x04000000  /* Don't do LayoutCommit */
 #define	NFSSTA_SESSPERSIST	0x08000000  /* Has a persistent session */
 #define	NFSSTA_TIMEO		0x10000000  /* Experiencing a timeout */
@@ -863,6 +926,9 @@ int newnfs_realign(struct mbuf **, int);
 #define	NFSHASNOLAYOUTCOMMIT(n)	((n)->nm_state & NFSSTA_NOLAYOUTCOMMIT)
 #define	NFSHASSESSPERSIST(n)	((n)->nm_state & NFSSTA_SESSPERSIST)
 #define	NFSHASPNFS(n)		((n)->nm_state & NFSSTA_PNFS)
+#define	NFSHASOPENMODE(n)	((n)->nm_state & NFSSTA_OPENMODE)
+#define	NFSHASONEOPENOWN(n)	(((n)->nm_flag & NFSMNT_ONEOPENOWN) != 0 &&	\
+				    (n)->nm_minorvers > 0)
 
 /*
  * Gets the stats field out of the mount structure.
@@ -952,7 +1018,7 @@ struct nfsreq {
 };
 
 #ifndef NFS_MAXBSIZE
-#define	NFS_MAXBSIZE	MAXBCACHEBUF
+#define	NFS_MAXBSIZE	(maxbcachebuf)
 #endif
 
 /*

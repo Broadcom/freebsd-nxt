@@ -744,6 +744,9 @@ struct ccb_scsiio {
 #define		CAM_TAG_ACTION_NONE	0x00
 	u_int	   tag_id;		/* tag id from initator (target mode) */
 	u_int	   init_id;		/* initiator id of who selected */
+#if defined(BUF_TRACKING) || defined(FULL_BUF_TRACKING)
+	struct bio *bio;		/* Associated bio */
+#endif
 };
 
 static __inline uint8_t *
@@ -780,6 +783,13 @@ struct ccb_accept_tio {
 	u_int      init_id;		/* initiator id of who selected */
 	struct     scsi_sense_data sense_data;
 };
+
+static __inline uint8_t *
+atio_cdb_ptr(struct ccb_accept_tio *ccb)
+{
+	return ((ccb->ccb_h.flags & CAM_CDB_POINTER) ?
+	    ccb->cdb_io.cdb_ptr : ccb->cdb_io.cdb_bytes);
+}
 
 /* Release SIM Queue */
 struct ccb_relsim {
@@ -1335,6 +1345,9 @@ cam_fill_csio(struct ccb_scsiio *csio, u_int32_t retries,
 	csio->sense_len = sense_len;
 	csio->cdb_len = cdb_len;
 	csio->tag_action = tag_action;
+#if defined(BUF_TRACKING) || defined(FULL_BUF_TRACKING)
+	csio->bio = NULL;
+#endif
 }
 
 static __inline void

@@ -20,7 +20,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -468,10 +468,11 @@ copyout_map(struct thread *td, vm_offset_t *addr, size_t sz)
 
 	/* round size up to page boundary */
 	size = (vm_size_t)round_page(sz);
-
-	error = vm_mmap(&vms->vm_map, addr, size, VM_PROT_READ | VM_PROT_WRITE,
-	    VM_PROT_ALL, MAP_PRIVATE | MAP_ANON, OBJT_DEFAULT, NULL, 0);
-
+	if (size == 0)
+		return (EINVAL);
+	error = vm_mmap_object(&vms->vm_map, addr, size, VM_PROT_READ |
+	    VM_PROT_WRITE, VM_PROT_ALL, MAP_PRIVATE | MAP_ANON, NULL, 0,
+	    FALSE, td);
 	return (error);
 }
 
@@ -532,7 +533,7 @@ fueword32(volatile const void *base, int32_t *val)
 int
 fueword64(volatile const void *base, int64_t *val)
 {
-	int32_t res;
+	int64_t res;
 
 	res = fuword64(base);
 	if (res == -1)

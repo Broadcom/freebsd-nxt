@@ -352,24 +352,24 @@ ipfw_nptv6(struct ip_fw_chain *chain, struct ip_fw_args *args,
 	int ret;
 
 	*done = 0; /* try next rule if not matched */
+	ret = IP_FW_DENY;
 	icmd = cmd + 1;
 	if (cmd->opcode != O_EXTERNAL_ACTION ||
 	    cmd->arg1 != V_nptv6_eid ||
 	    icmd->opcode != O_EXTERNAL_INSTANCE ||
 	    (cfg = NPTV6_LOOKUP(chain, icmd)) == NULL)
-		return (0);
+		return (ret);
 	/*
 	 * We need act as router, so when forwarding is disabled -
 	 * do nothing.
 	 */
 	if (V_ip6_forwarding == 0 || args->f_id.addr_type != 6)
-		return (0);
+		return (ret);
 	/*
 	 * NOTE: we expect ipfw_chk() did m_pullup() up to upper level
 	 * protocol's headers. Also we skip some checks, that ip6_input(),
 	 * ip6_forward(), ip6_fastfwd() and ipfw_chk() already did.
 	 */
-	ret = IP_FW_DENY;
 	ip6 = mtod(args->m, struct ip6_hdr *);
 	NPTV6_IPDEBUG("eid %u, oid %u, %s -> %s %d",
 	    cmd->arg1, icmd->arg1,
@@ -384,15 +384,15 @@ ipfw_nptv6(struct ip_fw_chain *chain, struct ip_fw_args *args,
 		 */
 		if (IN6_ARE_MASKED_ADDR_EQUAL(&ip6->ip6_dst,
 		    &cfg->internal, &cfg->mask))
-			return (0);
+			return (ret);
 		ret = nptv6_rewrite_internal(cfg, &args->m, 0);
 	} else if (IN6_ARE_MASKED_ADDR_EQUAL(&ip6->ip6_dst,
 	    &cfg->external, &cfg->mask))
 		ret = nptv6_rewrite_external(cfg, &args->m, 0);
 	else
-		return (0);
+		return (ret);
 	/*
-	 * If address wasn't rewrited - free mbuf.
+	 * If address wasn't rewrited - free mbuf and terminate the search.
 	 */
 	if (ret != 0) {
 		if (args->m != NULL) {
@@ -400,14 +400,16 @@ ipfw_nptv6(struct ip_fw_chain *chain, struct ip_fw_args *args,
 			args->m = NULL; /* mark mbuf as consumed */
 		}
 		NPTV6STAT_INC(cfg, dropped);
-	}
-	/* Terminate the search if one_pass is set */
-	*done = V_fw_one_pass;
-	/* Update args->f_id when one_pass is off */
-	if (*done == 0 && ret == 0) {
-		ip6 = mtod(args->m, struct ip6_hdr *);
-		args->f_id.src_ip6 = ip6->ip6_src;
-		args->f_id.dst_ip6 = ip6->ip6_dst;
+		*done = 1;
+	} else {
+		/* Terminate the search if one_pass is set */
+		*done = V_fw_one_pass;
+		/* Update args->f_id when one_pass is off */
+		if (*done == 0) {
+			ip6 = mtod(args->m, struct ip6_hdr *);
+			args->f_id.src_ip6 = ip6->ip6_src;
+			args->f_id.dst_ip6 = ip6->ip6_dst;
+		}
 	}
 	return (ret);
 }
@@ -700,6 +702,9 @@ nptv6_stats(struct ip_fw_chain *ch, ip_fw3_opheader *op,
 	oh = (ipfw_obj_header *)ipfw_get_sopt_header(sd, sz);
 	if (oh == NULL)
 		return (EINVAL);
+	if (ipfw_check_object_name_generic(oh->ntlv.name) != 0 ||
+	    oh->ntlv.set >= IPFW_MAX_SETS)
+		return (EINVAL);
 	memset(&stats, 0, sizeof(stats));
 
 	IPFW_UH_RLOCK(ch);
@@ -722,12 +727,45 @@ nptv6_stats(struct ip_fw_chain *ch, ip_fw3_opheader *op,
 	return (0);
 }
 
+/*
+ * Reset NPTv6 statistics.
+ * Data layout (v0)(current):
+ * Request: [ ipfw_obj_header ]
+ *
+ * Returns 0 on success
+ */
+static int
+nptv6_reset_stats(struct ip_fw_chain *ch, ip_fw3_opheader *op,
+    struct sockopt_data *sd)
+{
+	struct nptv6_cfg *cfg;
+	ipfw_obj_header *oh;
+
+	if (sd->valsize != sizeof(*oh))
+		return (EINVAL);
+	oh = (ipfw_obj_header *)sd->kbuf;
+	if (ipfw_check_object_name_generic(oh->ntlv.name) != 0 ||
+	    oh->ntlv.set >= IPFW_MAX_SETS)
+		return (EINVAL);
+
+	IPFW_UH_WLOCK(ch);
+	cfg = nptv6_find(CHAIN_TO_SRV(ch), oh->ntlv.name, oh->ntlv.set);
+	if (cfg == NULL) {
+		IPFW_UH_WUNLOCK(ch);
+		return (ESRCH);
+	}
+	COUNTER_ARRAY_ZERO(cfg->stats, NPTV6STATS);
+	IPFW_UH_WUNLOCK(ch);
+	return (0);
+}
+
 static struct ipfw_sopt_handler	scodes[] = {
 	{ IP_FW_NPTV6_CREATE, 0,	HDIR_SET,	nptv6_create },
 	{ IP_FW_NPTV6_DESTROY,0,	HDIR_SET,	nptv6_destroy },
 	{ IP_FW_NPTV6_CONFIG, 0,	HDIR_BOTH,	nptv6_config },
 	{ IP_FW_NPTV6_LIST,   0,	HDIR_GET,	nptv6_list },
 	{ IP_FW_NPTV6_STATS,  0,	HDIR_GET,	nptv6_stats },
+	{ IP_FW_NPTV6_RESET_STATS,0,	HDIR_SET,	nptv6_reset_stats },
 };
 
 static int

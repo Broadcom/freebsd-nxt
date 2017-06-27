@@ -272,10 +272,7 @@ u_int
 netisr_get_cpuid(u_int cpunumber)
 {
 
-	KASSERT(cpunumber < nws_count, ("%s: %u > %u", __func__, cpunumber,
-	    nws_count));
-
-	return (nws_array[cpunumber]);
+	return (nws_array[cpunumber % nws_count]);
 }
 
 /*
@@ -810,10 +807,12 @@ netisr_select_cpuid(struct netisr_proto *npp, u_int dispatch_policy,
 		 * dispatch.  In the queued case, fall back on the SOURCE
 		 * policy.
 		 */
-		if (*cpuidp != NETISR_CPUID_NONE)
+		if (*cpuidp != NETISR_CPUID_NONE) {
+			*cpuidp = netisr_get_cpuid(*cpuidp);
 			return (m);
+		}
 		if (dispatch_policy == NETISR_DISPATCH_HYBRID) {
-			*cpuidp = curcpu;
+			*cpuidp = netisr_get_cpuid(curcpu);
 			return (m);
 		}
 		policy = NETISR_POLICY_SOURCE;
@@ -1269,9 +1268,7 @@ netisr_start_swi(u_int cpuid, struct pcpu *pc)
 static void
 netisr_init(void *arg)
 {
-#ifdef EARLY_AP_STARTUP
 	struct pcpu *pc;
-#endif
 
 	NETISR_LOCK_INIT();
 	if (netisr_maxthreads == 0 || netisr_maxthreads < -1 )
@@ -1309,7 +1306,8 @@ netisr_init(void *arg)
 		netisr_start_swi(pc->pc_cpuid, pc);
 	}
 #else
-	netisr_start_swi(curcpu, pcpu_find(curcpu));
+	pc = get_pcpu();
+	netisr_start_swi(pc->pc_cpuid, pc);
 #endif
 }
 SYSINIT(netisr_init, SI_SUB_SOFTINTR, SI_ORDER_FIRST, netisr_init, NULL);
