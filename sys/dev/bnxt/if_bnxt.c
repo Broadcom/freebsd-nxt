@@ -691,6 +691,12 @@ bnxt_attach_pre(if_ctx_t ctx)
 		goto drv_rgtr_fail;
 	}
 
+        rc = bnxt_hwrm_func_rgtr_async_events(softc, NULL, 0);
+	if (rc) {
+		device_printf(softc->dev, "attach: hwrm rgtr async evts failed\n");
+		goto drv_rgtr_fail;
+	}
+
 	/* Get the HW capabilities */
 	rc = bnxt_hwrm_func_qcaps(softc);
 	if (rc)

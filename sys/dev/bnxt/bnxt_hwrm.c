@@ -30,6 +30,7 @@
 __FBSDID("$FreeBSD$");
 
 #include <sys/endian.h>
+#include <sys/bitstring.h>
 
 #include "bnxt.h"
 #include "bnxt_hwrm.h"
@@ -1547,3 +1548,44 @@ bnxt_hwrm_free_wol_fltr(struct bnxt_softc *softc)
 	req.wol_filter_id = softc->wol_filter_id;
 	return hwrm_send_message(softc, &req, sizeof(req));
 }
+
+
+int bnxt_hwrm_func_rgtr_async_events(struct bnxt_softc *softc, unsigned long *bmap,
+                                     int bmap_size)
+{
+        struct hwrm_func_drv_rgtr_input req = {0};
+	bitstr_t *async_events_bmap; 
+        uint32_t *events;
+        int i;
+
+	async_events_bmap = bit_alloc(256, M_DEVBUF, M_WAITOK|M_ZERO);
+        events = (uint32_t *)async_events_bmap;
+
+        bnxt_hwrm_cmd_hdr_init(softc, &req, HWRM_FUNC_DRV_RGTR);
+
+        req.enables =
+                htole32(HWRM_FUNC_DRV_RGTR_INPUT_ENABLES_ASYNC_EVENT_FWD);
+
+        memset(async_events_bmap, 0, sizeof(256 / 8));
+	
+	bit_set(async_events_bmap, HWRM_ASYNC_EVENT_CMPL_EVENT_ID_LINK_STATUS_CHANGE);
+	bit_set(async_events_bmap, HWRM_ASYNC_EVENT_CMPL_EVENT_ID_PF_DRVR_UNLOAD);
+	bit_set(async_events_bmap, HWRM_ASYNC_EVENT_CMPL_EVENT_ID_PORT_CONN_NOT_ALLOWED);
+	bit_set(async_events_bmap, HWRM_ASYNC_EVENT_CMPL_EVENT_ID_VF_CFG_CHANGE);
+	bit_set(async_events_bmap, HWRM_ASYNC_EVENT_CMPL_EVENT_ID_LINK_SPEED_CFG_CHANGE);
+        
+	if (bmap && bmap_size) {
+                for (i = 0; i < bmap_size; i++) {
+                        if (bit_test(bmap, i))
+				bit_set(async_events_bmap, i);
+                }
+        }
+
+        for (i = 0; i < 8; i++)
+                req.async_event_fwd[i] |= htole32(events[i]);
+
+        free(async_events_bmap, M_DEVBUF);
+
+        return hwrm_send_message(softc, &req, sizeof(req));
+}
+
