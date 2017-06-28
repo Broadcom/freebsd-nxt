@@ -103,4 +103,5 @@ int bnxt_hwrm_alloc_wol_fltr(struct bnxt_softc *softc);
 int bnxt_hwrm_free_wol_fltr(struct bnxt_softc *softc);
 int bnxt_hwrm_func_rgtr_async_events(struct bnxt_softc *softc, unsigned long *bmap,
                                      int bmap_size);
+int bnxt_hwrm_set_coal(struct bnxt_softc *softc);
 #endif

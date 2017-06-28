@@ -1550,7 +1550,8 @@ bnxt_hwrm_free_wol_fltr(struct bnxt_softc *softc)
 }
 
 
-int bnxt_hwrm_func_rgtr_async_events(struct bnxt_softc *softc, unsigned long *bmap,
+int 
+bnxt_hwrm_func_rgtr_async_events(struct bnxt_softc *softc, unsigned long *bmap,
                                      int bmap_size)
 {
         struct hwrm_func_drv_rgtr_input req = {0};
@@ -1587,5 +1588,93 @@ int bnxt_hwrm_func_rgtr_async_events(struct bnxt_softc *softc, unsigned long *bm
         free(async_events_bmap, M_DEVBUF);
 
         return hwrm_send_message(softc, &req, sizeof(req));
+}
+
+
+static void 
+bnxt_hwrm_set_coal_params(struct bnxt_softc *softc, uint32_t max_frames,
+        uint32_t buf_tmrs, uint16_t flags,
+        struct hwrm_ring_cmpl_ring_cfg_aggint_params_input *req)
+{
+        req->flags = htole16(flags);
+        req->num_cmpl_dma_aggr = htole16((uint16_t)max_frames);
+        req->num_cmpl_dma_aggr_during_int = htole16(max_frames >> 16);
+        req->cmpl_aggr_dma_tmr = htole16((uint16_t)buf_tmrs);
+        req->cmpl_aggr_dma_tmr_during_int = htole16(buf_tmrs >> 16);
+        /* Minimum time between 2 interrupts set to buf_tmr x 2 */
+        req->int_lat_tmr_min = htole16((uint16_t)buf_tmrs * 2);
+        req->int_lat_tmr_max = htole16((uint16_t)buf_tmrs * 4);
+        req->num_cmpl_aggr_int = htole16((uint16_t)max_frames * 4);
+}
+
+int 
+bnxt_hwrm_set_coal(struct bnxt_softc *softc)
+{
+        int i, rc = 0;
+        struct hwrm_ring_cmpl_ring_cfg_aggint_params_input req_rx = {0},
+                                                           req_tx = {0}, *req;
+        uint16_t max_buf, max_buf_irq;
+        uint16_t buf_tmr, buf_tmr_irq;
+        uint32_t flags;
+
+        bnxt_hwrm_cmd_hdr_init(softc, &req_rx,
+                               HWRM_RING_CMPL_RING_CFG_AGGINT_PARAMS);
+        bnxt_hwrm_cmd_hdr_init(softc, &req_tx,
+                               HWRM_RING_CMPL_RING_CFG_AGGINT_PARAMS);
+
+        /* Each rx completion (2 records) should be DMAed immediately.
+         * DMA 1/4 of the completion buffers at a time.
+         */
+        max_buf = min_t(uint16_t, softc->rx_coal_frames / 4, 2);
+        /* max_buf must not be zero */
+        max_buf = clamp_t(uint16_t, max_buf, 1, 63);
+        max_buf_irq = clamp_t(uint16_t, softc->rx_coal_frames_irq, 1, 63);
+        buf_tmr = BNXT_USEC_TO_COAL_TIMER(softc->rx_coal_usecs);
+        /* buf timer set to 1/4 of interrupt timer */
+        buf_tmr = max_t(uint16_t, buf_tmr / 4, 1);
+        buf_tmr_irq = BNXT_USEC_TO_COAL_TIMER(softc->rx_coal_usecs_irq);
+        buf_tmr_irq = max_t(uint16_t, buf_tmr_irq, 1);
+
+        flags = HWRM_RING_CMPL_RING_CFG_AGGINT_PARAMS_INPUT_FLAGS_TIMER_RESET;
+
+        /* RING_IDLE generates more IRQs for lower latency.  Enable it only
+         * if coal_usecs is less than 25 us.
+         */
+        if (softc->rx_coal_usecs < 25)
+                flags |= HWRM_RING_CMPL_RING_CFG_AGGINT_PARAMS_INPUT_FLAGS_RING_IDLE;
+
+        bnxt_hwrm_set_coal_params(softc, max_buf_irq << 16 | max_buf,
+                                  buf_tmr_irq << 16 | buf_tmr, flags, &req_rx);
+
+        /* max_buf must not be zero */
+        max_buf = clamp_t(uint16_t, softc->tx_coal_frames, 1, 63);
+        max_buf_irq = clamp_t(uint16_t, softc->tx_coal_frames_irq, 1, 63);
+        buf_tmr = BNXT_USEC_TO_COAL_TIMER(softc->tx_coal_usecs);
+        /* buf timer set to 1/4 of interrupt timer */
+        buf_tmr = max_t(uint16_t, buf_tmr / 4, 1);
+        buf_tmr_irq = BNXT_USEC_TO_COAL_TIMER(softc->tx_coal_usecs_irq);
+        buf_tmr_irq = max_t(uint16_t, buf_tmr_irq, 1);
+        flags = HWRM_RING_CMPL_RING_CFG_AGGINT_PARAMS_INPUT_FLAGS_TIMER_RESET;
+        bnxt_hwrm_set_coal_params(softc, max_buf_irq << 16 | max_buf,
+                                  buf_tmr_irq << 16 | buf_tmr, flags, &req_tx);
+
+        for (i = 0; i < softc->nrxqsets; i++) {
+
+                
+		req = &req_rx;
+                /*
+                 * TBD:
+		 *      Check if Tx also needs to be done
+                 *      So far, Tx processing has been done in softirq contest
+                 *
+		 * req = &req_tx;
+		 */
+		req->ring_id = htole16(softc->grp_info[i].cp_ring_id);
+
+                rc = hwrm_send_message(softc, req, sizeof(*req));
+                if (rc)
+                        break;
+        }
+        return rc;
 }
 
